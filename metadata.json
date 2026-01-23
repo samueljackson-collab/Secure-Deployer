@@ -1,0 +1,5 @@
+{
+  "name": "Secure Deployment Runner",
+  "description": "A graphical user interface to manage and monitor the remote deployment of software packages using a PowerShell-based backend. Features real-time progress tracking, Wake-on-LAN, and secure credential handling.",
+  "requestFramePermissions": []
+}
