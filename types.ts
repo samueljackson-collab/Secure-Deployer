@@ -32,3 +32,13 @@ export enum DeploymentState {
     Running = 'running',
     Complete = 'complete',
 }
+
+export interface DeploymentRun {
+  id: number;
+  endTime: Date;
+  totalDevices: number;
+  compliant: number;
+  needsAction: number;
+  failed: number;
+  successRate: number;
+}

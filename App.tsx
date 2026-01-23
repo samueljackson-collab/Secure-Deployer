@@ -7,7 +7,9 @@ import { DeploymentProgress } from './components/DeploymentProgress';
 import { DeviceStatusTable } from './components/DeviceStatusTable';
 import { LogViewer } from './components/LogViewer';
 import { BulkActions } from './components/BulkActions';
-import type { Device, LogEntry, DeploymentStatus, Credentials } from './types';
+import { DeploymentHistory } from './components/DeploymentHistory';
+import { SecureCredentialModal } from './components/SecureCredentialModal';
+import type { Device, LogEntry, DeploymentStatus, Credentials, DeploymentRun } from './types';
 import { DeploymentState } from './types';
 import Papa from 'papaparse';
 
@@ -34,6 +36,8 @@ const App: React.FC = () => {
     const [logs, setLogs] = useState<LogEntry[]>([]);
     const [deploymentState, setDeploymentState] = useState<DeploymentState>(DeploymentState.Idle);
     const [selectedDeviceIds, setSelectedDeviceIds] = useState<Set<number>>(new Set());
+    const [deploymentHistory, setDeploymentHistory] = useState<DeploymentRun[]>([]);
+    const [isCredentialModalOpen, setIsCredentialModalOpen] = useState(false);
 
     const isCancelledRef = useRef(false);
 
@@ -61,18 +65,41 @@ const App: React.FC = () => {
     
     const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-    const handleStartDeployment = async () => {
-        if (!csvFile || !batchFile || !credentials.username || !credentials.password) {
-            addLog("All fields are required to start deployment.", 'ERROR');
+    const archiveCurrentRun = (currentDevices: Device[]) => {
+        if (currentDevices.length === 0) return;
+
+        const total = currentDevices.length;
+        const compliant = currentDevices.filter(d => d.status === 'Success').length;
+        const needsAction = currentDevices.filter(d => d.status === 'Scan Complete').length;
+        const failed = currentDevices.filter(d => ['Failed', 'Offline', 'Cancelled'].includes(d.status)).length;
+        const successRate = total > 0 ? (compliant / total) * 100 : 0;
+
+        const newRun: DeploymentRun = {
+            id: Date.now(),
+            endTime: new Date(),
+            totalDevices: total,
+            compliant,
+            needsAction,
+            failed,
+            successRate,
+        };
+        setDeploymentHistory(prev => [newRun, ...prev].slice(0, 10)); // Keep last 10 runs
+    };
+
+    const handleConfirmCredentialsAndDeploy = async (sessionCredentials: Credentials) => {
+        setIsCredentialModalOpen(false);
+        if (!csvFile || !batchFile) {
+            addLog("CSV or Batch file is missing.", 'ERROR');
             return;
         }
 
         isCancelledRef.current = false;
+        setCredentials(sessionCredentials); // Set credentials for the run
         setDeploymentState(DeploymentState.Running);
         setLogs([]);
         setSelectedDeviceIds(new Set());
         addLog("Deployment process initiated.", 'INFO');
-        addLog(`User: ${credentials.username}`, 'INFO');
+        addLog(`User: ${sessionCredentials.username}`, 'INFO');
 
         try {
             Papa.parse<Record<string, string>>(csvFile, {
@@ -111,7 +138,6 @@ const App: React.FC = () => {
                         const hostname = (row[hostnameCol] || '').trim();
                         const rawMac = row[macCol] || '';
                         
-                        // Skip completely empty lines
                         if (!hostname && !rawMac) {
                             return;
                         }
@@ -125,7 +151,7 @@ const App: React.FC = () => {
                         }
 
                         if (!isValidMacAddress(normalizedMac)) {
-                            addLog(`Skipping device "${hostname}" (row ${index + 2}): Invalid MAC address "${rawMac}". MAC must be 12 hexadecimal characters (separators are ignored).`, 'WARNING');
+                            addLog(`Validation failed for row ${index + 2}: Invalid MAC address format "${rawMac}" for device "${hostname}". Skipping entry.`, 'WARNING');
                             invalidCount++;
                             return;
                         }
@@ -162,6 +188,14 @@ const App: React.FC = () => {
             setDeploymentState(DeploymentState.Idle);
         }
     };
+
+    const handleStartDeployment = () => {
+        if (!csvFile || !batchFile) {
+            addLog("Please select a device list and deployment package first.", 'ERROR');
+            return;
+        }
+        setIsCredentialModalOpen(true);
+    };
     
     const runDeploymentFlow = async (parsedDevices: Device[]) => {
         if(isCancelledRef.current) return;
@@ -176,6 +210,10 @@ const App: React.FC = () => {
             if (isCancelledRef.current) {
                 addLog('Deployment cancelled by user during WoL wait.', 'WARNING');
                 setDeploymentState(DeploymentState.Idle);
+                setDevices(currentDevices => {
+                    archiveCurrentRun(currentDevices);
+                    return currentDevices;
+                });
                 return;
             }
             await sleep(2500);
@@ -195,9 +233,8 @@ const App: React.FC = () => {
             for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
                  if (isCancelledRef.current) break;
 
-                // Simulate connection attempt
                 await sleep(1000 + Math.random() * 500);
-                if (Math.random() > 0.3) { // Higher chance of success on retries
+                if (Math.random() > 0.3) {
                     isConnected = true;
                     if(attempt > 1) {
                         addLog(`Successfully connected to ${device.hostname} on attempt ${attempt}.`, 'SUCCESS');
@@ -205,9 +242,9 @@ const App: React.FC = () => {
                     break;
                 } else {
                     if (attempt < MAX_RETRIES) {
-                        addLog(`Connection failed for ${device.hostname}. Retrying... (Attempt ${attempt}/${MAX_RETRIES})`, 'WARNING');
+                        addLog(`[${device.hostname}] Connection failed. Retrying... (Attempt ${attempt} of ${MAX_RETRIES})`, 'WARNING');
                         setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Retrying...', retryAttempt: attempt } : d));
-                        await sleep(2000); // Wait before retrying
+                        await sleep(2000);
                     }
                 }
             }
@@ -218,7 +255,6 @@ const App: React.FC = () => {
                 continue;
             }
 
-            // If connected, proceed with checks
             setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Checking Info' } : d));
             addLog(`Checking system info for ${device.hostname}.`);
             await sleep(400 + Math.random() * 400);
@@ -259,6 +295,12 @@ const App: React.FC = () => {
              sendNotification('Deployment Complete', `Scan finished for ${parsedDevices.length} devices.`);
              setDeploymentState(DeploymentState.Complete);
         }
+        
+        // Archive the final state of devices for history
+        setDevices(currentDevices => {
+            archiveCurrentRun(currentDevices);
+            return currentDevices;
+        });
     };
 
     const handleUpdateDevice = async (deviceId: number) => {
@@ -272,28 +314,31 @@ const App: React.FC = () => {
         if (isCancelledRef.current) return;
         if (device.isBiosUpToDate === false) {
             setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Updating BIOS' } : d));
-            addLog(`[${device.hostname}] Starting BIOS update...`, 'INFO');
+            addLog(`[${device.hostname}] Phase: BIOS Update. Status: Starting. Current version: ${device.biosVersion}`, 'INFO');
             await sleep(2000 + Math.random() * 1000);
+            if (isCancelledRef.current) return;
             setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, biosVersion: TARGET_BIOS_VERSION, isBiosUpToDate: true } : d));
-            addLog(`[${device.hostname}] BIOS update finished successfully.`, 'SUCCESS');
+            addLog(`[${device.hostname}] Phase: BIOS Update. Status: Complete. New version: ${TARGET_BIOS_VERSION}`, 'SUCCESS');
         }
         
         if (isCancelledRef.current) return;
         if (device.isDcuUpToDate === false) {
             setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Updating DCU' } : d));
-            addLog(`[${device.hostname}] Starting DCU update...`, 'INFO');
+            addLog(`[${device.hostname}] Phase: DCU Update. Status: Starting. Current version: ${device.dcuVersion}`, 'INFO');
             await sleep(2000 + Math.random() * 1000);
+            if (isCancelledRef.current) return;
             setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, dcuVersion: TARGET_DCU_VERSION, isDcuUpToDate: true } : d));
-            addLog(`[${device.hostname}] DCU update finished successfully.`, 'SUCCESS');
+            addLog(`[${device.hostname}] Phase: DCU Update. Status: Complete. New version: ${TARGET_DCU_VERSION}`, 'SUCCESS');
         }
 
         if (isCancelledRef.current) return;
         if (device.isWinUpToDate === false) {
             setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Updating Windows' } : d));
-            addLog(`[${device.hostname}] Starting Windows update...`, 'INFO');
+            addLog(`[${device.hostname}] Phase: Windows Update. Status: Starting. Current version: ${device.winVersion}`, 'INFO');
             await sleep(2000 + Math.random() * 1000);
+            if (isCancelledRef.current) return;
             setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, winVersion: TARGET_WIN_VERSION, isWinUpToDate: true } : d));
-            addLog(`[${device.hostname}] Windows update finished successfully.`, 'SUCCESS');
+            addLog(`[${device.hostname}] Phase: Windows Update. Status: Complete. New version: ${TARGET_WIN_VERSION}`, 'SUCCESS');
         }
 
         if (isCancelledRef.current) return;
@@ -305,9 +350,27 @@ const App: React.FC = () => {
         isCancelledRef.current = true;
         setDeploymentState(DeploymentState.Idle);
         const cancellableStatuses: DeploymentStatus[] = ['Connecting', 'Retrying...', 'Updating', 'Waking Up', 'Checking Info', 'Checking BIOS', 'Checking DCU', 'Checking Windows', 'Updating BIOS', 'Updating DCU', 'Updating Windows'];
-        setDevices(prev => prev.map(d => cancellableStatuses.includes(d.status) ? { ...d, status: 'Cancelled' } : d));
+        setDevices(prev => {
+            const updatedDevices = prev.map(d => cancellableStatuses.includes(d.status) ? { ...d, status: 'Cancelled' } : d);
+            archiveCurrentRun(updatedDevices);
+            return updatedDevices;
+        });
         addLog('Deployment has been cancelled by the user.', 'WARNING');
         sendNotification('Deployment Cancelled', 'The scan process was stopped by the user.');
+    };
+
+    const handleWakeOnLan = (deviceIds: Set<number>) => {
+        if (deviceIds.size === 0) return;
+        const hostnames: string[] = [];
+        setDevices(prev => prev.map(d => {
+            if (deviceIds.has(d.id)) {
+                hostnames.push(d.hostname);
+                return { ...d, status: 'Waking Up' };
+            }
+            return d;
+        }));
+        addLog(`Sent Wake-on-LAN to ${deviceIds.size} device(s): ${hostnames.join(', ')}`, 'INFO');
+        setSelectedDeviceIds(new Set());
     };
 
     const handleDeviceSelection = (deviceId: number) => {
@@ -348,11 +411,11 @@ const App: React.FC = () => {
         setSelectedDeviceIds(new Set());
     };
 
-    const isReadyToDeploy = csvFile && batchFile && credentials.username && credentials.password;
+    const isReadyToDeploy = csvFile && batchFile;
 
     return (
         <div className="min-h-screen bg-slate-900 text-slate-200 font-sans p-4 sm:p-6 lg:p-8">
-            <Header />
+            <Header selectedDeviceIds={selectedDeviceIds} onWakeOnLan={handleWakeOnLan} />
             <main className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-1 flex flex-col gap-8">
                     <div className="bg-slate-800/50 p-6 rounded-lg shadow-lg border border-slate-700">
@@ -377,12 +440,12 @@ const App: React.FC = () => {
                              <StepCard
                                 step="3"
                                 title="Enter Credentials"
-                                description="Domain admin credentials for this session only."
+                                description="Secure credentials will be requested when you start the scan."
                             >
-                                <CredentialsForm credentials={credentials} setCredentials={setCredentials} />
                             </StepCard>
                         </div>
                     </div>
+                     <DeploymentHistory history={deploymentHistory} />
                 </div>
 
                 <div className="lg:col-span-2 flex flex-col gap-8">
@@ -432,6 +495,11 @@ const App: React.FC = () => {
                     </div>
                 </div>
             </main>
+            <SecureCredentialModal
+                isOpen={isCredentialModalOpen}
+                onClose={() => setIsCredentialModalOpen(false)}
+                onConfirm={handleConfirmCredentialsAndDeploy}
+            />
         </div>
     );
 };
