@@ -1,14 +1,15 @@
 
+
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Header } from './components/Header';
 import { StepCard } from './components/StepCard';
-import { CredentialsForm } from './components/CredentialsForm';
 import { DeploymentProgress } from './components/DeploymentProgress';
 import { DeviceStatusTable } from './components/DeviceStatusTable';
 import { LogViewer } from './components/LogViewer';
 import { BulkActions } from './components/BulkActions';
 import { DeploymentHistory } from './components/DeploymentHistory';
 import { SecureCredentialModal } from './components/SecureCredentialModal';
+import { DeploymentAnalytics } from './components/DeploymentAnalytics';
 import type { Device, LogEntry, DeploymentStatus, Credentials, DeploymentRun } from './types';
 import { DeploymentState } from './types';
 import Papa from 'papaparse';
@@ -71,8 +72,21 @@ const App: React.FC = () => {
         const total = currentDevices.length;
         const compliant = currentDevices.filter(d => d.status === 'Success').length;
         const needsAction = currentDevices.filter(d => d.status === 'Scan Complete').length;
-        const failed = currentDevices.filter(d => ['Failed', 'Offline', 'Cancelled'].includes(d.status)).length;
         const successRate = total > 0 ? (compliant / total) * 100 : 0;
+
+        const updatesNeededCounts = { bios: 0, dcu: 0, windows: 0 };
+        currentDevices.forEach(d => {
+            if (d.updatesNeeded?.bios) updatesNeededCounts.bios++;
+            if (d.updatesNeeded?.dcu) updatesNeededCounts.dcu++;
+            if (d.updatesNeeded?.windows) updatesNeededCounts.windows++;
+        });
+
+        const failureCounts = {
+            offline: currentDevices.filter(d => d.status === 'Offline').length,
+            cancelled: currentDevices.filter(d => d.status === 'Cancelled').length,
+            failed: currentDevices.filter(d => d.status === 'Failed').length,
+        };
+        const failedTotal = failureCounts.offline + failureCounts.cancelled + failureCounts.failed;
 
         const newRun: DeploymentRun = {
             id: Date.now(),
@@ -80,8 +94,10 @@ const App: React.FC = () => {
             totalDevices: total,
             compliant,
             needsAction,
-            failed,
+            failed: failedTotal,
             successRate,
+            updatesNeededCounts,
+            failureCounts,
         };
         setDeploymentHistory(prev => [newRun, ...prev].slice(0, 10)); // Keep last 10 runs
     };
@@ -123,7 +139,7 @@ const App: React.FC = () => {
                     }
 
                     const hostnameCol = header.find(h => h.toLowerCase().includes('hostname') || h.toLowerCase().includes('computer') || h.toLowerCase().includes('name') || h.toLowerCase().includes('device'));
-                    const macCol = header.find(h => h.toLowerCase().includes('mac'));
+                    const macCol = header.find(h => h.toLowerCase().replace(/[\s_-]/g, '').includes('macaddress') || h.toLowerCase().trim() === 'mac');
 
                     if (!hostnameCol || !macCol) {
                         addLog("CSV must contain columns for 'Hostname' and 'MAC Address'.", 'ERROR');
@@ -257,33 +273,42 @@ const App: React.FC = () => {
 
             setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Checking Info' } : d));
             addLog(`Checking system info for ${device.hostname}.`);
-            await sleep(400 + Math.random() * 400);
+            await sleep(500 + Math.random() * 500);
 
-            setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Checking BIOS' } : d));
-            await sleep(1000 + Math.random() * 700);
+            const deviceType = Math.random() > 0.4 ? 'laptop' : 'desktop';
+            addLog(`[${device.hostname}] Detected device type: ${deviceType}.`);
+
+            setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Checking BIOS', deviceType } : d));
+            await sleep(1500 + Math.random() * 1000);
             const biosVersion = Math.random() > 0.3 ? TARGET_BIOS_VERSION : `A${Math.floor(18 + Math.random() * 6)}`;
             const isBiosUpToDate = biosVersion === TARGET_BIOS_VERSION;
             setDevices(prev => prev.map(d => d.id === device.id ? { ...d, biosVersion, isBiosUpToDate } : d));
             addLog(`[${device.hostname}] BIOS Version: ${biosVersion}`);
 
             setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Checking DCU' } : d));
-            await sleep(1000 + Math.random() * 700);
+            await sleep(1200 + Math.random() * 800);
             const dcuVersion = Math.random() > 0.3 ? TARGET_DCU_VERSION : `5.${Math.floor(Math.random() * 2)}.${Math.floor(Math.random() * 9)}`;
             const isDcuUpToDate = dcuVersion === TARGET_DCU_VERSION;
             setDevices(prev => prev.map(d => d.id === device.id ? { ...d, dcuVersion, isDcuUpToDate } : d));
             addLog(`[${device.hostname}] DCU Version: ${dcuVersion}`);
 
             setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Checking Windows' } : d));
-            await sleep(1000 + Math.random() * 700);
+            await sleep(1800 + Math.random() * 1200);
             const winVersion = Math.random() > 0.3 ? TARGET_WIN_VERSION : ['22H2', '21H2'][Math.floor(Math.random()*2)];
             const isWinUpToDate = winVersion === TARGET_WIN_VERSION;
             
             const allUpToDate = isBiosUpToDate && isDcuUpToDate && isWinUpToDate;
+            const updatesNeeded = {
+                bios: !isBiosUpToDate,
+                dcu: !isDcuUpToDate,
+                windows: !isWinUpToDate,
+            };
 
             setDevices(prev => prev.map(d => d.id === device.id ? {
                 ...d,
                 winVersion,
                 isWinUpToDate,
+                updatesNeeded,
                 status: allUpToDate ? 'Success' : 'Scan Complete',
             } : d));
              addLog(`[${device.hostname}] Windows Version: ${winVersion}`);
@@ -351,7 +376,7 @@ const App: React.FC = () => {
         setDeploymentState(DeploymentState.Idle);
         const cancellableStatuses: DeploymentStatus[] = ['Connecting', 'Retrying...', 'Updating', 'Waking Up', 'Checking Info', 'Checking BIOS', 'Checking DCU', 'Checking Windows', 'Updating BIOS', 'Updating DCU', 'Updating Windows'];
         setDevices(prev => {
-            const updatedDevices = prev.map(d => cancellableStatuses.includes(d.status) ? { ...d, status: 'Cancelled' } : d);
+            const updatedDevices = prev.map((d): Device => cancellableStatuses.includes(d.status) ? { ...d, status: 'Cancelled' } : d);
             archiveCurrentRun(updatedDevices);
             return updatedDevices;
         });
@@ -402,7 +427,7 @@ const App: React.FC = () => {
         addLog(`Cancelling tasks for ${selectedDeviceIds.size} selected devices...`, 'WARNING');
         const cancellableStatuses: DeploymentStatus[] = ['Connecting', 'Retrying...', 'Updating', 'Waking Up', 'Checking Info', 'Checking BIOS', 'Checking DCU', 'Checking Windows', 'Updating BIOS', 'Updating DCU', 'Updating Windows'];
         setDevices(prev =>
-            prev.map(d =>
+            prev.map((d): Device =>
                 selectedDeviceIds.has(d.id) && cancellableStatuses.includes(d.status)
                     ? { ...d, status: 'Cancelled' }
                     : d
@@ -442,10 +467,12 @@ const App: React.FC = () => {
                                 title="Enter Credentials"
                                 description="Secure credentials will be requested when you start the scan."
                             >
+                                <p className="text-xs text-slate-500 pt-2">Authentication will be prompted before the scan begins.</p>
                             </StepCard>
                         </div>
                     </div>
                      <DeploymentHistory history={deploymentHistory} />
+                     <DeploymentAnalytics history={deploymentHistory} />
                 </div>
 
                 <div className="lg:col-span-2 flex flex-col gap-8">
@@ -462,7 +489,7 @@ const App: React.FC = () => {
                             ) : (
                                  <button
                                     onClick={handleStartDeployment}
-                                    disabled={!isReadyToDeploy || deploymentState === DeploymentState.Running}
+                                    disabled={!isReadyToDeploy}
                                     className="px-6 py-2 bg-cyan-600 text-white font-semibold rounded-lg hover:bg-cyan-700 disabled:bg-slate-600 disabled:cursor-not-allowed transition duration-200 shadow-md focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-opacity-50"
                                 >
                                     Start System Scan

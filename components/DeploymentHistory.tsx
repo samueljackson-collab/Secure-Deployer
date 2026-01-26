@@ -2,8 +2,54 @@
 import React, { useState } from 'react';
 import type { DeploymentRun } from '../types';
 
+const HistoryChart: React.FC<{ history: DeploymentRun[] }> = ({ history }) => {
+    if (history.length < 2) {
+        return <p className="text-slate-500 text-sm text-center py-4">Run at least two deployments to see a trend chart.</p>;
+    }
+
+    const reversedHistory = [...history].reverse().slice(-10); // Show last 10 runs, oldest to newest
+
+    return (
+        <div className="mb-6">
+            <h4 className="text-sm font-semibold text-slate-300 mb-2 text-center">Success Rate Trend (Last {reversedHistory.length} runs)</h4>
+            <div className="h-40 bg-slate-900/50 p-4 pl-8 rounded-md flex items-end justify-around gap-2 border border-slate-700 relative">
+                {/* Y-Axis labels */}
+                <div className="absolute top-0 left-0 h-full text-xs text-slate-500 flex flex-col justify-between py-2 pr-2">
+                    <span>100%</span>
+                    <span>50%</span>
+                    <span>0%</span>
+                </div>
+                {/* Y-Axis lines */}
+                <div className="absolute top-0 left-8 right-0 h-full">
+                    <div className="h-1/2 w-full border-b border-dashed border-slate-700"></div>
+                </div>
+
+                {reversedHistory.map(run => {
+                    const barColor = run.successRate >= 90 ? 'bg-green-500' : run.successRate >= 60 ? 'bg-yellow-500' : 'bg-red-500';
+                    return (
+                        <div key={run.id} className="group relative flex-1 h-full flex items-end justify-center z-10">
+                            <div
+                                className={`w-3/4 ${barColor} rounded-t-sm hover:opacity-100 opacity-80 transition-all duration-200`}
+                                style={{ height: `${run.successRate}%` }}
+                                title={`${Math.round(run.successRate)}% Success on ${run.endTime.toLocaleDateString()}`}
+                            ></div>
+                            {/* Tooltip */}
+                            <div className="absolute bottom-full mb-2 w-max bg-slate-900 border border-slate-600 text-white text-xs rounded py-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">
+                                <p className="font-semibold">{run.endTime.toLocaleDateString()}</p>
+                                <p>Success: {Math.round(run.successRate)}%</p>
+                                <div className="w-2 h-2 bg-slate-900 border-r border-b border-slate-600 absolute left-1/2 transform -translate-x-1/2 rotate-45 -bottom-1"></div>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+};
+
+
 const HistoryItem: React.FC<{ run: DeploymentRun }> = ({ run }) => {
-    const barColor = run.successRate > 80 ? 'bg-green-500' : run.successRate > 50 ? 'bg-yellow-500' : 'bg-red-500';
+    const barColor = run.successRate >= 90 ? 'bg-green-500' : run.successRate >= 60 ? 'bg-yellow-500' : 'bg-red-500';
     
     return (
         <div className="bg-slate-800/60 p-3 rounded-md border border-slate-700">
@@ -62,11 +108,14 @@ export const DeploymentHistory: React.FC<{ history: DeploymentRun[] }> = ({ hist
                     {history.length === 0 ? (
                         <p className="text-slate-500 text-sm text-center py-4">No completed runs yet.</p>
                     ) : (
-                        <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
-                            {history.map(run => (
-                                <HistoryItem key={run.id} run={run} />
-                            ))}
-                        </div>
+                        <>
+                            <HistoryChart history={history} />
+                            <div className="space-y-3 max-h-80 overflow-y-auto pr-2">
+                                {history.map(run => (
+                                    <HistoryItem key={run.id} run={run} />
+                                ))}
+                            </div>
+                        </>
                     )}
                 </div>
             )}

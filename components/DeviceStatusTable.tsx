@@ -1,6 +1,7 @@
 
 import React from 'react';
 import type { Device, DeploymentStatus } from '../types';
+import { DeviceIcon } from './DeviceIcon';
 
 const statusColors: Record<DeploymentStatus, string> = {
     Pending: 'text-slate-400',
@@ -84,13 +85,14 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
                     return (
                         <div key={device.id} className={`bg-slate-800/90 border rounded-lg p-3 transition-all duration-200 ${isSelected ? 'border-cyan-500 shadow-lg' : 'border-slate-700'}`}>
                             <div className="flex justify-between items-start mb-2">
-                                <div className="flex items-center">
+                                <div className="flex items-center gap-3">
                                     <input 
                                         type="checkbox" 
-                                        className="h-4 w-4 rounded bg-slate-700 border-slate-600 text-cyan-500 focus:ring-cyan-600 mr-3"
+                                        className="h-4 w-4 rounded bg-slate-700 border-slate-600 text-cyan-500 focus:ring-cyan-600"
                                         checked={isSelected}
                                         onChange={() => onDeviceSelect(device.id)}
                                     />
+                                    {device.deviceType && <DeviceIcon type={device.deviceType} />}
                                     <h4 className="font-bold text-slate-100 break-all">{device.hostname}</h4>
                                 </div>
                                 <StatusBadge status={device.status} retryAttempt={device.retryAttempt} />
