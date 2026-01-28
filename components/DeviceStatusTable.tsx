@@ -1,4 +1,5 @@
 
+
 import React from 'react';
 import type { Device, DeploymentStatus } from '../types';
 import { DeviceIcon } from './DeviceIcon';
@@ -25,7 +26,7 @@ const statusColors: Record<DeploymentStatus, string> = {
 
 const StatusBadge: React.FC<{ status: DeploymentStatus; retryAttempt?: number }> = ({ status, retryAttempt }) => {
     const color = statusColors[status] || 'text-slate-400';
-    const text = status === 'Retrying...' && retryAttempt ? `Retrying... (${retryAttempt}/3)` : status;
+    const text = status === 'Retrying...' && retryAttempt ? `Retrying... (${retryAttempt})` : status;
     return (
         <span className={`px-2 py-1 text-xs font-medium rounded-full bg-slate-700 ${color}`}>
             {text}
@@ -42,8 +43,8 @@ const VersionDetail: React.FC<{ label: string; version?: string; isUpToDate?: bo
             <span>{label}</span>
             <span className="font-mono text-sm">
                 {version}
-                {isUpToDate === true && <span className="ml-2 text-green-400" aria-label="Up to date">✔</span>}
-                {isUpToDate === false && <span className="ml-2 text-red-400" aria-label="Out of date">❌</span>}
+                {isUpToDate === true && <span className="ml-2 text-green-400" title="Up to date" aria-label="Up to date">✔</span>}
+                {isUpToDate === false && <span className="ml-2 text-red-400" title="Out of date" aria-label="Out of date">❌</span>}
             </span>
         </li>
     );
@@ -64,12 +65,12 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
         <div className="bg-slate-900/70 rounded-lg overflow-hidden border border-slate-700 h-full flex flex-col">
             <div className="p-3 bg-slate-800 border-b border-slate-700 flex justify-between items-center">
                 <h3 className="font-semibold text-slate-200">Device Status</h3>
-                <div className="flex items-center">
-                    <label htmlFor="selectAll" className="text-xs text-slate-400 mr-2">Select All</label>
+                <div className="flex items-center" title="Select or deselect all devices in the list">
+                    <label htmlFor="selectAll" className="text-xs text-slate-400 mr-2 cursor-pointer">Select All</label>
                     <input 
                         type="checkbox" 
                         id="selectAll"
-                        className="h-4 w-4 rounded bg-slate-700 border-slate-600 text-cyan-500 focus:ring-cyan-600"
+                        className="h-4 w-4 rounded bg-slate-700 border-slate-600 text-cyan-500 focus:ring-cyan-600 cursor-pointer"
                         checked={allSelected}
                         onChange={(e) => onSelectAll(e.target.checked)}
                         disabled={devices.length === 0}
@@ -91,6 +92,7 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
                                         className="h-4 w-4 rounded bg-slate-700 border-slate-600 text-cyan-500 focus:ring-cyan-600"
                                         checked={isSelected}
                                         onChange={() => onDeviceSelect(device.id)}
+                                        aria-label={`Select device ${device.hostname}`}
                                     />
                                     {device.deviceType && <DeviceIcon type={device.deviceType} />}
                                     <h4 className="font-bold text-slate-100 break-all">{device.hostname}</h4>
@@ -110,6 +112,7 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
                                         <button 
                                             onClick={() => onUpdateDevice(device.id)}
                                             className="w-full mt-2 px-4 py-2 bg-cyan-600 text-white text-sm font-semibold rounded-lg hover:bg-cyan-700 transition duration-200 shadow-md focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-opacity-50"
+                                            title="Install all required updates on this device."
                                         >
                                             Run Updates
                                         </button>

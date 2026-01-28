@@ -9,7 +9,6 @@ import { LogViewer } from './components/LogViewer';
 import { BulkActions } from './components/BulkActions';
 import { DeploymentHistory } from './components/DeploymentHistory';
 import { SecureCredentialModal } from './components/SecureCredentialModal';
-import { DeploymentAnalytics } from './components/DeploymentAnalytics';
 import type { Device, LogEntry, DeploymentStatus, Credentials, DeploymentRun } from './types';
 import { DeploymentState } from './types';
 import Papa from 'papaparse';
@@ -24,10 +23,22 @@ const isValidMacAddress = (mac: string): boolean => {
     return /^[0-9A-F]{12}$/.test(mac);
 };
 
+const detectDeviceType = (hostname: string): 'laptop' | 'desktop' => {
+    const upperHostname = hostname.toUpperCase();
+    
+    // ELS Enterprise Laptop Standard (ELSLE) or ESLSC
+    if (upperHostname.includes('ELSLE') || upperHostname.includes('ESLSC')) {
+        return 'laptop';
+    }
+
+    // Default to desktop if no specific laptop identifier is found.
+    // EWSLE (Enterprise Workstation Standard) would fall into this category.
+    return 'desktop';
+};
+
 const TARGET_BIOS_VERSION = 'A25';
 const TARGET_DCU_VERSION = '5.2.0';
 const TARGET_WIN_VERSION = '23H2';
-const MAX_RETRIES = 3;
 
 const App: React.FC = () => {
     const [csvFile, setCsvFile] = useState<File | null>(null);
@@ -39,6 +50,8 @@ const App: React.FC = () => {
     const [selectedDeviceIds, setSelectedDeviceIds] = useState<Set<number>>(new Set());
     const [deploymentHistory, setDeploymentHistory] = useState<DeploymentRun[]>([]);
     const [isCredentialModalOpen, setIsCredentialModalOpen] = useState(false);
+    const [maxRetries, setMaxRetries] = useState(3);
+    const [retryDelay, setRetryDelay] = useState(2); // in seconds
 
     const isCancelledRef = useRef(false);
 
@@ -138,7 +151,7 @@ const App: React.FC = () => {
                          return;
                     }
 
-                    const hostnameCol = header.find(h => h.toLowerCase().includes('hostname') || h.toLowerCase().includes('computer') || h.toLowerCase().includes('name') || h.toLowerCase().includes('device'));
+                    const hostnameCol = header.find(h => h.toLowerCase().includes('hostname') || h.toLowerCase().includes('computername') || h.toLowerCase().includes('devicename') || h.toLowerCase().includes('computer') || h.toLowerCase().includes('name') || h.toLowerCase().includes('device'));
                     const macCol = header.find(h => h.toLowerCase().replace(/[\s_-]/g, '').includes('macaddress') || h.toLowerCase().trim() === 'mac');
 
                     if (!hostnameCol || !macCol) {
@@ -167,10 +180,12 @@ const App: React.FC = () => {
                         }
 
                         if (!isValidMacAddress(normalizedMac)) {
-                            addLog(`Validation failed for row ${index + 2}: Invalid MAC address format "${rawMac}" for device "${hostname}". Skipping entry.`, 'WARNING');
+                            addLog(`[Validation Skip] Skipping device "${hostname}" from row ${index + 2}. Reason: Invalid MAC address format. Received: "${rawMac}".`, 'WARNING');
                             invalidCount++;
                             return;
                         }
+                        
+                        const deviceType = detectDeviceType(hostname);
 
                         parsedDevices.push({
                             id: index,
@@ -178,6 +193,7 @@ const App: React.FC = () => {
                             mac: normalizedMac,
                             status: 'Pending',
                             isSelected: false,
+                            deviceType,
                         });
                     });
 
@@ -246,7 +262,7 @@ const App: React.FC = () => {
             setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Connecting' } : d));
             
             let isConnected = false;
-            for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            for (let attempt = 1; attempt <= maxRetries; attempt++) {
                  if (isCancelledRef.current) break;
 
                 await sleep(1000 + Math.random() * 500);
@@ -257,28 +273,25 @@ const App: React.FC = () => {
                     }
                     break;
                 } else {
-                    if (attempt < MAX_RETRIES) {
-                        addLog(`[${device.hostname}] Connection failed. Retrying... (Attempt ${attempt} of ${MAX_RETRIES})`, 'WARNING');
+                    if (attempt < maxRetries) {
+                        addLog(`[${device.hostname}] Connection failed. Retrying... (Attempt ${attempt} of ${maxRetries})`, 'WARNING');
                         setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Retrying...', retryAttempt: attempt } : d));
-                        await sleep(2000);
+                        await sleep(retryDelay * 1000);
                     }
                 }
             }
 
             if (!isConnected) {
                 setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Offline' } : d));
-                addLog(`Host ${device.hostname} is not responding after ${MAX_RETRIES} attempts.`, 'ERROR');
+                addLog(`Host ${device.hostname} is not responding after ${maxRetries} attempts.`, 'ERROR');
                 continue;
             }
 
             setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Checking Info' } : d));
-            addLog(`Checking system info for ${device.hostname}.`);
+            addLog(`Checking system info for ${device.hostname} (${device.deviceType}).`);
             await sleep(500 + Math.random() * 500);
 
-            const deviceType = Math.random() > 0.4 ? 'laptop' : 'desktop';
-            addLog(`[${device.hostname}] Detected device type: ${deviceType}.`);
-
-            setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Checking BIOS', deviceType } : d));
+            setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Checking BIOS' } : d));
             await sleep(1500 + Math.random() * 1000);
             const biosVersion = Math.random() > 0.3 ? TARGET_BIOS_VERSION : `A${Math.floor(18 + Math.random() * 6)}`;
             const isBiosUpToDate = biosVersion === TARGET_BIOS_VERSION;
@@ -469,10 +482,37 @@ const App: React.FC = () => {
                             >
                                 <p className="text-xs text-slate-500 pt-2">Authentication will be prompted before the scan begins.</p>
                             </StepCard>
+                             <StepCard
+                                step="4"
+                                title="Advanced Settings"
+                                description="Configure connection retry behavior."
+                            >
+                                <div className="space-y-3 pt-2">
+                                     <div className="flex items-center justify-between">
+                                        <label htmlFor="maxRetries" className="text-sm text-slate-300">Max Retries</label>
+                                        <input 
+                                            type="number" 
+                                            id="maxRetries" 
+                                            value={maxRetries}
+                                            onChange={(e) => setMaxRetries(Math.max(1, parseInt(e.target.value, 10)))}
+                                            className="w-20 bg-slate-700 border border-slate-600 rounded-md px-2 py-1 text-sm text-center"
+                                        />
+                                    </div>
+                                     <div className="flex items-center justify-between">
+                                        <label htmlFor="retryDelay" className="text-sm text-slate-300">Retry Delay (sec)</label>
+                                        <input 
+                                            type="number" 
+                                            id="retryDelay"
+                                            value={retryDelay}
+                                            onChange={(e) => setRetryDelay(Math.max(1, parseInt(e.target.value, 10)))}
+                                            className="w-20 bg-slate-700 border border-slate-600 rounded-md px-2 py-1 text-sm text-center"
+                                        />
+                                    </div>
+                                </div>
+                            </StepCard>
                         </div>
                     </div>
                      <DeploymentHistory history={deploymentHistory} />
-                     <DeploymentAnalytics history={deploymentHistory} />
                 </div>
 
                 <div className="lg:col-span-2 flex flex-col gap-8">
