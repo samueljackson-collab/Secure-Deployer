@@ -1,4 +1,5 @@
 
+
 import React from 'react';
 import type { Device } from '../types';
 
@@ -13,11 +14,11 @@ export const DeploymentProgress: React.FC<DeploymentProgressProps> = ({ devices 
 
     const total = devices.length;
     const compliant = devices.filter(d => d.status === 'Success').length;
-    const needsAction = devices.filter(d => d.status === 'Scan Complete').length;
-    const failed = devices.filter(d => ['Failed', 'Offline'].includes(d.status)).length;
-
-    const completedScans = compliant + needsAction + failed;
-    const progress = total > 0 ? (completedScans / total) * 100 : 0;
+    const needsAction = devices.filter(d => ['Scan Complete', 'Update Complete (Reboot Pending)'].includes(d.status)).length;
+    const failed = devices.filter(d => ['Failed', 'Offline', 'Cancelled'].includes(d.status)).length;
+    
+    const completedActions = compliant + needsAction + failed;
+    const progress = total > 0 ? (completedActions / total) * 100 : 0;
 
     return (
         <div className="space-y-4">

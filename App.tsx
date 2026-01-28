@@ -52,6 +52,8 @@ const App: React.FC = () => {
     const [isCredentialModalOpen, setIsCredentialModalOpen] = useState(false);
     const [maxRetries, setMaxRetries] = useState(3);
     const [retryDelay, setRetryDelay] = useState(2); // in seconds
+    const [autoRebootEnabled, setAutoRebootEnabled] = useState(false);
+
 
     const isCancelledRef = useRef(false);
 
@@ -84,7 +86,7 @@ const App: React.FC = () => {
 
         const total = currentDevices.length;
         const compliant = currentDevices.filter(d => d.status === 'Success').length;
-        const needsAction = currentDevices.filter(d => d.status === 'Scan Complete').length;
+        const needsAction = currentDevices.filter(d => ['Scan Complete', 'Update Complete (Reboot Pending)'].includes(d.status)).length;
         const successRate = total > 0 ? (compliant / total) * 100 : 0;
 
         const updatesNeededCounts = { bios: 0, dcu: 0, windows: 0 };
@@ -288,8 +290,32 @@ const App: React.FC = () => {
             }
 
             setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Checking Info' } : d));
-            addLog(`Checking system info for ${device.hostname} (${device.deviceType}).`);
-            await sleep(500 + Math.random() * 500);
+            addLog(`Gathering metadata for ${device.hostname}...`);
+            await sleep(1500 + Math.random() * 1000);
+
+            // Simulate gathering detailed metadata
+            const ipAddress = `10.1.${Math.floor(Math.random() * 254) + 1}.${Math.floor(Math.random() * 254) + 1}`;
+            const serialNumber = Math.random().toString(36).substring(2, 9).toUpperCase();
+            const model = device.deviceType === 'laptop'
+                ? ['Latitude 7420', 'Latitude 5430', 'Precision 5560'][Math.floor(Math.random() * 3)]
+                : ['OptiPlex 7090', 'OptiPlex 5000', 'Precision 3650'][Math.floor(Math.random() * 3)];
+            const ramAmount = [8, 16, 32, 64][Math.floor(Math.random() * 4)];
+            const diskTotal = [256, 512, 1024][Math.floor(Math.random() * 3)];
+            const diskFree = Math.floor(diskTotal * (0.1 + Math.random() * 0.8));
+            const encryptionStatus = Math.random() > 0.2 ? 'Enabled' : 'Disabled';
+
+            const newMetadata = {
+                ipAddress,
+                serialNumber,
+                model,
+                ramAmount,
+                diskSpace: { total: diskTotal, free: diskFree },
+                encryptionStatus,
+            };
+
+            setDevices(prev => prev.map(d => d.id === device.id ? { ...d, ...newMetadata } : d));
+            addLog(`[${device.hostname}] IP: ${ipAddress}, Model: ${model}, SN: ${serialNumber}`);
+            addLog(`[${device.hostname}] RAM: ${ramAmount}GB, Disk: ${diskFree}GB/${diskTotal}GB Free, Encryption: ${encryptionStatus}`);
 
             setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Checking BIOS' } : d));
             await sleep(1500 + Math.random() * 1000);
@@ -344,50 +370,104 @@ const App: React.FC = () => {
     const handleUpdateDevice = async (deviceId: number) => {
         const device = devices.find(d => d.id === deviceId);
         if (!device) return;
-
+    
         addLog(`Initiating updates for ${device.hostname}...`, 'INFO');
-        setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Updating' } : d));
+        setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Updating', lastUpdateResult: undefined } : d));
         await sleep(1000);
-
-        if (isCancelledRef.current) return;
-        if (device.isBiosUpToDate === false) {
-            setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Updating BIOS' } : d));
-            addLog(`[${device.hostname}] Phase: BIOS Update. Status: Starting. Current version: ${device.biosVersion}`, 'INFO');
+    
+        let needsReboot = false;
+        const succeeded: string[] = [];
+        const failed: string[] = [];
+    
+        const componentsToUpdate = [
+            { name: 'BIOS', key: 'bios', versionKey: 'biosVersion', isUpToDateKey: 'isBiosUpToDate', needsUpdate: device.isBiosUpToDate === false, currentVersion: device.biosVersion, targetVersion: TARGET_BIOS_VERSION, requiresReboot: true },
+            { name: 'DCU', key: 'dcu', versionKey: 'dcuVersion', isUpToDateKey: 'isDcuUpToDate', needsUpdate: device.isDcuUpToDate === false, currentVersion: device.dcuVersion, targetVersion: TARGET_DCU_VERSION, requiresReboot: false },
+            { name: 'Windows', key: 'windows', versionKey: 'winVersion', isUpToDateKey: 'isWinUpToDate', needsUpdate: device.isWinUpToDate === false, currentVersion: device.winVersion, targetVersion: TARGET_WIN_VERSION, requiresReboot: false },
+        ];
+    
+        for (const comp of componentsToUpdate) {
+            if (isCancelledRef.current) break;
+            if (!comp.needsUpdate) continue;
+            
+            setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: `Updating ${comp.name}` } : d));
+            addLog(`[${device.hostname}] Phase: ${comp.name} Update. Status: Starting. Current version: ${comp.currentVersion}`, 'INFO');
+            
             await sleep(2000 + Math.random() * 1000);
-            if (isCancelledRef.current) return;
-            setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, biosVersion: TARGET_BIOS_VERSION, isBiosUpToDate: true } : d));
-            addLog(`[${device.hostname}] Phase: BIOS Update. Status: Complete. New version: ${TARGET_BIOS_VERSION}`, 'SUCCESS');
+    
+            if (isCancelledRef.current) break;
+    
+            const updateSucceeded = Math.random() > 0.15; // 85% success chance
+    
+            if (updateSucceeded) {
+                succeeded.push(comp.name);
+                if (comp.requiresReboot) {
+                    needsReboot = true;
+                }
+                setDevices(prev => prev.map(d => d.id === deviceId ? { 
+                    ...d,
+                    [comp.versionKey]: comp.targetVersion, 
+                    [comp.isUpToDateKey]: true 
+                } : d));
+                addLog(`[${device.hostname}] Phase: ${comp.name} Update. Status: Complete. New version: ${comp.targetVersion}`, 'SUCCESS');
+            } else {
+                failed.push(comp.name);
+                addLog(`[${device.hostname}] Phase: ${comp.name} Update. Status: FAILED.`, 'ERROR');
+                break; // Stop updating this device if one component fails
+            }
         }
         
-        if (isCancelledRef.current) return;
-        if (device.isDcuUpToDate === false) {
-            setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Updating DCU' } : d));
-            addLog(`[${device.hostname}] Phase: DCU Update. Status: Starting. Current version: ${device.dcuVersion}`, 'INFO');
-            await sleep(2000 + Math.random() * 1000);
-            if (isCancelledRef.current) return;
-            setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, dcuVersion: TARGET_DCU_VERSION, isDcuUpToDate: true } : d));
-            addLog(`[${device.hostname}] Phase: DCU Update. Status: Complete. New version: ${TARGET_DCU_VERSION}`, 'SUCCESS');
+        if (isCancelledRef.current) {
+             addLog(`Update for ${device.hostname} was cancelled.`, 'WARNING');
+             return;
         }
-
-        if (isCancelledRef.current) return;
-        if (device.isWinUpToDate === false) {
-            setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Updating Windows' } : d));
-            addLog(`[${device.hostname}] Phase: Windows Update. Status: Starting. Current version: ${device.winVersion}`, 'INFO');
-            await sleep(2000 + Math.random() * 1000);
-            if (isCancelledRef.current) return;
-            setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, winVersion: TARGET_WIN_VERSION, isWinUpToDate: true } : d));
-            addLog(`[${device.hostname}] Phase: Windows Update. Status: Complete. New version: ${TARGET_WIN_VERSION}`, 'SUCCESS');
+    
+        const finalUpdateResult = { succeeded, failed };
+    
+        if (failed.length > 0) {
+            addLog(`Update process for ${device.hostname} failed on ${failed[0]} component.`, 'ERROR');
+            setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Failed', lastUpdateResult: finalUpdateResult } : d));
+        } else if (succeeded.length > 0) {
+            const successSummary = `Updates finished for ${device.hostname}. Components updated: ${succeeded.join(', ')}.`;
+            if (needsReboot) {
+                addLog(`${successSummary} A reboot is required to complete the installation.`, 'INFO');
+                setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Update Complete (Reboot Pending)', lastUpdateResult: finalUpdateResult } : d));
+                 if (autoRebootEnabled) {
+                    addLog(`[${device.hostname}] Auto-reboot is enabled. Initiating reboot now...`, 'INFO');
+                    await handleRebootDevice(deviceId);
+                }
+            } else {
+                addLog(`${successSummary} System is now compliant.`, 'SUCCESS');
+                setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Success', lastUpdateResult: finalUpdateResult } : d));
+            }
+        } else {
+            addLog(`No updates were needed for ${device.hostname}. System is already compliant.`, 'INFO');
+            setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Success' } : d));
         }
-
-        if (isCancelledRef.current) return;
-        addLog(`All updates finished for ${device.hostname}. System is now compliant.`, 'SUCCESS');
-        setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Success' } : d));
     };
     
+    const handleRebootDevice = async (deviceId: number) => {
+        const device = devices.find(d => d.id === deviceId);
+        if (!device) return;
+
+        addLog(`[${device.hostname}] Initiating reboot as required by recent updates.`, 'INFO');
+        setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Rebooting...' } : d));
+        
+        await sleep(8000 + Math.random() * 4000);
+
+        if (isCancelledRef.current) {
+            addLog(`[${device.hostname}] Reboot cancelled during process.`, 'WARNING');
+            setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Cancelled' } : d));
+            return;
+        }
+
+        addLog(`[${device.hostname}] Reboot complete. System is now compliant.`, 'SUCCESS');
+        setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Success' } : d));
+    };
+
     const handleCancelDeployment = () => {
         isCancelledRef.current = true;
         setDeploymentState(DeploymentState.Idle);
-        const cancellableStatuses: DeploymentStatus[] = ['Connecting', 'Retrying...', 'Updating', 'Waking Up', 'Checking Info', 'Checking BIOS', 'Checking DCU', 'Checking Windows', 'Updating BIOS', 'Updating DCU', 'Updating Windows'];
+        const cancellableStatuses: DeploymentStatus[] = ['Connecting', 'Retrying...', 'Updating', 'Waking Up', 'Checking Info', 'Checking BIOS', 'Checking DCU', 'Checking Windows', 'Updating BIOS', 'Updating DCU', 'Updating Windows', 'Rebooting...'];
         setDevices(prev => {
             const updatedDevices = prev.map((d): Device => cancellableStatuses.includes(d.status) ? { ...d, status: 'Cancelled' } : d);
             archiveCurrentRun(updatedDevices);
@@ -453,7 +533,10 @@ const App: React.FC = () => {
 
     return (
         <div className="min-h-screen bg-slate-900 text-slate-200 font-sans p-4 sm:p-6 lg:p-8">
-            <Header selectedDeviceIds={selectedDeviceIds} onWakeOnLan={handleWakeOnLan} />
+            <Header
+                selectedDeviceIds={selectedDeviceIds}
+                onWakeOnLan={handleWakeOnLan}
+            />
             <main className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-1 flex flex-col gap-8">
                     <div className="bg-slate-800/50 p-6 rounded-lg shadow-lg border border-slate-700">
@@ -485,7 +568,7 @@ const App: React.FC = () => {
                              <StepCard
                                 step="4"
                                 title="Advanced Settings"
-                                description="Configure connection retry behavior."
+                                description="Configure connection retry and reboot behavior."
                             >
                                 <div className="space-y-3 pt-2">
                                      <div className="flex items-center justify-between">
@@ -507,6 +590,24 @@ const App: React.FC = () => {
                                             onChange={(e) => setRetryDelay(Math.max(1, parseInt(e.target.value, 10)))}
                                             className="w-20 bg-slate-700 border border-slate-600 rounded-md px-2 py-1 text-sm text-center"
                                         />
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <label htmlFor="autoReboot" className="text-sm text-slate-300 cursor-pointer">Auto Reboot</label>
+                                        <button
+                                            id="autoReboot"
+                                            role="switch"
+                                            aria-checked={autoRebootEnabled}
+                                            onClick={() => setAutoRebootEnabled(!autoRebootEnabled)}
+                                            className={`${
+                                                autoRebootEnabled ? 'bg-cyan-600' : 'bg-slate-600'
+                                            } relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 focus:ring-offset-slate-800`}
+                                        >
+                                            <span
+                                                className={`${
+                                                autoRebootEnabled ? 'translate-x-6' : 'translate-x-1'
+                                                } inline-block h-4 w-4 transform rounded-full bg-white transition-transform`}
+                                            />
+                                        </button>
                                     </div>
                                 </div>
                             </StepCard>
@@ -553,6 +654,7 @@ const App: React.FC = () => {
                              <DeviceStatusTable 
                                 devices={devices} 
                                 onUpdateDevice={handleUpdateDevice} 
+                                onRebootDevice={handleRebootDevice}
                                 selectedDeviceIds={selectedDeviceIds}
                                 onDeviceSelect={handleDeviceSelection}
                                 onSelectAll={handleSelectAll}
