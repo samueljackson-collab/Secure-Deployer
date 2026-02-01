@@ -34,6 +34,6 @@ This project can be packaged as a Windows installer using Electron Builder.
 
 ### GitHub Actions artifact
 
-On pushes to `main` or when manually triggered, the workflow **Build Windows EXE**
+On pushes to `main`, pull requests, or when manually triggered, the workflow **Build Windows EXE**
 creates a Windows installer and uploads it as a workflow artifact. Download it from
 the workflow run page under **Artifacts**.
