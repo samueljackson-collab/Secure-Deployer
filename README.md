@@ -1,20 +1,72 @@
 <div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+  <img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
 </div>
 
-# Run and deploy your AI Studio app
+# Secure Deployer
 
-This contains everything you need to run your app locally.
+Secure Deployer is a React + Vite dashboard for coordinating device deployment runs. It validates device inventories from CSV files, captures operator credentials for the session, and visualizes progress, logs, and deployment history so you can keep rollouts on track. 
 
-View your app in AI Studio: https://ai.studio/apps/drive/1ZxJ354NyPZQcWB9WkqM5JquC1JNMLShH
+## Highlights
 
-## Run Locally
+- Upload a device inventory CSV and validate MAC address formats before deployment.
+- Capture session credentials in a dedicated modal before starting a run.
+- Track deployment progress, device status, and failures in real time.
+- Review a centralized log stream for actions, warnings, and errors.
+- See a history of recent runs with compliance metrics and success rates.
 
-**Prerequisites:**  Node.js
+## Tech Stack
 
+- React 19 + TypeScript
+- Vite 6
+- PapaParse for CSV ingestion
+- React Markdown for rich log and status rendering
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Getting Started
+
+### Prerequisites
+
+- Node.js (latest LTS recommended)
+
+### Installation
+
+```bash
+npm install
+```
+
+### Environment Variables
+
+Create a `.env.local` file and add your Gemini API key:
+
+```bash
+GEMINI_API_KEY=your_api_key_here
+```
+
+### Run the app locally
+
+```bash
+npm run dev
+```
+
+## Available Scripts
+
+| Command | Description |
+| --- | --- |
+| `npm run dev` | Start the local dev server. |
+| `npm run build` | Build the production bundle. |
+| `npm run preview` | Preview the production build locally. |
+
+## Project Structure
+
+```text
+.
+├── components/           # UI building blocks (tables, progress, logs, modals)
+├── services/             # Service helpers
+├── App.tsx               # Primary application flow
+└── types.ts              # Shared types and enums
+```
+
+## Notes
+
+- The app expects a device CSV that includes hostname and MAC address columns (case-insensitive matches).
+- MAC addresses are normalized and validated before deployments are queued.
+
