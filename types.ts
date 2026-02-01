@@ -1,4 +1,5 @@
 
+
 export interface Device {
   id: number;
   hostname: string;
@@ -12,9 +13,29 @@ export interface Device {
   isDcuUpToDate?: boolean;
   isWinUpToDate?: boolean;
   retryAttempt?: number;
+  deviceType?: 'desktop' | 'laptop';
+  updatesNeeded?: {
+    bios: boolean;
+    dcu: boolean;
+    windows: boolean;
+  };
+  lastUpdateResult?: {
+    succeeded: string[];
+    failed: string[];
+  };
+  // New metadata fields
+  ipAddress?: string;
+  serialNumber?: string;
+  model?: string;
+  ramAmount?: number; // in GB
+  diskSpace?: {
+    total: number; // in GB
+    free: number; // in GB
+  };
+  encryptionStatus?: 'Enabled' | 'Disabled' | 'Unknown';
 }
 
-export type DeploymentStatus = 'Pending' | 'Waking Up' | 'Connecting' | 'Retrying...' | 'Checking Info' | 'Checking BIOS' | 'Checking DCU' | 'Checking Windows' | 'Scan Complete' | 'Updating' | 'Updating BIOS' | 'Updating DCU' | 'Updating Windows' | 'Success' | 'Failed' | 'Offline' | 'Cancelled';
+export type DeploymentStatus = 'Pending' | 'Waking Up' | 'Connecting' | 'Retrying...' | 'Checking Info' | 'Checking BIOS' | 'Checking DCU' | 'Checking Windows' | 'Scan Complete' | 'Updating' | 'Updating BIOS' | 'Updating DCU' | 'Updating Windows' | 'Success' | 'Failed' | 'Offline' | 'Cancelled' | 'Update Complete (Reboot Pending)' | 'Rebooting...';
 
 export interface LogEntry {
   timestamp: Date;
@@ -41,4 +62,14 @@ export interface DeploymentRun {
   needsAction: number;
   failed: number;
   successRate: number;
+  updatesNeededCounts?: {
+    bios: number;
+    dcu: number;
+    windows: number;
+  };
+  failureCounts?: {
+    offline: number;
+    cancelled: number;
+    failed: number;
+  };
 }
