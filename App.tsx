@@ -1,3 +1,25 @@
+import React, { useMemo, useState } from "react";
+
+/**
+ * Generated from: VISUAL_SPEC_FULL.json
+ * Spec file: portfolio_app_spec.json
+ *
+ * Usage:
+ *   - Drop into a Vite React + TS project as src/App.tsx
+ *   - Ensure Tailwind is configured (classes used below). If not using Tailwind,
+ *     replace className strings with your styling approach.
+ */
+
+type Project = {
+  id: string;
+  name: string;
+  domain: string;
+  status: string;
+  difficulty: string;
+  summary: string;
+  tags: string[];
+  artifacts: Array<{ type: string; label: string }>;
+};
 
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
@@ -18,9 +40,230 @@ const normalizeMacAddress = (mac: string): string => {
     return mac.replace(/[:-]/g, '').toUpperCase();
 };
 
-const isValidMacAddress = (mac: string): boolean => {
-    // After normalization, a valid MAC address is 12 hexadecimal characters.
-    return /^[0-9A-F]{12}$/.test(mac);
+const DATA: AppData = {
+  domains: ["General", "P", "SITE"],
+  projects: [
+    {
+      id: "00",
+      name: "Homelab & Secure Network Build",
+      domain: "General",
+      status: "Planned",
+      difficulty: "Intermediate",
+      summary: "Portfolio project definition from the master visual spec.",
+      tags: [],
+      artifacts: [],
+    },
+    {
+      id: "P01",
+      name: "AWS Infra Automation (CloudFormation)",
+      domain: "P",
+      status: "Planned",
+      difficulty: "Intermediate",
+      summary: "Portfolio project definition from the master visual spec.",
+      tags: [],
+      artifacts: [],
+    },
+    {
+      id: "P02",
+      name: "IAM Security Hardening",
+      domain: "P",
+      status: "Planned",
+      difficulty: "Intermediate",
+      summary: "Portfolio project definition from the master visual spec.",
+      tags: [],
+      artifacts: [],
+    },
+    {
+      id: "P03",
+      name: "Hybrid Network Connectivity Lab",
+      domain: "P",
+      status: "Planned",
+      difficulty: "Intermediate",
+      summary: "Portfolio project definition from the master visual spec.",
+      tags: [],
+      artifacts: [],
+    },
+    {
+      id: "P04",
+      name: "Operational Monitoring & Automation",
+      domain: "P",
+      status: "Planned",
+      difficulty: "Intermediate",
+      summary: "Portfolio project definition from the master visual spec.",
+      tags: [],
+      artifacts: [],
+    },
+    {
+      id: "P05",
+      name: "Mobile App Manual Testing",
+      domain: "P",
+      status: "Planned",
+      difficulty: "Intermediate",
+      summary: "Portfolio project definition from the master visual spec.",
+      tags: [],
+      artifacts: [],
+    },
+    {
+      id: "P06",
+      name: "Web App Automated Testing",
+      domain: "P",
+      status: "Planned",
+      difficulty: "Intermediate",
+      summary: "Portfolio project definition from the master visual spec.",
+      tags: [],
+      artifacts: [],
+    },
+    {
+      id: "P07",
+      name: "International Roaming Test Simulation",
+      domain: "P",
+      status: "Planned",
+      difficulty: "Intermediate",
+      summary: "Portfolio project definition from the master visual spec.",
+      tags: [],
+      artifacts: [],
+    },
+    {
+      id: "P08",
+      name: "Backend API Testing",
+      domain: "P",
+      status: "Planned",
+      difficulty: "Intermediate",
+      summary: "Portfolio project definition from the master visual spec.",
+      tags: [],
+      artifacts: [],
+    },
+    {
+      id: "P09",
+      name: "Cloud-Native POC Deployment",
+      domain: "P",
+      status: "Planned",
+      difficulty: "Intermediate",
+      summary: "Portfolio project definition from the master visual spec.",
+      tags: [],
+      artifacts: [],
+    },
+    {
+      id: "P10",
+      name: "Scalable Multi-Region Architecture",
+      domain: "P",
+      status: "Planned",
+      difficulty: "Intermediate",
+      summary: "Portfolio project definition from the master visual spec.",
+      tags: [],
+      artifacts: [],
+    },
+    {
+      id: "P11",
+      name: "API Gateway & Serverless Integration",
+      domain: "P",
+      status: "Planned",
+      difficulty: "Intermediate",
+      summary: "Portfolio project definition from the master visual spec.",
+      tags: [],
+      artifacts: [],
+    },
+    {
+      id: "P12",
+      name: "Data Pipeline Architecture",
+      domain: "P",
+      status: "Planned",
+      difficulty: "Intermediate",
+      summary: "Portfolio project definition from the master visual spec.",
+      tags: [],
+      artifacts: [],
+    },
+    {
+      id: "P13",
+      name: "High Availability Web App",
+      domain: "P",
+      status: "Planned",
+      difficulty: "Intermediate",
+      summary: "Portfolio project definition from the master visual spec.",
+      tags: [],
+      artifacts: [],
+    },
+    {
+      id: "P14",
+      name: "Disaster Recovery Design",
+      domain: "P",
+      status: "Planned",
+      difficulty: "Intermediate",
+      summary: "Portfolio project definition from the master visual spec.",
+      tags: [],
+      artifacts: [],
+    },
+    {
+      id: "P15",
+      name: "Cloud Cost Optimization Lab",
+      domain: "P",
+      status: "Planned",
+      difficulty: "Intermediate",
+      summary: "Portfolio project definition from the master visual spec.",
+      tags: [],
+      artifacts: [],
+    },
+    {
+      id: "P16",
+      name: "Zero-Trust Cloud Architecture",
+      domain: "P",
+      status: "Planned",
+      difficulty: "Intermediate",
+      summary: "Portfolio project definition from the master visual spec.",
+      tags: [],
+      artifacts: [],
+    },
+    {
+      id: "P17",
+      name: "Terraform Multi-Cloud Deployment",
+      domain: "P",
+      status: "Planned",
+      difficulty: "Intermediate",
+      summary: "Portfolio project definition from the master visual spec.",
+      tags: [],
+      artifacts: [],
+    },
+    {
+      id: "P18",
+      name: "CI/CD Pipeline with Kubernetes",
+      domain: "P",
+      status: "Planned",
+      difficulty: "Intermediate",
+      summary: "Portfolio project definition from the master visual spec.",
+      tags: [],
+      artifacts: [],
+    },
+    {
+      id: "P19",
+      name: "Cloud Security Automation",
+      domain: "P",
+      status: "Planned",
+      difficulty: "Intermediate",
+      summary: "Portfolio project definition from the master visual spec.",
+      tags: [],
+      artifacts: [],
+    },
+    {
+      id: "P20",
+      name: "Observability Engineering",
+      domain: "P",
+      status: "Planned",
+      difficulty: "Intermediate",
+      summary: "Portfolio project definition from the master visual spec.",
+      tags: [],
+      artifacts: [],
+    },
+    {
+      id: "SITE",
+      name: "Portfolio Site (Static)",
+      domain: "SITE",
+      status: "Planned",
+      difficulty: "Intermediate",
+      summary: "Portfolio project definition from the master visual spec.",
+      tags: [],
+      artifacts: [],
+    },
+  ],
 };
 
 const detectDeviceType = (hostname: string): 'laptop' | 'desktop' => {
@@ -663,14 +906,10 @@ const App: React.FC = () => {
                         </div>
                     </div>
                 </div>
-            </main>
-            <SecureCredentialModal
-                isOpen={isCredentialModalOpen}
-                onClose={() => setIsCredentialModalOpen(false)}
-                onConfirm={handleConfirmCredentialsAndDeploy}
-            />
+              </div>
+            </div>
+          </div>
         </div>
-    );
-};
+      )}
 
 export default App;
