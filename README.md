@@ -286,7 +286,7 @@ secure-deployment-runner/
 │   ├── CredentialsForm.tsx # Credential input form
 │   └── SecureCredentialModal.tsx # Modal for credentials
 └── services/
-    └── geminiService.ts    # External service integration
+    └── aiService.ts        # External service integration
 ```
 
 ## Technology Stack

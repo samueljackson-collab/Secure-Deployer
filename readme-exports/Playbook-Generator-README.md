@@ -33,7 +33,7 @@ The Ansible Homelab Playbook Generator simplifies the creation of complex Ansibl
 2. Click "Generate" to create complete playbooks
 3. Copy the generated code directly into their projects
 
-The application leverages Google's Generative AI to produce intelligent, context-aware Ansible code that follows best practices, including:
+The application leverages AI to produce intelligent, context-aware Ansible code that follows best practices, including:
 
 - Modular role-based architecture
 - Idempotent operations
@@ -46,7 +46,7 @@ The application leverages Google's Generative AI to produce intelligent, context
 ### Core Capabilities
 
 - **Visual Configuration Builder**: Intuitive checkbox-based interface for selecting playbook components
-- **AI-Powered Generation**: Uses Google Gemini AI to create intelligent, context-aware Ansible code
+- **AI-Powered Generation**: Uses a large language model to create intelligent, context-aware Ansible code
 - **Complete Project Structure**: Generates not just playbooks, but full role structures with tasks, handlers, and variables
 - **Documentation Generation**: Optionally creates README files with setup instructions and troubleshooting guides
 - **Theme Support**: Dark and light mode with automatic system preference detection
@@ -67,7 +67,7 @@ The application leverages Google's Generative AI to produce intelligent, context
 
 - **Node.js**: Version 18.x or higher
 - **Modern Web Browser**: Chrome, Firefox, Edge, or Safari (latest versions)
-- **Google AI API Key**: Required for playbook generation (Gemini API access)
+- **AI API Key**: Required for playbook generation (set via environment variable)
 
 ## Installation
 
@@ -86,7 +86,7 @@ The application leverages Google's Generative AI to produce intelligent, context
 
    Create a `.env.local` file in the project root:
    ```bash
-   API_KEY=your_google_generative_ai_api_key
+   API_KEY=your_api_key_here
    ```
 
 4. **Start the development server**
@@ -218,7 +218,7 @@ Self-hosted applications:
 |--------|-------------|
 | Media server (Plex/Jellyfin) | Docker-based media server with transcoding |
 | Home automation (Home Assistant) | Smart home platform with reverse proxy exposure |
-| Photo management (Immich) | Self-hosted photo backup (Google Photos alternative) |
+| Photo management (Immich) | Self-hosted photo backup and management |
 | Password manager (Vaultwarden) | Bitwarden-compatible password vault |
 | Git server (Gitea) | Lightweight self-hosted Git service |
 
@@ -323,7 +323,7 @@ Playbook-Generator/
 │   ├── Sidebar.tsx         # Configuration selection panel
 │   └── CodeDisplay.tsx     # Generated code viewer
 └── services/
-    └── geminiService.ts    # Google AI integration
+    └── aiService.ts        # AI generation service
 ```
 
 ## Technology Stack
@@ -333,33 +333,32 @@ Playbook-Generator/
 | React | 19.x | UI framework |
 | TypeScript | 5.8.x | Type safety |
 | Vite | 6.x | Build tool and dev server |
-| @google/genai | 1.34.x | Google Generative AI SDK |
+| AI SDK | latest | Generative AI integration |
 | Tailwind CSS | (inline) | Styling |
 
 ## API Configuration
 
-### Google Generative AI Setup
+### AI Service Setup
 
 1. **Get API Key**:
-   - Visit [Google AI Studio](https://aistudio.google.com/)
-   - Create a new project or select existing
-   - Generate an API key
+   - Obtain an API key from your AI provider
+   - Ensure the key has access to a generative text model
 
 2. **Configure Environment**:
    ```bash
    # .env.local
-   API_KEY=AIza...your-key-here
+   API_KEY=your-api-key-here
    ```
 
-3. **Model Used**: `gemini-3-flash-preview`
-   - Fast generation
-   - High-quality Ansible output
-   - Cost-effective for development
+3. **Model Configuration**:
+   - The service uses a generative AI model for playbook creation
+   - Fast generation with high-quality Ansible output
+   - Cost-effective for development use
 
 ### Rate Limits
 
-Be aware of Google AI API rate limits:
-- Free tier: Limited requests per minute
+Be aware of API rate limits from your AI provider:
+- Free tiers typically have limited requests per minute
 - Consider caching generated outputs
 - Implement retry logic for production use
 
@@ -369,12 +368,12 @@ Be aware of Google AI API rate limits:
 
 **"API_KEY environment variable not set"**
 - Ensure `.env.local` file exists in project root
-- Verify the key is named `API_KEY` (not `GOOGLE_API_KEY`)
+- Verify the key is named `API_KEY`
 - Restart the development server after adding the key
 
 **Empty or incomplete generation**
 - Check browser console for API errors
-- Verify API key has Generative AI permissions
+- Verify the API key is valid and has not expired
 - Try selecting fewer options for simpler output
 
 **Theme not persisting**
