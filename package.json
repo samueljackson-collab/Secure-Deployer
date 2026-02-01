@@ -14,8 +14,8 @@
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "papaparse": "^5.5.3",
-    "react-markdown": "^10.1.0",
-    "@google/genai": "^1.38.0"
+    "@google/genai": "^1.38.0",
+    "react-markdown": "^10.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
