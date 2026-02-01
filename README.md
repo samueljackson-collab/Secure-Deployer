@@ -91,6 +91,8 @@ To create a production-ready build:
 npm run build
 ```
 
+The GitHub Actions workflow named **Build Windows EXE** runs on pushes to the `main` branch, on pull requests, and when manually triggered.
+
 To preview the production build:
 
 ```bash
