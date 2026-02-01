@@ -432,7 +432,7 @@ export default function App() {
               <div>
                 <div className={sectionTitleClass()}>Sort</div>
                 <div className="mt-2">
-                  <select className={selectClass()} value={sort} onChange={(e) => setSort(e.target.value as any)}>
+                  <select className={selectClass()} value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
                     <option value="name_asc">Name (A → Z)</option>
                     <option value="name_desc">Name (Z → A)</option>
                     <option value="domain_asc">Domain</option>
