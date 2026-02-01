@@ -1,4 +1,5 @@
 
+
 import React from 'react';
 
 interface HeaderProps {
@@ -20,10 +21,11 @@ export const Header: React.FC<HeaderProps> = ({ selectedDeviceIds, onWakeOnLan }
                     onClick={() => onWakeOnLan(selectedDeviceIds)}
                     disabled={!hasSelection}
                     className="px-4 py-2 bg-sky-600 text-white text-sm font-semibold rounded-lg hover:bg-sky-700 disabled:bg-slate-600 disabled:cursor-not-allowed transition duration-200 shadow-md focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-opacity-50"
+                    title={hasSelection ? `Send Wake-on-LAN signal to ${selectedDeviceIds.size} selected device(s)` : 'Select devices to send Wake-on-LAN signal'}
                 >
                     Wake-on-LAN ({selectedDeviceIds.size})
                 </button>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-2" title="The deployment system is online and ready.">
                      <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
                      <span className="text-sm font-medium text-green-400">System Online</span>
                 </div>

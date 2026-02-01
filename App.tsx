@@ -1,8 +1,8 @@
 
+
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Header } from './components/Header';
 import { StepCard } from './components/StepCard';
-import { CredentialsForm } from './components/CredentialsForm';
 import { DeploymentProgress } from './components/DeploymentProgress';
 import { DeviceStatusTable } from './components/DeviceStatusTable';
 import { LogViewer } from './components/LogViewer';
@@ -23,10 +23,22 @@ const isValidMacAddress = (mac: string): boolean => {
     return /^[0-9A-F]{12}$/.test(mac);
 };
 
+const detectDeviceType = (hostname: string): 'laptop' | 'desktop' => {
+    const upperHostname = hostname.toUpperCase();
+    
+    // ELS Enterprise Laptop Standard (ELSLE) or ESLSC
+    if (upperHostname.includes('ELSLE') || upperHostname.includes('ESLSC')) {
+        return 'laptop';
+    }
+
+    // Default to desktop if no specific laptop identifier is found.
+    // EWSLE (Enterprise Workstation Standard) would fall into this category.
+    return 'desktop';
+};
+
 const TARGET_BIOS_VERSION = 'A25';
 const TARGET_DCU_VERSION = '5.2.0';
 const TARGET_WIN_VERSION = '23H2';
-const MAX_RETRIES = 3;
 
 const App: React.FC = () => {
     const [csvFile, setCsvFile] = useState<File | null>(null);
@@ -38,6 +50,10 @@ const App: React.FC = () => {
     const [selectedDeviceIds, setSelectedDeviceIds] = useState<Set<number>>(new Set());
     const [deploymentHistory, setDeploymentHistory] = useState<DeploymentRun[]>([]);
     const [isCredentialModalOpen, setIsCredentialModalOpen] = useState(false);
+    const [maxRetries, setMaxRetries] = useState(3);
+    const [retryDelay, setRetryDelay] = useState(2); // in seconds
+    const [autoRebootEnabled, setAutoRebootEnabled] = useState(false);
+
 
     const isCancelledRef = useRef(false);
 
@@ -70,9 +86,22 @@ const App: React.FC = () => {
 
         const total = currentDevices.length;
         const compliant = currentDevices.filter(d => d.status === 'Success').length;
-        const needsAction = currentDevices.filter(d => d.status === 'Scan Complete').length;
-        const failed = currentDevices.filter(d => ['Failed', 'Offline', 'Cancelled'].includes(d.status)).length;
+        const needsAction = currentDevices.filter(d => ['Scan Complete', 'Update Complete (Reboot Pending)'].includes(d.status)).length;
         const successRate = total > 0 ? (compliant / total) * 100 : 0;
+
+        const updatesNeededCounts = { bios: 0, dcu: 0, windows: 0 };
+        currentDevices.forEach(d => {
+            if (d.updatesNeeded?.bios) updatesNeededCounts.bios++;
+            if (d.updatesNeeded?.dcu) updatesNeededCounts.dcu++;
+            if (d.updatesNeeded?.windows) updatesNeededCounts.windows++;
+        });
+
+        const failureCounts = {
+            offline: currentDevices.filter(d => d.status === 'Offline').length,
+            cancelled: currentDevices.filter(d => d.status === 'Cancelled').length,
+            failed: currentDevices.filter(d => d.status === 'Failed').length,
+        };
+        const failedTotal = failureCounts.offline + failureCounts.cancelled + failureCounts.failed;
 
         const newRun: DeploymentRun = {
             id: Date.now(),
@@ -80,8 +109,10 @@ const App: React.FC = () => {
             totalDevices: total,
             compliant,
             needsAction,
-            failed,
+            failed: failedTotal,
             successRate,
+            updatesNeededCounts,
+            failureCounts,
         };
         setDeploymentHistory(prev => [newRun, ...prev].slice(0, 10)); // Keep last 10 runs
     };
@@ -122,8 +153,8 @@ const App: React.FC = () => {
                          return;
                     }
 
-                    const hostnameCol = header.find(h => h.toLowerCase().includes('hostname') || h.toLowerCase().includes('computer') || h.toLowerCase().includes('name') || h.toLowerCase().includes('device'));
-                    const macCol = header.find(h => h.toLowerCase().includes('mac'));
+                    const hostnameCol = header.find(h => h.toLowerCase().includes('hostname') || h.toLowerCase().includes('computername') || h.toLowerCase().includes('devicename') || h.toLowerCase().includes('computer') || h.toLowerCase().includes('name') || h.toLowerCase().includes('device'));
+                    const macCol = header.find(h => h.toLowerCase().replace(/[\s_-]/g, '').includes('macaddress') || h.toLowerCase().trim() === 'mac');
 
                     if (!hostnameCol || !macCol) {
                         addLog("CSV must contain columns for 'Hostname' and 'MAC Address'.", 'ERROR');
@@ -151,10 +182,12 @@ const App: React.FC = () => {
                         }
 
                         if (!isValidMacAddress(normalizedMac)) {
-                            addLog(`Validation failed for row ${index + 2}: Invalid MAC address format "${rawMac}" for device "${hostname}". Skipping entry.`, 'WARNING');
+                            addLog(`[Validation Skip] Skipping device "${hostname}" from row ${index + 2}. Reason: Invalid MAC address format. Received: "${rawMac}".`, 'WARNING');
                             invalidCount++;
                             return;
                         }
+                        
+                        const deviceType = detectDeviceType(hostname);
 
                         parsedDevices.push({
                             id: index,
@@ -162,6 +195,7 @@ const App: React.FC = () => {
                             mac: normalizedMac,
                             status: 'Pending',
                             isSelected: false,
+                            deviceType,
                         });
                     });
 
@@ -230,7 +264,7 @@ const App: React.FC = () => {
             setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Connecting' } : d));
             
             let isConnected = false;
-            for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            for (let attempt = 1; attempt <= maxRetries; attempt++) {
                  if (isCancelledRef.current) break;
 
                 await sleep(1000 + Math.random() * 500);
@@ -241,49 +275,79 @@ const App: React.FC = () => {
                     }
                     break;
                 } else {
-                    if (attempt < MAX_RETRIES) {
-                        addLog(`[${device.hostname}] Connection failed. Retrying... (Attempt ${attempt} of ${MAX_RETRIES})`, 'WARNING');
+                    if (attempt < maxRetries) {
+                        addLog(`[${device.hostname}] Connection failed. Retrying... (Attempt ${attempt} of ${maxRetries})`, 'WARNING');
                         setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Retrying...', retryAttempt: attempt } : d));
-                        await sleep(2000);
+                        await sleep(retryDelay * 1000);
                     }
                 }
             }
 
             if (!isConnected) {
                 setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Offline' } : d));
-                addLog(`Host ${device.hostname} is not responding after ${MAX_RETRIES} attempts.`, 'ERROR');
+                addLog(`Host ${device.hostname} is not responding after ${maxRetries} attempts.`, 'ERROR');
                 continue;
             }
 
             setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Checking Info' } : d));
-            addLog(`Checking system info for ${device.hostname}.`);
-            await sleep(400 + Math.random() * 400);
+            addLog(`Gathering metadata for ${device.hostname}...`);
+            await sleep(1500 + Math.random() * 1000);
+
+            // Simulate gathering detailed metadata
+            const ipAddress = `10.1.${Math.floor(Math.random() * 254) + 1}.${Math.floor(Math.random() * 254) + 1}`;
+            const serialNumber = Math.random().toString(36).substring(2, 9).toUpperCase();
+            const model = device.deviceType === 'laptop'
+                ? ['Latitude 7420', 'Latitude 5430', 'Precision 5560'][Math.floor(Math.random() * 3)]
+                : ['OptiPlex 7090', 'OptiPlex 5000', 'Precision 3650'][Math.floor(Math.random() * 3)];
+            const ramAmount = [8, 16, 32, 64][Math.floor(Math.random() * 4)];
+            const diskTotal = [256, 512, 1024][Math.floor(Math.random() * 3)];
+            const diskFree = Math.floor(diskTotal * (0.1 + Math.random() * 0.8));
+            const encryptionStatus = Math.random() > 0.2 ? 'Enabled' : 'Disabled';
+
+            const newMetadata = {
+                ipAddress,
+                serialNumber,
+                model,
+                ramAmount,
+                diskSpace: { total: diskTotal, free: diskFree },
+                encryptionStatus,
+            };
+
+            setDevices(prev => prev.map(d => d.id === device.id ? { ...d, ...newMetadata } : d));
+            addLog(`[${device.hostname}] IP: ${ipAddress}, Model: ${model}, SN: ${serialNumber}`);
+            addLog(`[${device.hostname}] RAM: ${ramAmount}GB, Disk: ${diskFree}GB/${diskTotal}GB Free, Encryption: ${encryptionStatus}`);
 
             setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Checking BIOS' } : d));
-            await sleep(1000 + Math.random() * 700);
+            await sleep(1500 + Math.random() * 1000);
             const biosVersion = Math.random() > 0.3 ? TARGET_BIOS_VERSION : `A${Math.floor(18 + Math.random() * 6)}`;
             const isBiosUpToDate = biosVersion === TARGET_BIOS_VERSION;
             setDevices(prev => prev.map(d => d.id === device.id ? { ...d, biosVersion, isBiosUpToDate } : d));
             addLog(`[${device.hostname}] BIOS Version: ${biosVersion}`);
 
             setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Checking DCU' } : d));
-            await sleep(1000 + Math.random() * 700);
+            await sleep(1200 + Math.random() * 800);
             const dcuVersion = Math.random() > 0.3 ? TARGET_DCU_VERSION : `5.${Math.floor(Math.random() * 2)}.${Math.floor(Math.random() * 9)}`;
             const isDcuUpToDate = dcuVersion === TARGET_DCU_VERSION;
             setDevices(prev => prev.map(d => d.id === device.id ? { ...d, dcuVersion, isDcuUpToDate } : d));
             addLog(`[${device.hostname}] DCU Version: ${dcuVersion}`);
 
             setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Checking Windows' } : d));
-            await sleep(1000 + Math.random() * 700);
+            await sleep(1800 + Math.random() * 1200);
             const winVersion = Math.random() > 0.3 ? TARGET_WIN_VERSION : ['22H2', '21H2'][Math.floor(Math.random()*2)];
             const isWinUpToDate = winVersion === TARGET_WIN_VERSION;
             
             const allUpToDate = isBiosUpToDate && isDcuUpToDate && isWinUpToDate;
+            const updatesNeeded = {
+                bios: !isBiosUpToDate,
+                dcu: !isDcuUpToDate,
+                windows: !isWinUpToDate,
+            };
 
             setDevices(prev => prev.map(d => d.id === device.id ? {
                 ...d,
                 winVersion,
                 isWinUpToDate,
+                updatesNeeded,
                 status: allUpToDate ? 'Success' : 'Scan Complete',
             } : d));
              addLog(`[${device.hostname}] Windows Version: ${winVersion}`);
@@ -306,52 +370,106 @@ const App: React.FC = () => {
     const handleUpdateDevice = async (deviceId: number) => {
         const device = devices.find(d => d.id === deviceId);
         if (!device) return;
-
+    
         addLog(`Initiating updates for ${device.hostname}...`, 'INFO');
-        setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Updating' } : d));
+        setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Updating', lastUpdateResult: undefined } : d));
         await sleep(1000);
-
-        if (isCancelledRef.current) return;
-        if (device.isBiosUpToDate === false) {
-            setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Updating BIOS' } : d));
-            addLog(`[${device.hostname}] Phase: BIOS Update. Status: Starting. Current version: ${device.biosVersion}`, 'INFO');
+    
+        let needsReboot = false;
+        const succeeded: string[] = [];
+        const failed: string[] = [];
+    
+        const componentsToUpdate = [
+            { name: 'BIOS', key: 'bios', versionKey: 'biosVersion', isUpToDateKey: 'isBiosUpToDate', needsUpdate: device.isBiosUpToDate === false, currentVersion: device.biosVersion, targetVersion: TARGET_BIOS_VERSION, requiresReboot: true },
+            { name: 'DCU', key: 'dcu', versionKey: 'dcuVersion', isUpToDateKey: 'isDcuUpToDate', needsUpdate: device.isDcuUpToDate === false, currentVersion: device.dcuVersion, targetVersion: TARGET_DCU_VERSION, requiresReboot: false },
+            { name: 'Windows', key: 'windows', versionKey: 'winVersion', isUpToDateKey: 'isWinUpToDate', needsUpdate: device.isWinUpToDate === false, currentVersion: device.winVersion, targetVersion: TARGET_WIN_VERSION, requiresReboot: false },
+        ];
+    
+        for (const comp of componentsToUpdate) {
+            if (isCancelledRef.current) break;
+            if (!comp.needsUpdate) continue;
+            
+            setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: `Updating ${comp.name}` } : d));
+            addLog(`[${device.hostname}] Phase: ${comp.name} Update. Status: Starting. Current version: ${comp.currentVersion}`, 'INFO');
+            
             await sleep(2000 + Math.random() * 1000);
-            if (isCancelledRef.current) return;
-            setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, biosVersion: TARGET_BIOS_VERSION, isBiosUpToDate: true } : d));
-            addLog(`[${device.hostname}] Phase: BIOS Update. Status: Complete. New version: ${TARGET_BIOS_VERSION}`, 'SUCCESS');
+    
+            if (isCancelledRef.current) break;
+    
+            const updateSucceeded = Math.random() > 0.15; // 85% success chance
+    
+            if (updateSucceeded) {
+                succeeded.push(comp.name);
+                if (comp.requiresReboot) {
+                    needsReboot = true;
+                }
+                setDevices(prev => prev.map(d => d.id === deviceId ? { 
+                    ...d,
+                    [comp.versionKey]: comp.targetVersion, 
+                    [comp.isUpToDateKey]: true 
+                } : d));
+                addLog(`[${device.hostname}] Phase: ${comp.name} Update. Status: Complete. New version: ${comp.targetVersion}`, 'SUCCESS');
+            } else {
+                failed.push(comp.name);
+                addLog(`[${device.hostname}] Phase: ${comp.name} Update. Status: FAILED.`, 'ERROR');
+                break; // Stop updating this device if one component fails
+            }
         }
         
-        if (isCancelledRef.current) return;
-        if (device.isDcuUpToDate === false) {
-            setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Updating DCU' } : d));
-            addLog(`[${device.hostname}] Phase: DCU Update. Status: Starting. Current version: ${device.dcuVersion}`, 'INFO');
-            await sleep(2000 + Math.random() * 1000);
-            if (isCancelledRef.current) return;
-            setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, dcuVersion: TARGET_DCU_VERSION, isDcuUpToDate: true } : d));
-            addLog(`[${device.hostname}] Phase: DCU Update. Status: Complete. New version: ${TARGET_DCU_VERSION}`, 'SUCCESS');
+        if (isCancelledRef.current) {
+             addLog(`Update for ${device.hostname} was cancelled.`, 'WARNING');
+             return;
         }
-
-        if (isCancelledRef.current) return;
-        if (device.isWinUpToDate === false) {
-            setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Updating Windows' } : d));
-            addLog(`[${device.hostname}] Phase: Windows Update. Status: Starting. Current version: ${device.winVersion}`, 'INFO');
-            await sleep(2000 + Math.random() * 1000);
-            if (isCancelledRef.current) return;
-            setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, winVersion: TARGET_WIN_VERSION, isWinUpToDate: true } : d));
-            addLog(`[${device.hostname}] Phase: Windows Update. Status: Complete. New version: ${TARGET_WIN_VERSION}`, 'SUCCESS');
+    
+        const finalUpdateResult = { succeeded, failed };
+    
+        if (failed.length > 0) {
+            addLog(`Update process for ${device.hostname} failed on ${failed[0]} component.`, 'ERROR');
+            setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Failed', lastUpdateResult: finalUpdateResult } : d));
+        } else if (succeeded.length > 0) {
+            const successSummary = `Updates finished for ${device.hostname}. Components updated: ${succeeded.join(', ')}.`;
+            if (needsReboot) {
+                addLog(`${successSummary} A reboot is required to complete the installation.`, 'INFO');
+                setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Update Complete (Reboot Pending)', lastUpdateResult: finalUpdateResult } : d));
+                 if (autoRebootEnabled) {
+                    addLog(`[${device.hostname}] Auto-reboot is enabled. Initiating reboot now...`, 'INFO');
+                    await handleRebootDevice(deviceId);
+                }
+            } else {
+                addLog(`${successSummary} System is now compliant.`, 'SUCCESS');
+                setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Success', lastUpdateResult: finalUpdateResult } : d));
+            }
+        } else {
+            addLog(`No updates were needed for ${device.hostname}. System is already compliant.`, 'INFO');
+            setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Success' } : d));
         }
-
-        if (isCancelledRef.current) return;
-        addLog(`All updates finished for ${device.hostname}. System is now compliant.`, 'SUCCESS');
-        setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Success' } : d));
     };
     
+    const handleRebootDevice = async (deviceId: number) => {
+        const device = devices.find(d => d.id === deviceId);
+        if (!device) return;
+
+        addLog(`[${device.hostname}] Initiating reboot as required by recent updates.`, 'INFO');
+        setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Rebooting...' } : d));
+        
+        await sleep(8000 + Math.random() * 4000);
+
+        if (isCancelledRef.current) {
+            addLog(`[${device.hostname}] Reboot cancelled during process.`, 'WARNING');
+            setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Cancelled' } : d));
+            return;
+        }
+
+        addLog(`[${device.hostname}] Reboot complete. System is now compliant.`, 'SUCCESS');
+        setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Success' } : d));
+    };
+
     const handleCancelDeployment = () => {
         isCancelledRef.current = true;
         setDeploymentState(DeploymentState.Idle);
-        const cancellableStatuses: DeploymentStatus[] = ['Connecting', 'Retrying...', 'Updating', 'Waking Up', 'Checking Info', 'Checking BIOS', 'Checking DCU', 'Checking Windows', 'Updating BIOS', 'Updating DCU', 'Updating Windows'];
+        const cancellableStatuses: DeploymentStatus[] = ['Connecting', 'Retrying...', 'Updating', 'Waking Up', 'Checking Info', 'Checking BIOS', 'Checking DCU', 'Checking Windows', 'Updating BIOS', 'Updating DCU', 'Updating Windows', 'Rebooting...'];
         setDevices(prev => {
-            const updatedDevices = prev.map(d => cancellableStatuses.includes(d.status) ? { ...d, status: 'Cancelled' } : d);
+            const updatedDevices = prev.map((d): Device => cancellableStatuses.includes(d.status) ? { ...d, status: 'Cancelled' } : d);
             archiveCurrentRun(updatedDevices);
             return updatedDevices;
         });
@@ -402,7 +520,7 @@ const App: React.FC = () => {
         addLog(`Cancelling tasks for ${selectedDeviceIds.size} selected devices...`, 'WARNING');
         const cancellableStatuses: DeploymentStatus[] = ['Connecting', 'Retrying...', 'Updating', 'Waking Up', 'Checking Info', 'Checking BIOS', 'Checking DCU', 'Checking Windows', 'Updating BIOS', 'Updating DCU', 'Updating Windows'];
         setDevices(prev =>
-            prev.map(d =>
+            prev.map((d): Device =>
                 selectedDeviceIds.has(d.id) && cancellableStatuses.includes(d.status)
                     ? { ...d, status: 'Cancelled' }
                     : d
@@ -415,7 +533,10 @@ const App: React.FC = () => {
 
     return (
         <div className="min-h-screen bg-slate-900 text-slate-200 font-sans p-4 sm:p-6 lg:p-8">
-            <Header selectedDeviceIds={selectedDeviceIds} onWakeOnLan={handleWakeOnLan} />
+            <Header
+                selectedDeviceIds={selectedDeviceIds}
+                onWakeOnLan={handleWakeOnLan}
+            />
             <main className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-1 flex flex-col gap-8">
                     <div className="bg-slate-800/50 p-6 rounded-lg shadow-lg border border-slate-700">
@@ -442,6 +563,53 @@ const App: React.FC = () => {
                                 title="Enter Credentials"
                                 description="Secure credentials will be requested when you start the scan."
                             >
+                                <p className="text-xs text-slate-500 pt-2">Authentication will be prompted before the scan begins.</p>
+                            </StepCard>
+                             <StepCard
+                                step="4"
+                                title="Advanced Settings"
+                                description="Configure connection retry and reboot behavior."
+                            >
+                                <div className="space-y-3 pt-2">
+                                     <div className="flex items-center justify-between">
+                                        <label htmlFor="maxRetries" className="text-sm text-slate-300">Max Retries</label>
+                                        <input 
+                                            type="number" 
+                                            id="maxRetries" 
+                                            value={maxRetries}
+                                            onChange={(e) => setMaxRetries(Math.max(1, parseInt(e.target.value, 10)))}
+                                            className="w-20 bg-slate-700 border border-slate-600 rounded-md px-2 py-1 text-sm text-center"
+                                        />
+                                    </div>
+                                     <div className="flex items-center justify-between">
+                                        <label htmlFor="retryDelay" className="text-sm text-slate-300">Retry Delay (sec)</label>
+                                        <input 
+                                            type="number" 
+                                            id="retryDelay"
+                                            value={retryDelay}
+                                            onChange={(e) => setRetryDelay(Math.max(1, parseInt(e.target.value, 10)))}
+                                            className="w-20 bg-slate-700 border border-slate-600 rounded-md px-2 py-1 text-sm text-center"
+                                        />
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <label htmlFor="autoReboot" className="text-sm text-slate-300 cursor-pointer">Auto Reboot</label>
+                                        <button
+                                            id="autoReboot"
+                                            role="switch"
+                                            aria-checked={autoRebootEnabled}
+                                            onClick={() => setAutoRebootEnabled(!autoRebootEnabled)}
+                                            className={`${
+                                                autoRebootEnabled ? 'bg-cyan-600' : 'bg-slate-600'
+                                            } relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 focus:ring-offset-slate-800`}
+                                        >
+                                            <span
+                                                className={`${
+                                                autoRebootEnabled ? 'translate-x-6' : 'translate-x-1'
+                                                } inline-block h-4 w-4 transform rounded-full bg-white transition-transform`}
+                                            />
+                                        </button>
+                                    </div>
+                                </div>
                             </StepCard>
                         </div>
                     </div>
@@ -462,7 +630,7 @@ const App: React.FC = () => {
                             ) : (
                                  <button
                                     onClick={handleStartDeployment}
-                                    disabled={!isReadyToDeploy || deploymentState === DeploymentState.Running}
+                                    disabled={!isReadyToDeploy}
                                     className="px-6 py-2 bg-cyan-600 text-white font-semibold rounded-lg hover:bg-cyan-700 disabled:bg-slate-600 disabled:cursor-not-allowed transition duration-200 shadow-md focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-opacity-50"
                                 >
                                     Start System Scan
@@ -486,6 +654,7 @@ const App: React.FC = () => {
                              <DeviceStatusTable 
                                 devices={devices} 
                                 onUpdateDevice={handleUpdateDevice} 
+                                onRebootDevice={handleRebootDevice}
                                 selectedDeviceIds={selectedDeviceIds}
                                 onDeviceSelect={handleDeviceSelection}
                                 onSelectAll={handleSelectAll}
