@@ -33,7 +33,9 @@ const getAllowedUrl = (url) => {
       // Validate path is within app directory (no path traversal)
       const relativePath = path.relative(appPath, requestedPath);
       // Reject if path tries to escape the app directory
-      if (relativePath.startsWith('..') || relativePath.includes(path.sep + '..')) {
+      // Split by both possible separators and check each component
+      const pathComponents = relativePath.split(/[/\\]/);
+      if (pathComponents.some(component => component === '..')) {
         return null;
       }
     }
