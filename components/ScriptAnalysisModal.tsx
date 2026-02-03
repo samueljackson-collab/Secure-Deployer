@@ -114,7 +114,9 @@ export const ScriptAnalysisModal: React.FC<ScriptAnalysisModalProps> = ({ isOpen
                                 </div>
                             )}
 
-                            {result.findings.length === 0 && result.blockedPatterns.length === 0 && (
+                            {result.findings.length === 0 &&
+                                result.blockedPatterns.length === 0 &&
+                                result.scopeViolations.length === 0 && (
                                 <div className="text-center py-8">
                                     <p className="text-green-400 text-lg font-semibold">No issues detected</p>
                                     <p className="text-sm text-slate-400 mt-1">Script appears safe for deployment on verified devices.</p>
