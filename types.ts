@@ -168,6 +168,11 @@ export interface ScriptFinding {
  * - Deployment scripts cannot contain dangerous patterns (script analysis)
  * - Operators must explicitly select devices within configured limits (UI)
  */
+// Device scope enforcement policy
+// NOTE: Most policy flags (blockBroadcastCommands, blockSubnetWideOperations,
+// blockRegistryWrites, blockServiceStops) are enforced at the script analysis
+// level (see scriptSafetyAnalyzer.ts) before deployment begins.
+// Only enforceHostnameWhitelist is enforced at runtime during device updates.
 export interface ScopePolicy {
   /** List of allowed hostnames - enforced at runtime during device updates */
   allowedHostnames: string[];
@@ -177,6 +182,7 @@ export interface ScopePolicy {
   maxDeviceCount: number;
   /** Require explicit device selection (prevents "select all") - enforced in UI */
   requireExplicitSelection: boolean;
+<<<<<<< copilot/sub-pr-6-another-one
   /** Block broadcast commands in deployment scripts - enforced during script analysis */
   blockBroadcastCommands: boolean;
   /** Block subnet-wide operations in deployment scripts - enforced during script analysis */
@@ -187,6 +193,13 @@ export interface ScopePolicy {
   blockServiceStops: boolean;
   /** Enable runtime hostname whitelist enforcement */
   enforceHostnameWhitelist: boolean;
+=======
+  blockBroadcastCommands: boolean;         // Enforced during script analysis
+  blockSubnetWideOperations: boolean;      // Enforced during script analysis
+  blockRegistryWrites: boolean;             // Enforced during script analysis
+  blockServiceStops: boolean;               // Enforced during script analysis
+  enforceHostnameWhitelist: boolean;        // Enforced at runtime AND during script analysis
+>>>>>>> claude/hospital-imaging-security-ovolc
 }
 
 export interface ScopeVerification {
