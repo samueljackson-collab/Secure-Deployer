@@ -65,7 +65,9 @@ const formatTimestamp = (dateStr: string | undefined): string => {
 // even across component remounts or multi-tab scenarios
 let idCounter = 0;
 const generateDeviceId = (): number => {
-  return Date.now() * 10000 + (idCounter++ % 10000);
+  // Use modulo to keep timestamp portion within safe integer range
+  // Combined with counter, this provides sufficient uniqueness for this use case
+  return (Date.now() % 1_000_000_000) * 1000 + (idCounter++ % 1000);
 };
 
 const metadataToDevice = (metadata: ImagingMetadata): Device => {
