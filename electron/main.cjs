@@ -28,12 +28,14 @@ const getAllowedUrl = (urlString) => {
     // For file: protocol, ensure it's within the app directory
     if (parsedUrl.protocol === 'file:') {
       // url.fileURLToPath properly handles both Unix and Windows file URLs
-      const requestedPath = path.normalize(url.fileURLToPath(parsedUrl));
+      // It already returns normalized paths, so no need for additional normalization
+      const requestedPath = url.fileURLToPath(parsedUrl);
       
       // Validate path is within app directory (no path traversal)
       const relativePath = path.relative(appPath, requestedPath);
-      // Reject if path tries to escape app directory, is absolute, or is empty
-      if (!relativePath || relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+      // Reject if path tries to escape app directory or is on a different drive
+      // Empty string means app root, which is allowed
+      if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
         return null;
       }
     }
