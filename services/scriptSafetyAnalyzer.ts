@@ -28,11 +28,11 @@ interface PatternRule {
 // ---- BLOCKED (CRITICAL) ---- script will be rejected outright ----
 
 const BLOCKED_PATTERNS: PatternRule[] = [
-  // -- shutdown without /t timeout or targeting all machines --
+  // -- shutdown without /t timeout or with unreasonably short timeout, or targeting all machines --
   {
-    regex: /shutdown\s+\/[sr](?!.*\/t\s+\d)/i,
+    regex: /shutdown\s+\/[sr](?!.*\/t\s+[1-9]\d+)/i,
     severity: 'BLOCKED',
-    description: 'Shutdown/restart command without explicit /t timeout. Could immediately power off hospital systems.',
+    description: 'Shutdown/restart command without explicit /t timeout or with too-short timeout. Could immediately power off hospital systems.',
     recommendation: 'Add an explicit /t timeout value (e.g. shutdown /r /t 60) and target a specific hostname.',
   },
   {
