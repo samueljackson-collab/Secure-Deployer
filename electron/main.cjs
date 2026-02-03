@@ -14,6 +14,9 @@ if (!gotTheLock) {
 // Security: Only allow file: protocol for local app files
 const allowedProtocols = new Set(['file:']);
 
+// Pre-compute app path for efficient validation
+const appPath = path.normalize(path.resolve(__dirname, '..'));
+
 // Security: Validate that URLs are within the app's directory
 const getAllowedUrl = (urlString) => {
   try {
@@ -24,18 +27,15 @@ const getAllowedUrl = (urlString) => {
     
     // For file: protocol, ensure it's within the app directory
     if (parsedUrl.protocol === 'file:') {
-      const appPath = path.normalize(path.resolve(__dirname, '..'));
       // url.fileURLToPath properly handles both Unix and Windows file URLs
-      // Remove query strings and fragments before conversion
-      const cleanUrl = parsedUrl.href.split('?')[0].split('#')[0];
-      const requestedPath = path.normalize(url.fileURLToPath(cleanUrl));
+      // Use pathname to exclude query strings and fragments
+      const fileUrl = parsedUrl.protocol + '//' + parsedUrl.pathname;
+      const requestedPath = path.normalize(url.fileURLToPath(fileUrl));
       
       // Validate path is within app directory (no path traversal)
       const relativePath = path.relative(appPath, requestedPath);
       // Reject if path tries to escape the app directory
-      // Split by both possible separators and check each component
-      const pathComponents = relativePath.split(/[/\\]/);
-      if (pathComponents.some(component => component === '..')) {
+      if (relativePath.startsWith('..')) {
         return null;
       }
     }
