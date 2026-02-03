@@ -568,6 +568,26 @@ const App: React.FC = () => {
         const device = devices.find(d => d.id === deviceId);
         if (!device) return;
 
+<<<<<<< copilot/sub-pr-6-another-one
+        // Runtime scope policy enforcement
+        if (activeScopePolicy) {
+            // Check hostname whitelist
+            if (activeScopePolicy.enforceHostnameWhitelist) {
+                if (!activeScopePolicy.allowedHostnames.includes(device.hostname)) {
+                    addLog(`BLOCKED: ${device.hostname} is not in the verified scope. Update denied.`, 'ERROR');
+                    return;
+                }
+            }
+
+            // Check MAC address whitelist
+            if (activeScopePolicy.allowedMacs && activeScopePolicy.allowedMacs.length > 0) {
+                const normalizedDeviceMac = normalizeMacAddress(device.mac);
+                const normalizedAllowedMacs = activeScopePolicy.allowedMacs.map(mac => normalizeMacAddress(mac));
+                if (!normalizedAllowedMacs.includes(normalizedDeviceMac)) {
+                    addLog(`BLOCKED: ${device.hostname} (MAC: ${device.mac}) is not in the verified MAC address list. Update denied.`, 'ERROR');
+                    return;
+                }
+=======
         // Runtime scope policy enforcement: Only hostname/MAC whitelist is checked here.
         // Other policy flags (blockBroadcastCommands, blockRegistryWrites, etc.) are
         // enforced at the script analysis level before deployment begins.
@@ -575,6 +595,7 @@ const App: React.FC = () => {
             if (!activeScopePolicy.allowedHostnames.includes(device.hostname)) {
                 addLog(`BLOCKED: ${device.hostname} is not in the verified scope. Update denied.`, 'ERROR');
                 return;
+>>>>>>> claude/hospital-imaging-security-ovolc
             }
         }
 
