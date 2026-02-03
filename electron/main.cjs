@@ -1,6 +1,6 @@
 const { app, BrowserWindow, session } = require('electron');
 const path = require('path');
-const { fileURLToPath } = require('url');
+const url = require('url');
 
 // Security: Disable hardware acceleration to reduce attack surface
 app.disableHardwareAcceleration();
@@ -28,7 +28,7 @@ const getAllowedUrl = (url) => {
       // fileURLToPath properly handles both Unix and Windows file URLs
       // Remove query strings and fragments before conversion
       const cleanUrl = parsedUrl.href.split('?')[0].split('#')[0];
-      const requestedPath = path.normalize(fileURLToPath(cleanUrl));
+      const requestedPath = path.normalize(url.fileURLToPath(cleanUrl));
       
       // Validate path is within app directory (no path traversal)
       const relativePath = path.relative(appPath, requestedPath);
