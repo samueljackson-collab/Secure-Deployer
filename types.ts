@@ -143,16 +143,49 @@ export interface ScriptFinding {
   recommendation: string;
 }
 
-// Device scope enforcement
+/**
+ * Device scope enforcement policy.
+ * 
+ * This policy is enforced at TWO levels:
+ * 
+ * 1. RUNTIME ENFORCEMENT (in handleUpdateDevice):
+ *    - allowedHostnames: Verified against device hostname before individual updates
+ *    - allowedMacs: Verified against device MAC address before individual updates
+ *    - enforceHostnameWhitelist: Controls whether hostname checking is enabled
+ * 
+ * 2. SCRIPT ANALYSIS ENFORCEMENT (in scriptSafetyAnalyzer):
+ *    - blockBroadcastCommands: Detects and blocks broadcast/subnet-wide commands in scripts
+ *    - blockSubnetWideOperations: Detects and blocks subnet targeting patterns in scripts
+ *    - blockRegistryWrites: Detects and blocks dangerous registry write operations in scripts
+ *    - blockServiceStops: Detects and blocks stopping of critical Windows services in scripts
+ * 
+ * 3. UI/CONFIGURATION LEVEL:
+ *    - maxDeviceCount: Enforced in DeviceScopeGuard UI to limit bulk operation scope
+ *    - requireExplicitSelection: Enforced in DeviceScopeGuard UI to prevent "select all" operations
+ * 
+ * This multi-level enforcement ensures that:
+ * - Individual device updates respect the verified device list (runtime)
+ * - Deployment scripts cannot contain dangerous patterns (script analysis)
+ * - Operators must explicitly select devices within configured limits (UI)
+ */
 export interface ScopePolicy {
+  /** List of allowed hostnames - enforced at runtime during device updates */
   allowedHostnames: string[];
+  /** List of allowed MAC addresses - enforced at runtime during device updates */
   allowedMacs: string[];
+  /** Maximum number of devices that can be selected for bulk operations - enforced in UI */
   maxDeviceCount: number;
+  /** Require explicit device selection (prevents "select all") - enforced in UI */
   requireExplicitSelection: boolean;
+  /** Block broadcast commands in deployment scripts - enforced during script analysis */
   blockBroadcastCommands: boolean;
+  /** Block subnet-wide operations in deployment scripts - enforced during script analysis */
   blockSubnetWideOperations: boolean;
+  /** Block registry write operations in deployment scripts - enforced during script analysis */
   blockRegistryWrites: boolean;
+  /** Block stopping critical services in deployment scripts - enforced during script analysis */
   blockServiceStops: boolean;
+  /** Enable runtime hostname whitelist enforcement */
   enforceHostnameWhitelist: boolean;
 }
 
