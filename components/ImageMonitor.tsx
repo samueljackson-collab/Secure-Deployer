@@ -32,7 +32,8 @@ const isValidMacFormat = (mac: string): boolean => {
 };
 
 const normalizeMac = (mac: string): string => {
-  return mac.replace(/[:\-]/g, '').toUpperCase();
+  // Normalize MAC addresses consistently with App.tsx: remove colons, hyphens, periods, and whitespace
+  return mac.replace(/[:\-.\s]/g, '').toUpperCase();
 };
 
 const resolveImagingStatus = (progress: number, metadata: ImagingMetadata): ImagingStatus => {
@@ -60,7 +61,14 @@ const formatTimestamp = (dateStr: string | undefined): string => {
   }
 };
 
-let nextDeviceId = Date.now();
+// Generate robust unique IDs using timestamp + counter to avoid collisions
+// even across component remounts or multi-tab scenarios
+let idCounter = 0;
+const generateDeviceId = (): number => {
+  // Use modulo to keep timestamp portion within safe integer range
+  // Combined with counter, this provides sufficient uniqueness for this use case
+  return (Date.now() % 1_000_000_000) * 1000 + (idCounter++ % 1000);
+};
 
 const metadataToDevice = (metadata: ImagingMetadata): Device => {
   const progress = typeof metadata.imageProgress === 'number'
@@ -69,7 +77,7 @@ const metadataToDevice = (metadata: ImagingMetadata): Device => {
   const imagingStatus = resolveImagingStatus(progress, metadata);
 
   return {
-    id: nextDeviceId++,
+    id: generateDeviceId(),
     hostname: metadata.hostname,
     mac: normalizeMac(metadata.macAddress),
     status: 'Pending',

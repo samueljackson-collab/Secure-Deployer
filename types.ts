@@ -143,17 +143,21 @@ export interface ScriptFinding {
   recommendation: string;
 }
 
-// Device scope enforcement
+// Device scope enforcement policy
+// NOTE: Most policy flags (blockBroadcastCommands, blockSubnetWideOperations,
+// blockRegistryWrites, blockServiceStops) are enforced at the script analysis
+// level (see scriptSafetyAnalyzer.ts) before deployment begins.
+// Only enforceHostnameWhitelist is enforced at runtime during device updates.
 export interface ScopePolicy {
   allowedHostnames: string[];
   allowedMacs: string[];
   maxDeviceCount: number;
   requireExplicitSelection: boolean;
-  blockBroadcastCommands: boolean;
-  blockSubnetWideOperations: boolean;
-  blockRegistryWrites: boolean;
-  blockServiceStops: boolean;
-  enforceHostnameWhitelist: boolean;
+  blockBroadcastCommands: boolean;         // Enforced during script analysis
+  blockSubnetWideOperations: boolean;      // Enforced during script analysis
+  blockRegistryWrites: boolean;             // Enforced during script analysis
+  blockServiceStops: boolean;               // Enforced during script analysis
+  enforceHostnameWhitelist: boolean;        // Enforced at runtime AND during script analysis
 }
 
 export interface ScopeVerification {

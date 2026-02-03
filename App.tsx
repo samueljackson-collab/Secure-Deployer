@@ -143,16 +143,19 @@ const App: React.FC = () => {
         if (sessionTimerRef.current) {
             clearTimeout(sessionTimerRef.current);
         }
-        if (sessionActive) {
-            sessionTimerRef.current = setTimeout(() => {
-                setCredentials({ username: '', password: '' });
-                setSessionActive(false);
-            }, SESSION_TIMEOUT_MS);
-        }
-    }, [sessionActive]);
+        // Always set timer when this function is called, regardless of current sessionActive state
+        // This ensures the timer is refreshed on every activity event
+        sessionTimerRef.current = setTimeout(() => {
+            setCredentials({ username: '', password: '' });
+            setSessionActive(false);
+            addLog('Session expired due to inactivity. Please re-authenticate.', 'WARNING');
+        }, SESSION_TIMEOUT_MS);
+    }, []);
 
     useEffect(() => {
         if (sessionActive) {
+            // Start the timer when session becomes active
+            resetSessionTimer();
             const handleActivity = () => resetSessionTimer();
             window.addEventListener('mousemove', handleActivity);
             window.addEventListener('keydown', handleActivity);
@@ -161,6 +164,12 @@ const App: React.FC = () => {
                 window.removeEventListener('keydown', handleActivity);
                 if (sessionTimerRef.current) clearTimeout(sessionTimerRef.current);
             };
+        } else {
+            // Clear timer when session becomes inactive
+            if (sessionTimerRef.current) {
+                clearTimeout(sessionTimerRef.current);
+                sessionTimerRef.current = null;
+            }
         }
     }, [sessionActive, resetSessionTimer]);
 
@@ -184,6 +193,10 @@ const App: React.FC = () => {
     const handleFileChange = (setter: React.Dispatch<React.SetStateAction<File | null>>) => (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             setter(e.target.files[0]);
+            // Reset script analysis when a new batch file is selected
+            if (setter === setBatchFile) {
+                setScriptAnalysisResult(null);
+            }
         }
     };
 
@@ -555,6 +568,9 @@ const App: React.FC = () => {
         const device = devices.find(d => d.id === deviceId);
         if (!device) return;
 
+        // Runtime scope policy enforcement: Only hostname/MAC whitelist is checked here.
+        // Other policy flags (blockBroadcastCommands, blockRegistryWrites, etc.) are
+        // enforced at the script analysis level before deployment begins.
         if (activeScopePolicy && activeScopePolicy.enforceHostnameWhitelist) {
             if (!activeScopePolicy.allowedHostnames.includes(device.hostname)) {
                 addLog(`BLOCKED: ${device.hostname} is not in the verified scope. Update denied.`, 'ERROR');
@@ -754,7 +770,7 @@ const App: React.FC = () => {
         setActiveView('deployment');
     };
 
-    const isReadyToDeploy = csvFile && batchFile;
+    const isReadyToDeploy = csvFile && batchFile && (!scriptAnalysisResult || scriptAnalysisResult.isSafe);
 
     return (
         <div className="min-h-screen bg-slate-900 text-slate-200 font-sans p-4 sm:p-6 lg:p-8">
@@ -856,15 +872,24 @@ const App: React.FC = () => {
                         <div className="bg-slate-800/50 p-6 rounded-lg shadow-lg border border-slate-700">
                             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
                                 <h2 className="text-xl font-bold text-cyan-400 mb-2 sm:mb-0">Deployment Status</h2>
-                                {deploymentState === DeploymentState.Running ? (
-                                    <button onClick={handleCancelDeployment} className="px-6 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition duration-200 shadow-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50">
-                                        Cancel Scan
-                                    </button>
-                                ) : (
-                                    <button onClick={handleStartDeployment} disabled={!isReadyToDeploy} className="px-6 py-2 bg-cyan-600 text-white font-semibold rounded-lg hover:bg-cyan-700 disabled:bg-slate-600 disabled:cursor-not-allowed transition duration-200 shadow-md focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-opacity-50">
-                                        Start System Scan
-                                    </button>
-                                )}
+                                <div className="flex flex-col items-end gap-2">
+                                    {deploymentState === DeploymentState.Running ? (
+                                        <button onClick={handleCancelDeployment} className="px-6 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition duration-200 shadow-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50">
+                                            Cancel Scan
+                                        </button>
+                                    ) : (
+                                        <>
+                                            <button onClick={handleStartDeployment} disabled={!isReadyToDeploy} className="px-6 py-2 bg-cyan-600 text-white font-semibold rounded-lg hover:bg-cyan-700 disabled:bg-slate-600 disabled:cursor-not-allowed transition duration-200 shadow-md focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-opacity-50">
+                                                Start System Scan
+                                            </button>
+                                            {scriptAnalysisResult && !scriptAnalysisResult.isSafe && (
+                                                <p className="text-xs text-red-400 max-w-xs text-right">
+                                                    Deployment blocked: Script failed safety analysis. Fix the script or select a different file.
+                                                </p>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
                             </div>
                             <DeploymentProgress devices={devices} />
                         </div>

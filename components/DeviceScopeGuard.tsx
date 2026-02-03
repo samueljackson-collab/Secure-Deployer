@@ -97,16 +97,6 @@ export const DeviceScopeGuard: React.FC<DeviceScopeGuardProps> = ({
       scopeVerifiedAt: now,
     }));
 
-    // Build verification records (kept for audit trail in the future)
-    const _verifications: ScopeVerification[] = selectedDevices.map((d) => ({
-      deviceId: d.id,
-      hostname: d.hostname,
-      mac: d.mac,
-      verified: true,
-      verifiedAt: now,
-      verifiedBy: username,
-    }));
-
     // Build the scope policy
     const policy: ScopePolicy = {
       allowedHostnames: selectedDevices.map((d) => d.hostname),
