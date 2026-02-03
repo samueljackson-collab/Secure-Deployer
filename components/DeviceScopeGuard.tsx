@@ -58,7 +58,9 @@ export const DeviceScopeGuard: React.FC<DeviceScopeGuardProps> = ({
     parseInt(confirmationCount.trim(), 10) === selectedCount;
 
   // Overall readiness
-  const isReadyToConfirm = allDevicesChecked && countConfirmed && selectedCount > 0;
+  const isWithinMax = selectedCount <= maxDeviceCount;
+  const isReadyToConfirm =
+    allDevicesChecked && countConfirmed && selectedCount > 0 && isWithinMax;
 
   const handleDeviceCheck = (deviceId: number) => {
     setCheckedDeviceIds((prev) => {
