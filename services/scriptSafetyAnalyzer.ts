@@ -11,7 +11,7 @@
  *   - All pattern lists are intentionally broad to catch obfuscation attempts.
  */
 
-import type { ScriptSafetyResult, ScriptFinding } from '../types';
+import type { ScriptSafetyResult, ScriptFinding, ScopePolicy } from '../types';
 
 // ---------------------------------------------------------------------------
 // Pattern definitions
@@ -807,17 +807,18 @@ function severityToRiskLevel(severity: ScriptFinding['severity']): ScriptSafetyR
  * This is DETERMINISTIC and AI-FREE. It uses only regex pattern matching.
  *
  * @param scriptContent  The raw text content of the script.
- * @param allowedHostnames  List of hostnames that the script is permitted to target.
+ * @param scopePolicy  The scope policy defining allowed operations and targets.
  * @returns A ScriptSafetyResult with all findings, risk level, and safety determination.
  */
 export function analyzeScript(
   scriptContent: string,
-  allowedHostnames: string[],
+  scopePolicy: ScopePolicy | null,
 ): ScriptSafetyResult {
   const findings: ScriptFinding[] = [];
   const blockedPatterns: string[] = [];
   const scopeViolations: string[] = [];
 
+  const allowedHostnames = scopePolicy?.allowedHostnames || [];
   const normalizedAllowed = new Set(allowedHostnames.map((h) => h.toUpperCase().trim()));
 
   const lines = scriptContent.split(/\r?\n/);
@@ -925,6 +926,121 @@ export function analyzeScript(
       findings.push(wf);
       scopeViolations.push(`Line ${lineNumber}: ${wf.description}`);
       overallWorstSeverity = worstSeverity(overallWorstSeverity, wf.severity);
+    }
+  }
+
+  // --- Enforce scope policy restrictions ---
+  if (scopePolicy) {
+    // Check for broadcast commands if blocked by policy
+    if (scopePolicy.blockBroadcastCommands) {
+      const broadcastPatterns = [
+        /ping\s+.*\.255/i,
+        /ping\s+.*255\.255\.255\.255/i,
+        /for\s+\/L\s+.*\bping\b/i,
+        /1\.\.254.*ping|ping.*1\.\.254/i,
+      ];
+      
+      const broadcastLines = scriptContent.split(/\r?\n/).filter((line, idx) => 
+        broadcastPatterns.some(pattern => pattern.test(line))
+      );
+      
+      if (broadcastLines.length > 0) {
+        const violation = 'Scope policy blocks broadcast commands, but script contains broadcast operations.';
+        scopeViolations.push(violation);
+        blockedPatterns.push(violation);
+        findings.push({
+          line: 0,
+          pattern: 'blockBroadcastCommands policy',
+          severity: 'BLOCKED',
+          description: violation,
+          recommendation: 'Remove all broadcast operations (ping .255, etc.) or disable the blockBroadcastCommands policy.',
+        });
+        overallWorstSeverity = 'BLOCKED';
+      }
+    }
+
+    // Check for subnet-wide operations if blocked by policy
+    if (scopePolicy.blockSubnetWideOperations) {
+      const subnetPatterns = [
+        /for\s+\/L\s+.*\bping\b/i,
+        /1\.\.254/i,
+        /wmic\s+.*\/node:\s*[*"]\*[*"]/i,
+        /Invoke-Command\s+.*-ComputerName\s+\*/i,
+        /\\\\[*]/i,
+      ];
+      
+      const subnetLines = scriptContent.split(/\r?\n/).filter((line, idx) => 
+        subnetPatterns.some(pattern => pattern.test(line))
+      );
+      
+      if (subnetLines.length > 0) {
+        const violation = 'Scope policy blocks subnet-wide operations, but script contains subnet scanning or wildcard targeting.';
+        scopeViolations.push(violation);
+        blockedPatterns.push(violation);
+        findings.push({
+          line: 0,
+          pattern: 'blockSubnetWideOperations policy',
+          severity: 'BLOCKED',
+          description: violation,
+          recommendation: 'Remove all subnet-wide operations (ping sweeps, wildcards, etc.) or disable the blockSubnetWideOperations policy.',
+        });
+        overallWorstSeverity = 'BLOCKED';
+      }
+    }
+
+    // Check for registry writes if blocked by policy
+    if (scopePolicy.blockRegistryWrites) {
+      const registryWritePatterns = [
+        /reg\s+add\s+HKLM\\SYSTEM/i,
+        /Set-ItemProperty\s+.*HKLM:\\SYSTEM/i,
+        /New-ItemProperty\s+.*HKLM:\\SYSTEM/i,
+        /reg\s+add\s+HKEY_LOCAL_MACHINE\\SYSTEM/i,
+      ];
+      
+      const registryLines = scriptContent.split(/\r?\n/).filter((line, idx) => 
+        registryWritePatterns.some(pattern => pattern.test(line))
+      );
+      
+      if (registryLines.length > 0) {
+        const violation = 'Scope policy blocks registry writes to HKLM\\SYSTEM, but script contains such operations.';
+        scopeViolations.push(violation);
+        blockedPatterns.push(violation);
+        findings.push({
+          line: 0,
+          pattern: 'blockRegistryWrites policy',
+          severity: 'BLOCKED',
+          description: violation,
+          recommendation: 'Remove all HKLM\\SYSTEM registry write operations or disable the blockRegistryWrites policy.',
+        });
+        overallWorstSeverity = 'BLOCKED';
+      }
+    }
+
+    // Check for service stops if blocked by policy
+    if (scopePolicy.blockServiceStops) {
+      const serviceStopPatterns = [
+        /net\s+stop\s+/i,
+        /Stop-Service\s+/i,
+        /sc\s+stop\s+/i,
+      ];
+      
+      const serviceStopLines = scriptContent.split(/\r?\n/).filter((line, idx) => 
+        serviceStopPatterns.some(pattern => pattern.test(line))
+      );
+      
+      if (serviceStopLines.length > 0) {
+        const violation = 'Scope policy blocks service stops, but script contains service stop commands.';
+        scopeViolations.push(violation);
+        blockedPatterns.push(violation);
+        findings.push({
+          line: 0,
+          pattern: 'blockServiceStops policy',
+          severity: 'BLOCKED',
+          description: violation,
+          recommendation: 'Remove all service stop commands (net stop, Stop-Service, etc.) or disable the blockServiceStops policy.',
+        });
+        overallWorstSeverity = 'BLOCKED';
+      }
     }
   }
 
