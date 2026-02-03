@@ -25,11 +25,13 @@ const getAllowedUrl = (url) => {
     // For file: protocol, ensure it's within the app directory
     if (parsedUrl.protocol === 'file:') {
       const appPath = path.resolve(__dirname, '..');
-      const requestedPath = path.resolve(fileURLToPath(parsedUrl.href));
+      // Construct clean file URL without query/fragments, then convert to path
+      const cleanFileUrl = parsedUrl.protocol + '//' + parsedUrl.pathname;
+      const requestedPath = path.resolve(fileURLToPath(cleanFileUrl));
       
       // Validate path is within app directory (no path traversal)
       const relativePath = path.relative(appPath, requestedPath);
-      if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+      if (relativePath.startsWith('..')) {
         return null;
       }
     }
