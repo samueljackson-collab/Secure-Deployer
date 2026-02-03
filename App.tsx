@@ -258,12 +258,22 @@ const App: React.FC = () => {
             return;
         }
 
-        if (sessionCredentials.username.length < 1 || sessionCredentials.username.length > 256) {
-            addLog("Invalid username format.", 'ERROR');
+        // NOTE: Full authentication and authorization are enforced server-side.
+        // This client-side check only validates basic credential format and complexity.
+        const username = sessionCredentials.username.trim();
+        const password = sessionCredentials.password;
+
+        const usernamePattern = /^[A-Za-z0-9@._\\-\\\\]{3,256}$/;
+        if (!usernamePattern.test(username)) {
+            addLog("Invalid username format. Use 3-256 characters: letters, numbers, and @ . _ - \\\\ only.", 'ERROR');
             return;
         }
-        if (sessionCredentials.password.length < 1 || sessionCredentials.password.length > 256) {
-            addLog("Invalid password format.", 'ERROR');
+
+        const MIN_PASSWORD_LENGTH = 12;
+        const passwordTooShortOrLong = password.length < MIN_PASSWORD_LENGTH || password.length > 256;
+        const passwordComplexityPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^\\da-zA-Z]).+$/;
+        if (passwordTooShortOrLong || !passwordComplexityPattern.test(password)) {
+            addLog("Invalid password format. Password must be 12-256 characters and include upper case, lower case, number, and special character.", 'ERROR');
             return;
         }
 
