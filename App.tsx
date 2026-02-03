@@ -11,7 +11,7 @@ import { ImageMonitor } from './components/ImageMonitor';
 import { DeviceScopeGuard } from './components/DeviceScopeGuard';
 import { ScriptAnalysisModal } from './components/ScriptAnalysisModal';
 import { analyzeScript } from './services/scriptSafetyAnalyzer';
-import type { Device, LogEntry, DeploymentStatus, Credentials, DeploymentRun, ScopePolicy, ScriptSafetyResult } from './types';
+import type { Device, DeviceFormFactor, LogEntry, DeploymentStatus, Credentials, DeploymentRun, ScopePolicy, ScriptSafetyResult } from './types';
 import { DeploymentState } from './types';
 import Papa from 'papaparse';
 
@@ -28,11 +28,70 @@ const isValidMacAddress = (mac: string): boolean => {
     return /^[0-9A-F]{12}$/.test(normalized);
 };
 
-const detectDeviceType = (hostname: string): 'laptop' | 'desktop' => {
+/**
+ * Detects the Dell business device form factor from hostname naming conventions.
+ *
+ * Enterprise hostname patterns (examples):
+ *   ELSLE / ESLSC / L14 / LAT14            → laptop-14  (Standard 14" Latitude)
+ *   EPLPR / L16 / LAT16 / PRE16 / PRE56    → laptop-16  (Pro 16" / Precision Mobile)
+ *   EDTCH / DET / 2IN1 / DTCH              → detachable (Latitude Detachable 2-in-1)
+ *   WYSE / WYS / THIN / TC                 → wyse       (Wyse Thin Client)
+ *   VDI / VIRT / VD-                        → vdi        (Virtual Desktop)
+ *   EWSSF / SFF                             → sff        (Standard Form Factor)
+ *   EWSMF / EWSMC / MFF / MICRO            → micro      (Micro Form Factor)
+ *   EWSTW / TWR / TOWER                    → tower      (Tower)
+ *   EWSLE / other desktop patterns          → desktop    (Generic desktop fallback)
+ *   Remaining laptops without size hint     → laptop     (Generic laptop fallback)
+ *
+ * Order matters: more specific patterns are tested before generic fallbacks.
+ */
+const detectDeviceType = (hostname: string): DeviceFormFactor => {
     const upper = hostname.toUpperCase();
-    if (upper.includes('ELSLE') || upper.includes('ESLSC')) {
+
+    // --- Thin Clients & VDI (check first - they are distinct categories) ---
+    if (upper.includes('WYSE') || upper.includes('WYS') || upper.includes('THIN') || /\bTC\d/.test(upper)) {
+        return 'wyse';
+    }
+    if (upper.includes('VDI') || upper.includes('VIRT') || /\bVD[-_]/.test(upper)) {
+        return 'vdi';
+    }
+
+    // --- Detachable 2-in-1 ---
+    if (upper.includes('EDTCH') || upper.includes('DET') || upper.includes('2IN1') || upper.includes('DTCH')) {
+        return 'detachable';
+    }
+
+    // --- Pro 16" Laptop (Precision Mobile / large Latitude) ---
+    if (upper.includes('EPLPR') || upper.includes('L16') || upper.includes('LAT16') || upper.includes('PRE16') || upper.includes('PRE56') || upper.includes('PRE57')) {
+        return 'laptop-16';
+    }
+
+    // --- Standard 14" Laptop ---
+    if (upper.includes('ELSLE') || upper.includes('ESLSC') || upper.includes('L14') || upper.includes('LAT14') || upper.includes('LAT54') || upper.includes('LAT74')) {
+        return 'laptop-14';
+    }
+
+    // --- Tower desktop ---
+    if (upper.includes('EWSTW') || upper.includes('TWR') || upper.includes('TOWER') || upper.includes('PRETW')) {
+        return 'tower';
+    }
+
+    // --- Micro Form Factor desktop ---
+    if (upper.includes('EWSMF') || upper.includes('EWSMC') || upper.includes('MFF') || upper.includes('MICRO')) {
+        return 'micro';
+    }
+
+    // --- Standard Form Factor desktop ---
+    if (upper.includes('EWSSF') || upper.includes('SFF')) {
+        return 'sff';
+    }
+
+    // --- Generic laptop (any remaining laptop-like hostname) ---
+    if (upper.includes('LAT') || upper.includes('LAPTOP') || upper.includes('NB') || upper.includes('PRE5') || upper.includes('PRE7')) {
         return 'laptop';
     }
+
+    // --- Generic desktop (any remaining desktop-like hostname, including EWSLE) ---
     return 'desktop';
 };
 
@@ -400,9 +459,21 @@ const App: React.FC = () => {
 
             const ipAddress = `10.1.${Math.floor(Math.random() * 254) + 1}.${Math.floor(Math.random() * 254) + 1}`;
             const serialNumber = Math.random().toString(36).substring(2, 9).toUpperCase();
-            const model = device.deviceType === 'laptop'
-                ? ['Latitude 7420', 'Latitude 5430', 'Precision 5560'][Math.floor(Math.random() * 3)]
-                : ['OptiPlex 7090', 'OptiPlex 5000', 'Precision 3650'][Math.floor(Math.random() * 3)];
+            const modelMap: Record<DeviceFormFactor, string[]> = {
+                'laptop-14':  ['Latitude 5450', 'Latitude 7450', 'Latitude 5440'],
+                'laptop-16':  ['Latitude 9640', 'Precision 5690', 'Precision 5680'],
+                'detachable': ['Latitude 7350 Detachable', 'Latitude 7230 Rugged Extreme'],
+                'laptop':     ['Latitude 7420', 'Latitude 5430', 'Precision 5560'],
+                'sff':        ['OptiPlex 7020 SFF', 'OptiPlex 5000 SFF', 'OptiPlex 7010 SFF'],
+                'micro':      ['OptiPlex 7020 Micro', 'OptiPlex 7010 Micro', 'OptiPlex 3000 Micro'],
+                'tower':      ['OptiPlex 7020 Tower', 'Precision 3680 Tower', 'OptiPlex 5000 Tower'],
+                'wyse':       ['Wyse 5070', 'Wyse 5470', 'Wyse 3040'],
+                'vdi':        ['VDI Virtual Desktop', 'VMware Horizon Client', 'Citrix Workspace'],
+                'desktop':    ['OptiPlex 7090', 'OptiPlex 5000', 'Precision 3650'],
+            };
+            const deviceFormFactor = device.deviceType || 'desktop';
+            const models = modelMap[deviceFormFactor];
+            const model = models[Math.floor(Math.random() * models.length)];
             const ramAmount = [8, 16, 32, 64][Math.floor(Math.random() * 4)];
             const diskTotal = [256, 512, 1024][Math.floor(Math.random() * 3)];
             const diskFree = Math.floor(diskTotal * (0.1 + Math.random() * 0.8));
