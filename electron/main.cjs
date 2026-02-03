@@ -15,7 +15,7 @@ if (!gotTheLock) {
 const allowedProtocols = new Set(['file:']);
 
 // Pre-compute app path for efficient validation
-const appPath = path.normalize(path.resolve(__dirname, '..'));
+const appPath = path.resolve(__dirname, '..');
 
 // Security: Validate that URLs are within the app's directory
 const getAllowedUrl = (urlString) => {
