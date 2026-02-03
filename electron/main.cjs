@@ -15,9 +15,9 @@ if (!gotTheLock) {
 const allowedProtocols = new Set(['file:']);
 
 // Security: Validate that URLs are within the app's directory
-const getAllowedUrl = (url) => {
+const getAllowedUrl = (urlString) => {
   try {
-    const parsedUrl = new URL(url);
+    const parsedUrl = new URL(urlString);
     if (!allowedProtocols.has(parsedUrl.protocol)) {
       return null;
     }
@@ -25,7 +25,7 @@ const getAllowedUrl = (url) => {
     // For file: protocol, ensure it's within the app directory
     if (parsedUrl.protocol === 'file:') {
       const appPath = path.normalize(path.resolve(__dirname, '..'));
-      // fileURLToPath properly handles both Unix and Windows file URLs
+      // url.fileURLToPath properly handles both Unix and Windows file URLs
       // Remove query strings and fragments before conversion
       const cleanUrl = parsedUrl.href.split('?')[0].split('#')[0];
       const requestedPath = path.normalize(url.fileURLToPath(cleanUrl));
