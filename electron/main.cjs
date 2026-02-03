@@ -24,14 +24,16 @@ const getAllowedUrl = (url) => {
     
     // For file: protocol, ensure it's within the app directory
     if (parsedUrl.protocol === 'file:') {
-      const appPath = path.resolve(__dirname, '..');
-      // Construct clean file URL without query/fragments, then convert to path
-      const cleanFileUrl = parsedUrl.protocol + '//' + parsedUrl.pathname;
-      const requestedPath = path.resolve(fileURLToPath(cleanFileUrl));
+      const appPath = path.normalize(path.resolve(__dirname, '..'));
+      // fileURLToPath properly handles both Unix and Windows file URLs
+      // Remove query strings and fragments before conversion
+      const cleanUrl = parsedUrl.href.split('?')[0].split('#')[0];
+      const requestedPath = path.normalize(fileURLToPath(cleanUrl));
       
       // Validate path is within app directory (no path traversal)
       const relativePath = path.relative(appPath, requestedPath);
-      if (relativePath.startsWith('..')) {
+      // Reject if path tries to escape the app directory
+      if (relativePath.startsWith('..') || relativePath.includes(path.sep + '..')) {
         return null;
       }
     }
