@@ -18,6 +18,10 @@ export default defineConfig({
   build: {
     // Security: No source maps in production
     sourcemap: false,
+    // USB portability: Force all assets to be emitted as separate local files.
+    // This ensures all resources are bundled locally for offline/USB operation,
+    // avoiding any reliance on external/CDN-hosted resources. Trade-off: more
+    // file requests vs. guaranteed offline functionality for hospital deployments.
     assetsInlineLimit: 0,
   },
 });

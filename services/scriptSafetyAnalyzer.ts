@@ -36,7 +36,7 @@ const BLOCKED_PATTERNS: PatternRule[] = [
     recommendation: 'Add an explicit /t timeout value (e.g. shutdown /r /t 60) and target a specific hostname.',
   },
   {
-    regex: /shutdown\s+.*\\\\[*]/i,
+    regex: /shutdown\s+.*\\\\\*/i,
     severity: 'BLOCKED',
     description: 'Shutdown command targeting wildcard machines. This would affect every reachable host.',
     recommendation: 'Target specific hostnames only. Never use wildcard targets for shutdown.',
@@ -224,7 +224,7 @@ const BLOCKED_PATTERNS: PatternRule[] = [
 
   // -- Generic wildcard computer targeting --
   {
-    regex: /\\\\[*]\s/i,
+    regex: /\\\\\*(?:\\|\/|\s|$)/i,
     severity: 'BLOCKED',
     description: 'UNC path with wildcard target (\\\\*). This targets all network hosts.',
     recommendation: 'Use explicit hostnames in UNC paths. Never use wildcard targets.',
@@ -757,8 +757,10 @@ function isCommentLine(line: string): boolean {
   if (trimmed.startsWith('#')) {
     return true;
   }
-  // Block comment markers (simplified - does not track state across lines)
-  if (trimmed.startsWith('<#') || trimmed.startsWith('#>')) {
+  // PowerShell block comment markers: <# ... #>
+  // Checks for block comment markers anywhere in the line (not just at start)
+  // to detect inline block comments like: $var = "value" <# comment #> + "more"
+  if (trimmed.includes('<#') || trimmed.includes('#>')) {
     return true;
   }
   return false;

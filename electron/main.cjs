@@ -37,6 +37,9 @@ const createWindow = () => {
         'Content-Security-Policy': [
           "default-src 'self'; " +
           "script-src 'self'; " +
+          // Note: 'unsafe-inline' for styles is required for Tailwind CSS and React inline styles.
+          // This creates a potential XSS vector but is necessary for the framework's functionality.
+          // All other CSP directives remain strict to minimize attack surface.
           "style-src 'self' 'unsafe-inline'; " +
           "img-src 'self' data:; " +
           "font-src 'self'; " +
@@ -82,19 +85,6 @@ const createWindow = () => {
       return;
     }
     callback(false);
-  });
-
-  // Security: Block remote module access
-  mainWindow.webContents.on('remote-require', (event) => {
-    event.preventDefault();
-  });
-
-  mainWindow.webContents.on('remote-get-global', (event) => {
-    event.preventDefault();
-  });
-
-  mainWindow.webContents.on('remote-get-builtin', (event) => {
-    event.preventDefault();
   });
 
   mainWindow.once('ready-to-show', () => {
