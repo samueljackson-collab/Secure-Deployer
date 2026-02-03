@@ -1,5 +1,6 @@
-const { app, BrowserWindow, shell, session } = require('electron');
+const { app, BrowserWindow, session } = require('electron');
 const path = require('path');
+const url = require('url');
 
 // Security: Disable hardware acceleration to reduce attack surface
 app.disableHardwareAcceleration();
@@ -9,6 +10,41 @@ const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();
 }
+
+// Security: Only allow file: protocol for local app files
+const allowedProtocols = new Set(['file:']);
+
+// Pre-compute app path for efficient validation
+const appPath = path.resolve(__dirname, '..');
+
+// Security: Validate that URLs are within the app's directory
+const getAllowedUrl = (urlString) => {
+  try {
+    const parsedUrl = new URL(urlString);
+    if (!allowedProtocols.has(parsedUrl.protocol)) {
+      return null;
+    }
+    
+    // For file: protocol, ensure it's within the app directory
+    if (parsedUrl.protocol === 'file:') {
+      // url.fileURLToPath properly handles both Unix and Windows file URLs
+      // It already returns normalized paths, so no need for additional normalization
+      const requestedPath = url.fileURLToPath(parsedUrl);
+      
+      // Validate path is within app directory (no path traversal)
+      const relativePath = path.relative(appPath, requestedPath);
+      // Reject if path tries to escape app directory or is on a different drive
+      // Empty string means app root, which is allowed
+      if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+        return null;
+      }
+    }
+    
+    return parsedUrl;
+  } catch (error) {
+    return null;
+  }
+};
 
 const createWindow = () => {
   const mainWindow = new BrowserWindow({
@@ -50,29 +86,19 @@ const createWindow = () => {
     });
   });
 
-  // Security: Block all navigation away from the app
-  mainWindow.webContents.on('will-navigate', (event, url) => {
-    try {
-      const parsedUrl = new URL(url);
-      if (parsedUrl.protocol !== 'file:') {
-        event.preventDefault();
-      }
-    } catch {
-      event.preventDefault();
-    }
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
   });
 
-  // Security: Block new window creation, only allow HTTPS external links
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    try {
-      const parsedUrl = new URL(url);
-      if (parsedUrl.protocol === 'https:') {
-        shell.openExternal(url);
-      }
-    } catch {
-      // Invalid URL, block silently
-    }
+  // Security: Deny all window.open attempts
+  mainWindow.webContents.setWindowOpenHandler(() => {
     return { action: 'deny' };
+  });
+
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!getAllowedUrl(url)) {
+      event.preventDefault();
+    }
   });
 
   // Security: Block permission requests except notifications
@@ -97,10 +123,6 @@ const createWindow = () => {
     event.preventDefault();
   });
 
-  mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
-  });
-
   const indexPath = path.join(__dirname, '..', 'dist', 'index.html');
   mainWindow.loadFile(indexPath);
 };
@@ -120,17 +142,17 @@ app.whenReady().then(() => {
   });
 });
 
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});
+
 app.on('second-instance', () => {
   const windows = BrowserWindow.getAllWindows();
   if (windows.length > 0) {
     if (windows[0].isMinimized()) windows[0].restore();
     windows[0].focus();
-  }
-});
-
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
   }
 });
 
