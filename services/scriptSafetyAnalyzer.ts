@@ -940,7 +940,7 @@ export function analyzeScript(
         /1\.\.254.*ping|ping.*1\.\.254/i,
       ];
       
-      const broadcastLines = scriptContent.split(/\r?\n/).filter((line, idx) => 
+      const broadcastLines = scriptContent.split(/\r?\n/).filter(line => 
         broadcastPatterns.some(pattern => pattern.test(line))
       );
       
@@ -969,7 +969,7 @@ export function analyzeScript(
         /\\\\[*]/i,
       ];
       
-      const subnetLines = scriptContent.split(/\r?\n/).filter((line, idx) => 
+      const subnetLines = scriptContent.split(/\r?\n/).filter(line => 
         subnetPatterns.some(pattern => pattern.test(line))
       );
       
@@ -997,7 +997,7 @@ export function analyzeScript(
         /reg\s+add\s+HKEY_LOCAL_MACHINE\\SYSTEM/i,
       ];
       
-      const registryLines = scriptContent.split(/\r?\n/).filter((line, idx) => 
+      const registryLines = scriptContent.split(/\r?\n/).filter(line => 
         registryWritePatterns.some(pattern => pattern.test(line))
       );
       
@@ -1024,7 +1024,7 @@ export function analyzeScript(
         /sc\s+stop\s+/i,
       ];
       
-      const serviceStopLines = scriptContent.split(/\r?\n/).filter((line, idx) => 
+      const serviceStopLines = scriptContent.split(/\r?\n/).filter(line => 
         serviceStopPatterns.some(pattern => pattern.test(line))
       );
       

@@ -701,15 +701,16 @@ const App: React.FC = () => {
     };
 
     const handleScopeVerified = async (verifiedDevices: Device[], policy: ScopePolicy) => {
-        setIsScopeGuardOpen(false);
-        setActiveScopePolicy(policy);
-
-        // Enforce maxDeviceCount policy
+        // Enforce maxDeviceCount policy before updating state
         if (policy.maxDeviceCount > 0 && verifiedDevices.length > policy.maxDeviceCount) {
             addLog(`BLOCKED: Scope policy limits operations to ${policy.maxDeviceCount} devices, but ${verifiedDevices.length} were selected. Operation denied.`, 'ERROR');
+            setIsScopeGuardOpen(false);
             setPendingAction(null);
             return;
         }
+
+        setIsScopeGuardOpen(false);
+        setActiveScopePolicy(policy);
 
         if (pendingAction === 'bulkUpdate') {
             const verifiedIds = new Set(verifiedDevices.map(d => d.id));
