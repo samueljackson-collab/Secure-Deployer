@@ -760,6 +760,10 @@ function isCommentLine(line: string): boolean {
   // PowerShell block comment markers: <# ... #>
   // Checks for block comment markers anywhere in the line (not just at start)
   // to detect inline block comments like: $var = "value" <# comment #> + "more"
+  // NOTE: This is a conservative approach that may create false positives (e.g.,
+  // string literals containing '<#' or '#>'), but for a security tool, it's safer
+  // to over-detect comments than to miss dangerous patterns hiding in comments.
+  // Full stateful PowerShell parsing would be needed to handle this perfectly.
   if (trimmed.includes('<#') || trimmed.includes('#>')) {
     return true;
   }

@@ -61,10 +61,11 @@ const formatTimestamp = (dateStr: string | undefined): string => {
   }
 };
 
-// Generate robust unique IDs using timestamp + random value to avoid collisions
+// Generate robust unique IDs using timestamp + counter to avoid collisions
 // even across component remounts or multi-tab scenarios
+let idCounter = 0;
 const generateDeviceId = (): number => {
-  return Date.now() * 1000 + Math.floor(Math.random() * 1000);
+  return Date.now() * 10000 + (idCounter++ % 10000);
 };
 
 const metadataToDevice = (metadata: ImagingMetadata): Device => {
