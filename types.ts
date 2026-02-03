@@ -1,5 +1,3 @@
-
-
 export interface Device {
   id: number;
   hostname: string;
@@ -23,19 +21,28 @@ export interface Device {
     succeeded: string[];
     failed: string[];
   };
-  // New metadata fields
   ipAddress?: string;
   serialNumber?: string;
   model?: string;
-  ramAmount?: number; // in GB
+  ramAmount?: number;
   diskSpace?: {
-    total: number; // in GB
-    free: number; // in GB
+    total: number;
+    free: number;
   };
   encryptionStatus?: 'Enabled' | 'Disabled' | 'Unknown';
+  // Imaging metadata fields
+  imagingStatus?: ImagingStatus;
+  imagingProgress?: number;
+  imagingStartTime?: Date;
+  imagingTaskSequence?: string;
+  scopeVerified?: boolean;
+  scopeVerifiedAt?: Date;
+  metadataCollectedAt?: Date;
 }
 
 export type DeploymentStatus = 'Pending' | 'Waking Up' | 'Connecting' | 'Retrying...' | 'Checking Info' | 'Checking BIOS' | 'Checking DCU' | 'Checking Windows' | 'Scan Complete' | 'Updating' | 'Updating BIOS' | 'Updating DCU' | 'Updating Windows' | 'Success' | 'Failed' | 'Offline' | 'Cancelled' | 'Update Complete (Reboot Pending)' | 'Rebooting...';
+
+export type ImagingStatus = 'Not Started' | 'Collecting Metadata' | 'Imaging In Progress' | 'Imaging Complete' | 'Imaging Failed' | 'Ready for Deployment';
 
 export interface LogEntry {
   timestamp: Date;
@@ -44,14 +51,14 @@ export interface LogEntry {
 }
 
 export interface Credentials {
-    username: string;
-    password: string;
+  username: string;
+  password: string;
 }
 
 export enum DeploymentState {
-    Idle = 'idle',
-    Running = 'running',
-    Complete = 'complete',
+  Idle = 'idle',
+  Running = 'running',
+  Complete = 'complete',
 }
 
 export interface DeploymentRun {
@@ -72,4 +79,64 @@ export interface DeploymentRun {
     cancelled: number;
     failed: number;
   };
+}
+
+// Script safety analysis types (deterministic, no AI)
+export interface ScriptSafetyResult {
+  isSafe: boolean;
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  findings: ScriptFinding[];
+  summary: string;
+  blockedPatterns: string[];
+  scopeViolations: string[];
+}
+
+export interface ScriptFinding {
+  line: number;
+  pattern: string;
+  severity: 'INFO' | 'WARNING' | 'DANGER' | 'BLOCKED';
+  description: string;
+  recommendation: string;
+}
+
+// Device scope enforcement
+export interface ScopePolicy {
+  allowedHostnames: string[];
+  allowedMacs: string[];
+  maxDeviceCount: number;
+  requireExplicitSelection: boolean;
+  blockBroadcastCommands: boolean;
+  blockSubnetWideOperations: boolean;
+  blockRegistryWrites: boolean;
+  blockServiceStops: boolean;
+  enforceHostnameWhitelist: boolean;
+}
+
+export interface ScopeVerification {
+  deviceId: number;
+  hostname: string;
+  mac: string;
+  verified: boolean;
+  verifiedAt: Date;
+  verifiedBy: string;
+  reason?: string;
+}
+
+// Imaging metadata from task sequence .bat script
+export interface ImagingMetadata {
+  hostname: string;
+  serialNumber: string;
+  macAddress: string;
+  model: string;
+  manufacturer: string;
+  biosVersion: string;
+  biosDate: string;
+  totalRamMB: number;
+  diskSizeGB: number;
+  osVersion: string;
+  ipAddress: string;
+  taskSequenceName: string;
+  collectedAt: string;
+  imageProgress: number;
+  encryptionReady: boolean;
 }
