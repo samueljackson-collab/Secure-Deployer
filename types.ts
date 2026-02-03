@@ -143,7 +143,31 @@ export interface ScriptFinding {
   recommendation: string;
 }
 
-// Device scope enforcement
+/**
+ * Device scope enforcement policy.
+ * 
+ * This policy captures the security restrictions chosen by the operator during
+ * scope verification and enforces them at different levels:
+ * 
+ * 1. Runtime enforcement (in handleUpdateDevice):
+ *    - allowedHostnames: Whitelisted device hostnames (when enforceHostnameWhitelist=true)
+ *    - allowedMacs: Whitelisted MAC addresses
+ * 
+ * 2. UI-level enforcement (in DeviceScopeGuard):
+ *    - maxDeviceCount: Maximum number of devices that can be selected for bulk operations
+ *    - requireExplicitSelection: Forces manual per-device verification
+ * 
+ * 3. Policy flags reflecting operator intent (informational):
+ *    - blockBroadcastCommands: Operator confirmed no broadcast/wildcard operations
+ *    - blockSubnetWideOperations: Operator confirmed no subnet-wide operations
+ *    - blockRegistryWrites: Operator confirmed no registry modifications
+ *    - blockServiceStops: Operator confirmed no service stop operations
+ * 
+ * Note: The script safety analyzer (scriptSafetyAnalyzer.ts) independently blocks
+ * dangerous patterns like broadcast commands, service stops, and registry writes
+ * before ANY deployment begins, regardless of these policy flags. These flags
+ * document what the operator confirmed during scope verification.
+ */
 export interface ScopePolicy {
   allowedHostnames: string[];
   allowedMacs: string[];

@@ -545,10 +545,25 @@ const App: React.FC = () => {
         const device = devices.find(d => d.id === deviceId);
         if (!device) return;
 
-        if (activeScopePolicy && activeScopePolicy.enforceHostnameWhitelist) {
-            if (!activeScopePolicy.allowedHostnames.includes(device.hostname)) {
-                addLog(`BLOCKED: ${device.hostname} is not in the verified scope. Update denied.`, 'ERROR');
-                return;
+        // Runtime enforcement of scope policy controls.
+        // Note: Script-level controls (blockBroadcastCommands, blockSubnetWideOperations,
+        // blockRegistryWrites, blockServiceStops) are enforced by the script safety analyzer
+        // before deployment begins. Here we enforce device-level runtime controls.
+        if (activeScopePolicy) {
+            // Enforce hostname whitelist
+            if (activeScopePolicy.enforceHostnameWhitelist) {
+                if (!activeScopePolicy.allowedHostnames.includes(device.hostname)) {
+                    addLog(`BLOCKED: ${device.hostname} is not in the verified scope. Update denied.`, 'ERROR');
+                    return;
+                }
+            }
+
+            // Enforce MAC address whitelist
+            if (activeScopePolicy.allowedMacs.length > 0) {
+                if (!activeScopePolicy.allowedMacs.includes(device.mac)) {
+                    addLog(`BLOCKED: ${device.hostname} (MAC: ${device.mac}) is not in the verified MAC whitelist. Update denied.`, 'ERROR');
+                    return;
+                }
             }
         }
 
