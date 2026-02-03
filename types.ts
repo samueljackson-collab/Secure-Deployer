@@ -1,5 +1,33 @@
+/**
+ * types.ts
+ *
+ * Central type definitions for the Secure Deployment Runner.
+ * Every interface used across the application is defined here to keep
+ * a single source of truth and avoid circular import issues.
+ *
+ * Key design decisions:
+ *   - DeviceFormFactor is a union of 10 string literals (not an enum)
+ *     so it can be used as a Record key and is easier to serialize.
+ *   - DeploymentStatus is a union of 19 string literals representing
+ *     every possible state in the deployment state machine.
+ *   - All imaging-related fields on Device are optional because they
+ *     are only populated when a device enters via the Image Monitor.
+ *   - ScriptSafetyResult / ScriptFinding are the output of the
+ *     deterministic (AI-free) script analyzer.
+ *   - ScopePolicy / ScopeVerification enforce that bulk operations
+ *     only affect explicitly verified devices.
+ */
 
-
+/**
+ * Represents a single device in the fleet — used in both the
+ * Image Monitor and Deployment Runner views.
+ *
+ * Core fields (hostname, mac, status) are always present.
+ * Scan fields (biosVersion, dcuVersion, etc.) are populated after
+ * the device is scanned during deployment.
+ * Imaging fields (imagingStatus, imagingProgress, etc.) are only
+ * populated for devices that entered via Image Monitor promotion.
+ */
 export interface Device {
   id: number;
   hostname: string;
@@ -13,7 +41,7 @@ export interface Device {
   isDcuUpToDate?: boolean;
   isWinUpToDate?: boolean;
   retryAttempt?: number;
-  deviceType?: 'desktop' | 'laptop';
+  deviceType?: DeviceFormFactor;
   updatesNeeded?: {
     bios: boolean;
     dcu: boolean;
@@ -23,19 +51,42 @@ export interface Device {
     succeeded: string[];
     failed: string[];
   };
-  // New metadata fields
   ipAddress?: string;
   serialNumber?: string;
   model?: string;
-  ramAmount?: number; // in GB
+  ramAmount?: number;
   diskSpace?: {
-    total: number; // in GB
-    free: number; // in GB
+    total: number;
+    free: number;
   };
   encryptionStatus?: 'Enabled' | 'Disabled' | 'Unknown';
+  // Imaging metadata fields
+  imagingStatus?: ImagingStatus;
+  imagingProgress?: number;
+  imagingStartTime?: Date;
+  imagingTaskSequence?: string;
+  scopeVerified?: boolean;
+  scopeVerifiedAt?: Date;
+  metadataCollectedAt?: Date;
 }
 
+// Dell business device form factors for icon rendering and fleet categorization.
+// Detection is hostname-pattern-based (see detectDeviceType in App.tsx).
+export type DeviceFormFactor =
+  | 'laptop-14'        // Standard 14" Latitude (e.g. 5450, 7450)
+  | 'laptop-16'        // Pro 16" Latitude / Precision Mobile (e.g. 9640, 5690)
+  | 'detachable'       // 2-in-1 Detachable (e.g. Latitude 7350 Detachable)
+  | 'laptop'           // Generic laptop fallback
+  | 'sff'              // Standard Form Factor desktop (e.g. OptiPlex SFF)
+  | 'micro'            // Micro Form Factor desktop (e.g. OptiPlex Micro)
+  | 'tower'            // Tower desktop (e.g. OptiPlex Tower, Precision Tower)
+  | 'wyse'             // Wyse Thin Client (e.g. Wyse 5070, 5470)
+  | 'vdi'              // Virtual Desktop Infrastructure client
+  | 'desktop';         // Generic desktop fallback
+
 export type DeploymentStatus = 'Pending' | 'Waking Up' | 'Connecting' | 'Retrying...' | 'Checking Info' | 'Checking BIOS' | 'Checking DCU' | 'Checking Windows' | 'Scan Complete' | 'Updating' | 'Updating BIOS' | 'Updating DCU' | 'Updating Windows' | 'Success' | 'Failed' | 'Offline' | 'Cancelled' | 'Update Complete (Reboot Pending)' | 'Rebooting...';
+
+export type ImagingStatus = 'Not Started' | 'Collecting Metadata' | 'Imaging In Progress' | 'Imaging Complete' | 'Imaging Failed' | 'Ready for Deployment';
 
 export interface LogEntry {
   timestamp: Date;
@@ -44,14 +95,14 @@ export interface LogEntry {
 }
 
 export interface Credentials {
-    username: string;
-    password: string;
+  username: string;
+  password: string;
 }
 
 export enum DeploymentState {
-    Idle = 'idle',
-    Running = 'running',
-    Complete = 'complete',
+  Idle = 'idle',
+  Running = 'running',
+  Complete = 'complete',
 }
 
 export interface DeploymentRun {
@@ -72,4 +123,64 @@ export interface DeploymentRun {
     cancelled: number;
     failed: number;
   };
+}
+
+// Script safety analysis types (deterministic, no AI)
+export interface ScriptSafetyResult {
+  isSafe: boolean;
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  findings: ScriptFinding[];
+  summary: string;
+  blockedPatterns: string[];
+  scopeViolations: string[];
+}
+
+export interface ScriptFinding {
+  line: number;
+  pattern: string;
+  severity: 'INFO' | 'WARNING' | 'DANGER' | 'BLOCKED';
+  description: string;
+  recommendation: string;
+}
+
+// Device scope enforcement
+export interface ScopePolicy {
+  allowedHostnames: string[];
+  allowedMacs: string[];
+  maxDeviceCount: number;
+  requireExplicitSelection: boolean;
+  blockBroadcastCommands: boolean;
+  blockSubnetWideOperations: boolean;
+  blockRegistryWrites: boolean;
+  blockServiceStops: boolean;
+  enforceHostnameWhitelist: boolean;
+}
+
+export interface ScopeVerification {
+  deviceId: number;
+  hostname: string;
+  mac: string;
+  verified: boolean;
+  verifiedAt: Date;
+  verifiedBy: string;
+  reason?: string;
+}
+
+// Imaging metadata from task sequence .bat script
+export interface ImagingMetadata {
+  hostname: string;
+  serialNumber: string;
+  macAddress: string;
+  model: string;
+  manufacturer: string;
+  biosVersion: string;
+  biosDate: string;
+  totalRamMB: number;
+  diskSizeGB: number;
+  osVersion: string;
+  ipAddress: string;
+  taskSequenceName: string;
+  collectedAt: string;
+  imageProgress: number;
+  encryptionReady: boolean;
 }

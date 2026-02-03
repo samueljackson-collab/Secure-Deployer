@@ -1,27 +1,3 @@
-import React, { useMemo, useState } from "react";
-
-/**
- * Generated from: VISUAL_SPEC_FULL.json
- * Spec file: portfolio_app_spec.json
- *
- * Usage:
- *   - Drop into a Vite React + TS project as src/App.tsx
- *   - Ensure Tailwind is configured (classes used below). If not using Tailwind,
- *     replace className strings with your styling approach.
- */
-
-type Project = {
-  id: string;
-  name: string;
-  domain: string;
-  status: string;
-  difficulty: string;
-  summary: string;
-  tags: string[];
-  artifacts: Array<{ type: string; label: string }>;
-};
-
-
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Header } from './components/Header';
 import { StepCard } from './components/StepCard';
@@ -31,253 +7,102 @@ import { LogViewer } from './components/LogViewer';
 import { BulkActions } from './components/BulkActions';
 import { DeploymentHistory } from './components/DeploymentHistory';
 import { SecureCredentialModal } from './components/SecureCredentialModal';
-import type { Device, LogEntry, DeploymentStatus, Credentials, DeploymentRun } from './types';
+import { ImageMonitor } from './components/ImageMonitor';
+import { DeviceScopeGuard } from './components/DeviceScopeGuard';
+import { ScriptAnalysisModal } from './components/ScriptAnalysisModal';
+import { analyzeScript } from './services/scriptSafetyAnalyzer';
+import type { Device, DeviceFormFactor, LogEntry, DeploymentStatus, Credentials, DeploymentRun, ScopePolicy, ScriptSafetyResult } from './types';
 import { DeploymentState } from './types';
 import Papa from 'papaparse';
 
+// --- Utility Functions ---
+
 const normalizeMacAddress = (mac: string): string => {
     if (!mac) return '';
-    return mac.replace(/[:-]/g, '').toUpperCase();
+    return mac.replace(/[:\-.\s]/g, '').toUpperCase();
 };
 
-const DATA: AppData = {
-  domains: ["General", "P", "SITE"],
-  projects: [
-    {
-      id: "00",
-      name: "Homelab & Secure Network Build",
-      domain: "General",
-      status: "Planned",
-      difficulty: "Intermediate",
-      summary: "Portfolio project definition from the master visual spec.",
-      tags: [],
-      artifacts: [],
-    },
-    {
-      id: "P01",
-      name: "AWS Infra Automation (CloudFormation)",
-      domain: "P",
-      status: "Planned",
-      difficulty: "Intermediate",
-      summary: "Portfolio project definition from the master visual spec.",
-      tags: [],
-      artifacts: [],
-    },
-    {
-      id: "P02",
-      name: "IAM Security Hardening",
-      domain: "P",
-      status: "Planned",
-      difficulty: "Intermediate",
-      summary: "Portfolio project definition from the master visual spec.",
-      tags: [],
-      artifacts: [],
-    },
-    {
-      id: "P03",
-      name: "Hybrid Network Connectivity Lab",
-      domain: "P",
-      status: "Planned",
-      difficulty: "Intermediate",
-      summary: "Portfolio project definition from the master visual spec.",
-      tags: [],
-      artifacts: [],
-    },
-    {
-      id: "P04",
-      name: "Operational Monitoring & Automation",
-      domain: "P",
-      status: "Planned",
-      difficulty: "Intermediate",
-      summary: "Portfolio project definition from the master visual spec.",
-      tags: [],
-      artifacts: [],
-    },
-    {
-      id: "P05",
-      name: "Mobile App Manual Testing",
-      domain: "P",
-      status: "Planned",
-      difficulty: "Intermediate",
-      summary: "Portfolio project definition from the master visual spec.",
-      tags: [],
-      artifacts: [],
-    },
-    {
-      id: "P06",
-      name: "Web App Automated Testing",
-      domain: "P",
-      status: "Planned",
-      difficulty: "Intermediate",
-      summary: "Portfolio project definition from the master visual spec.",
-      tags: [],
-      artifacts: [],
-    },
-    {
-      id: "P07",
-      name: "International Roaming Test Simulation",
-      domain: "P",
-      status: "Planned",
-      difficulty: "Intermediate",
-      summary: "Portfolio project definition from the master visual spec.",
-      tags: [],
-      artifacts: [],
-    },
-    {
-      id: "P08",
-      name: "Backend API Testing",
-      domain: "P",
-      status: "Planned",
-      difficulty: "Intermediate",
-      summary: "Portfolio project definition from the master visual spec.",
-      tags: [],
-      artifacts: [],
-    },
-    {
-      id: "P09",
-      name: "Cloud-Native POC Deployment",
-      domain: "P",
-      status: "Planned",
-      difficulty: "Intermediate",
-      summary: "Portfolio project definition from the master visual spec.",
-      tags: [],
-      artifacts: [],
-    },
-    {
-      id: "P10",
-      name: "Scalable Multi-Region Architecture",
-      domain: "P",
-      status: "Planned",
-      difficulty: "Intermediate",
-      summary: "Portfolio project definition from the master visual spec.",
-      tags: [],
-      artifacts: [],
-    },
-    {
-      id: "P11",
-      name: "API Gateway & Serverless Integration",
-      domain: "P",
-      status: "Planned",
-      difficulty: "Intermediate",
-      summary: "Portfolio project definition from the master visual spec.",
-      tags: [],
-      artifacts: [],
-    },
-    {
-      id: "P12",
-      name: "Data Pipeline Architecture",
-      domain: "P",
-      status: "Planned",
-      difficulty: "Intermediate",
-      summary: "Portfolio project definition from the master visual spec.",
-      tags: [],
-      artifacts: [],
-    },
-    {
-      id: "P13",
-      name: "High Availability Web App",
-      domain: "P",
-      status: "Planned",
-      difficulty: "Intermediate",
-      summary: "Portfolio project definition from the master visual spec.",
-      tags: [],
-      artifacts: [],
-    },
-    {
-      id: "P14",
-      name: "Disaster Recovery Design",
-      domain: "P",
-      status: "Planned",
-      difficulty: "Intermediate",
-      summary: "Portfolio project definition from the master visual spec.",
-      tags: [],
-      artifacts: [],
-    },
-    {
-      id: "P15",
-      name: "Cloud Cost Optimization Lab",
-      domain: "P",
-      status: "Planned",
-      difficulty: "Intermediate",
-      summary: "Portfolio project definition from the master visual spec.",
-      tags: [],
-      artifacts: [],
-    },
-    {
-      id: "P16",
-      name: "Zero-Trust Cloud Architecture",
-      domain: "P",
-      status: "Planned",
-      difficulty: "Intermediate",
-      summary: "Portfolio project definition from the master visual spec.",
-      tags: [],
-      artifacts: [],
-    },
-    {
-      id: "P17",
-      name: "Terraform Multi-Cloud Deployment",
-      domain: "P",
-      status: "Planned",
-      difficulty: "Intermediate",
-      summary: "Portfolio project definition from the master visual spec.",
-      tags: [],
-      artifacts: [],
-    },
-    {
-      id: "P18",
-      name: "CI/CD Pipeline with Kubernetes",
-      domain: "P",
-      status: "Planned",
-      difficulty: "Intermediate",
-      summary: "Portfolio project definition from the master visual spec.",
-      tags: [],
-      artifacts: [],
-    },
-    {
-      id: "P19",
-      name: "Cloud Security Automation",
-      domain: "P",
-      status: "Planned",
-      difficulty: "Intermediate",
-      summary: "Portfolio project definition from the master visual spec.",
-      tags: [],
-      artifacts: [],
-    },
-    {
-      id: "P20",
-      name: "Observability Engineering",
-      domain: "P",
-      status: "Planned",
-      difficulty: "Intermediate",
-      summary: "Portfolio project definition from the master visual spec.",
-      tags: [],
-      artifacts: [],
-    },
-    {
-      id: "SITE",
-      name: "Portfolio Site (Static)",
-      domain: "SITE",
-      status: "Planned",
-      difficulty: "Intermediate",
-      summary: "Portfolio project definition from the master visual spec.",
-      tags: [],
-      artifacts: [],
-    },
-  ],
+const isValidMacAddress = (mac: string): boolean => {
+    if (!mac) return false;
+    const normalized = mac.replace(/[:\-.\s]/g, '').toUpperCase();
+    return /^[0-9A-F]{12}$/.test(normalized);
 };
 
-const detectDeviceType = (hostname: string): 'laptop' | 'desktop' => {
-    const upperHostname = hostname.toUpperCase();
-    
-    // ELS Enterprise Laptop Standard (ELSLE) or ESLSC
-    if (upperHostname.includes('ELSLE') || upperHostname.includes('ESLSC')) {
+/**
+ * Detects the Dell business device form factor from hostname naming conventions.
+ *
+ * Enterprise hostname patterns (examples):
+ *   ELSLE / ESLSC / L14 / LAT14            → laptop-14  (Standard 14" Latitude)
+ *   EPLPR / L16 / LAT16 / PRE16 / PRE56    → laptop-16  (Pro 16" / Precision Mobile)
+ *   EDTCH / DET / 2IN1 / DTCH              → detachable (Latitude Detachable 2-in-1)
+ *   WYSE / WYS / THIN / TC                 → wyse       (Wyse Thin Client)
+ *   VDI / VIRT / VD-                        → vdi        (Virtual Desktop)
+ *   EWSSF / SFF                             → sff        (Standard Form Factor)
+ *   EWSMF / EWSMC / MFF / MICRO            → micro      (Micro Form Factor)
+ *   EWSTW / TWR / TOWER                    → tower      (Tower)
+ *   EWSLE / other desktop patterns          → desktop    (Generic desktop fallback)
+ *   Remaining laptops without size hint     → laptop     (Generic laptop fallback)
+ *
+ * Order matters: more specific patterns are tested before generic fallbacks.
+ */
+const detectDeviceType = (hostname: string): DeviceFormFactor => {
+    const upper = hostname.toUpperCase();
+
+    // --- Thin Clients & VDI (check first - they are distinct categories) ---
+    if (upper.includes('WYSE') || upper.includes('WYS') || upper.includes('THIN') || /\bTC\d/.test(upper)) {
+        return 'wyse';
+    }
+    if (upper.includes('VDI') || upper.includes('VIRT') || /\bVD[-_]/.test(upper)) {
+        return 'vdi';
+    }
+
+    // --- Detachable 2-in-1 ---
+    if (upper.includes('EDTCH') || upper.includes('DET') || upper.includes('2IN1') || upper.includes('DTCH')) {
+        return 'detachable';
+    }
+
+    // --- Pro 16" Laptop (Precision Mobile / large Latitude) ---
+    if (upper.includes('EPLPR') || upper.includes('L16') || upper.includes('LAT16') || upper.includes('PRE16') || upper.includes('PRE56') || upper.includes('PRE57')) {
+        return 'laptop-16';
+    }
+
+    // --- Standard 14" Laptop ---
+    if (upper.includes('ELSLE') || upper.includes('ESLSC') || upper.includes('L14') || upper.includes('LAT14') || upper.includes('LAT54') || upper.includes('LAT74')) {
+        return 'laptop-14';
+    }
+
+    // --- Tower desktop ---
+    if (upper.includes('EWSTW') || upper.includes('TWR') || upper.includes('TOWER') || upper.includes('PRETW')) {
+        return 'tower';
+    }
+
+    // --- Micro Form Factor desktop ---
+    if (upper.includes('EWSMF') || upper.includes('EWSMC') || upper.includes('MFF') || upper.includes('MICRO')) {
+        return 'micro';
+    }
+
+    // --- Standard Form Factor desktop ---
+    if (upper.includes('EWSSF') || upper.includes('SFF')) {
+        return 'sff';
+    }
+
+    // --- Generic laptop (any remaining laptop-like hostname) ---
+    if (upper.includes('LAT') || upper.includes('LAPTOP') || upper.includes('NB') || upper.includes('PRE5') || upper.includes('PRE7')) {
         return 'laptop';
     }
 
-    // Default to desktop if no specific laptop identifier is found.
-    // EWSLE (Enterprise Workstation Standard) would fall into this category.
+    // --- Generic desktop (any remaining desktop-like hostname, including EWSLE) ---
     return 'desktop';
 };
+
+const sanitizeLogMessage = (message: string): string => {
+    return message
+        .replace(/password\s*[:=]\s*\S+/gi, 'password: [REDACTED]')
+        .replace(/token\s*[:=]\s*\S+/gi, 'token: [REDACTED]')
+        .replace(/secret\s*[:=]\s*\S+/gi, 'secret: [REDACTED]');
+};
+
+const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 
 const TARGET_BIOS_VERSION = 'A25';
 const TARGET_DCU_VERSION = '5.2.0';
@@ -294,16 +119,55 @@ const App: React.FC = () => {
     const [deploymentHistory, setDeploymentHistory] = useState<DeploymentRun[]>([]);
     const [isCredentialModalOpen, setIsCredentialModalOpen] = useState(false);
     const [maxRetries, setMaxRetries] = useState(3);
-    const [retryDelay, setRetryDelay] = useState(2); // in seconds
+    const [retryDelay, setRetryDelay] = useState(2);
     const [autoRebootEnabled, setAutoRebootEnabled] = useState(false);
 
+    const [activeView, setActiveView] = useState<'imaging' | 'deployment'>('imaging');
+
+    const [isScopeGuardOpen, setIsScopeGuardOpen] = useState(false);
+    const [activeScopePolicy, setActiveScopePolicy] = useState<ScopePolicy | null>(null);
+    const [pendingAction, setPendingAction] = useState<'scan' | 'bulkUpdate' | null>(null);
+
+    const [isScriptAnalysisOpen, setIsScriptAnalysisOpen] = useState(false);
+    const [scriptAnalysisResult, setScriptAnalysisResult] = useState<ScriptSafetyResult | null>(null);
+    const [scriptAnalysisLoading, setScriptAnalysisLoading] = useState(false);
+
+    const [sessionActive, setSessionActive] = useState(false);
+    const sessionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const lastActivityRef = useRef<number>(Date.now());
 
     const isCancelledRef = useRef(false);
 
+    const resetSessionTimer = useCallback(() => {
+        lastActivityRef.current = Date.now();
+        if (sessionTimerRef.current) {
+            clearTimeout(sessionTimerRef.current);
+        }
+        if (sessionActive) {
+            sessionTimerRef.current = setTimeout(() => {
+                setCredentials({ username: '', password: '' });
+                setSessionActive(false);
+            }, SESSION_TIMEOUT_MS);
+        }
+    }, [sessionActive]);
+
     useEffect(() => {
-      if ('Notification' in window && Notification.permission !== 'denied') {
-        Notification.requestPermission();
-      }
+        if (sessionActive) {
+            const handleActivity = () => resetSessionTimer();
+            window.addEventListener('mousemove', handleActivity);
+            window.addEventListener('keydown', handleActivity);
+            return () => {
+                window.removeEventListener('mousemove', handleActivity);
+                window.removeEventListener('keydown', handleActivity);
+                if (sessionTimerRef.current) clearTimeout(sessionTimerRef.current);
+            };
+        }
+    }, [sessionActive, resetSessionTimer]);
+
+    useEffect(() => {
+        if ('Notification' in window && Notification.permission !== 'denied') {
+            Notification.requestPermission();
+        }
     }, []);
 
     const sendNotification = (title: string, body: string) => {
@@ -313,7 +177,8 @@ const App: React.FC = () => {
     };
 
     const addLog = useCallback((message: string, level: LogEntry['level'] = 'INFO') => {
-        setLogs(prev => [...prev, { timestamp: new Date(), message, level }]);
+        const sanitized = sanitizeLogMessage(message);
+        setLogs(prev => [...prev, { timestamp: new Date(), message: sanitized, level }]);
     }, []);
 
     const handleFileChange = (setter: React.Dispatch<React.SetStateAction<File | null>>) => (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -321,8 +186,34 @@ const App: React.FC = () => {
             setter(e.target.files[0]);
         }
     };
-    
+
     const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+    const handleAnalyzeScript = async () => {
+        if (!batchFile) return;
+
+        setScriptAnalysisLoading(true);
+        setIsScriptAnalysisOpen(true);
+
+        try {
+            const scriptContent = await batchFile.text();
+            const allowedHostnames = devices.map(d => d.hostname);
+            const result = analyzeScript(scriptContent, allowedHostnames);
+            setScriptAnalysisResult(result);
+
+            if (!result.isSafe) {
+                addLog(`SCRIPT BLOCKED: ${result.blockedPatterns.length} dangerous pattern(s) detected. Risk level: ${result.riskLevel}`, 'ERROR');
+            } else if (result.riskLevel === 'MEDIUM' || result.riskLevel === 'HIGH') {
+                addLog(`Script analysis: ${result.findings.length} finding(s). Risk level: ${result.riskLevel}. Review recommended.`, 'WARNING');
+            } else {
+                addLog('Script analysis complete. No critical issues found.', 'SUCCESS');
+            }
+        } catch (error) {
+            addLog(`Script analysis failed: ${error instanceof Error ? error.message : String(error)}`, 'ERROR');
+        } finally {
+            setScriptAnalysisLoading(false);
+        }
+    };
 
     const archiveCurrentRun = (currentDevices: Device[]) => {
         if (currentDevices.length === 0) return;
@@ -357,7 +248,7 @@ const App: React.FC = () => {
             updatesNeededCounts,
             failureCounts,
         };
-        setDeploymentHistory(prev => [newRun, ...prev].slice(0, 10)); // Keep last 10 runs
+        setDeploymentHistory(prev => [newRun, ...prev].slice(0, 10));
     };
 
     const handleConfirmCredentialsAndDeploy = async (sessionCredentials: Credentials) => {
@@ -367,13 +258,33 @@ const App: React.FC = () => {
             return;
         }
 
+        // NOTE: Full authentication and authorization are enforced server-side.
+        // This client-side check only validates basic credential format and complexity.
+        const username = sessionCredentials.username.trim();
+        const password = sessionCredentials.password;
+
+        const usernamePattern = /^[A-Za-z0-9@._\\-\\\\]{3,256}$/;
+        if (!usernamePattern.test(username)) {
+            addLog("Invalid username format. Use 3-256 characters: letters, numbers, and @ . _ - \\\\ only.", 'ERROR');
+            return;
+        }
+
+        const MIN_PASSWORD_LENGTH = 12;
+        const passwordTooShortOrLong = password.length < MIN_PASSWORD_LENGTH || password.length > 256;
+        const passwordComplexityPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^\\da-zA-Z]).+$/;
+        if (passwordTooShortOrLong || !passwordComplexityPattern.test(password)) {
+            addLog("Invalid password format. Password must be 12-256 characters and include upper case, lower case, number, and special character.", 'ERROR');
+            return;
+        }
+
         isCancelledRef.current = false;
-        setCredentials(sessionCredentials); // Set credentials for the run
+        setCredentials(sessionCredentials);
+        setSessionActive(true);
+        resetSessionTimer();
         setDeploymentState(DeploymentState.Running);
         setLogs([]);
         setSelectedDeviceIds(new Set());
-        addLog("Deployment process initiated.", 'INFO');
-        addLog(`User: ${sessionCredentials.username}`, 'INFO');
+        addLog("Deployment process initiated. Session authenticated.", 'INFO');
 
         try {
             Papa.parse<Record<string, string>>(csvFile, {
@@ -381,19 +292,18 @@ const App: React.FC = () => {
                 skipEmptyLines: true,
                 complete: async (results) => {
                     if (results.errors.length > 0) {
-                        const errorMsg = `CSV parsing errors: ${JSON.stringify(results.errors)}`;
-                        addLog(errorMsg, 'ERROR');
+                        addLog(`CSV parsing errors: ${results.errors.length} error(s) found.`, 'ERROR');
                         sendNotification('Critical Error', 'Failed to parse device list CSV.');
                         setDeploymentState(DeploymentState.Idle);
                         return;
                     }
-                    
+
                     const header = results.meta.fields;
                     if (!header) {
-                         addLog('Could not detect header row in CSV.', 'ERROR');
-                         sendNotification('Critical Error', 'Could not detect header in CSV.');
-                         setDeploymentState(DeploymentState.Idle);
-                         return;
+                        addLog('Could not detect header row in CSV.', 'ERROR');
+                        sendNotification('Critical Error', 'Could not detect header in CSV.');
+                        setDeploymentState(DeploymentState.Idle);
+                        return;
                     }
 
                     const hostnameCol = header.find(h => h.toLowerCase().includes('hostname') || h.toLowerCase().includes('computername') || h.toLowerCase().includes('devicename') || h.toLowerCase().includes('computer') || h.toLowerCase().includes('name') || h.toLowerCase().includes('device'));
@@ -411,7 +321,7 @@ const App: React.FC = () => {
                     results.data.forEach((row, index) => {
                         const hostname = (row[hostnameCol] || '').trim();
                         const rawMac = row[macCol] || '';
-                        
+
                         if (!hostname && !rawMac) {
                             return;
                         }
@@ -425,11 +335,11 @@ const App: React.FC = () => {
                         }
 
                         if (!isValidMacAddress(normalizedMac)) {
-                            addLog(`[Validation Skip] Skipping device "${hostname}" from row ${index + 2}. Reason: Invalid MAC address format. Received: "${rawMac}".`, 'WARNING');
+                            addLog(`[Validation Skip] Skipping device "${hostname}" from row ${index + 2}. Reason: Invalid MAC address format.`, 'WARNING');
                             invalidCount++;
                             return;
                         }
-                        
+
                         const deviceType = detectDeviceType(hostname);
 
                         parsedDevices.push({
@@ -454,7 +364,28 @@ const App: React.FC = () => {
 
                     setDevices(parsedDevices);
                     addLog(`Validated and loaded ${parsedDevices.length} devices from ${csvFile.name}.`, 'INFO');
-                    
+
+                    const scriptContent = await batchFile.text();
+                    const allowedHostnames = parsedDevices.map(d => d.hostname);
+                    const safetyResult = analyzeScript(scriptContent, allowedHostnames);
+
+                    if (!safetyResult.isSafe) {
+                        addLog(`DEPLOYMENT BLOCKED: Script contains ${safetyResult.blockedPatterns.length} dangerous pattern(s).`, 'ERROR');
+                        safetyResult.blockedPatterns.forEach(p => addLog(`  BLOCKED: ${p}`, 'ERROR'));
+                        setScriptAnalysisResult(safetyResult);
+                        setIsScriptAnalysisOpen(true);
+                        setDeploymentState(DeploymentState.Idle);
+                        sendNotification('Deployment Blocked', 'Script failed safety analysis.');
+                        return;
+                    }
+
+                    if (safetyResult.scopeViolations.length > 0) {
+                        addLog('SCOPE WARNING: Script may target devices outside the selected list.', 'WARNING');
+                        safetyResult.scopeViolations.forEach(v => addLog(`  SCOPE: ${v}`, 'WARNING'));
+                    }
+
+                    addLog(`Script safety check passed. Risk level: ${safetyResult.riskLevel}`, 'SUCCESS');
+
                     await runDeploymentFlow(parsedDevices);
                 }
             });
@@ -473,15 +404,15 @@ const App: React.FC = () => {
         }
         setIsCredentialModalOpen(true);
     };
-    
+
     const runDeploymentFlow = async (parsedDevices: Device[]) => {
-        if(isCancelledRef.current) return;
+        if (isCancelledRef.current) return;
 
         addLog("Sending Wake-on-LAN packets...", 'INFO');
-        setDevices(prev => prev.map(d => ({ ...d, status: 'Waking Up' })));
-        await sleep(2000); 
+        setDevices(prev => prev.map(d => ({ ...d, status: 'Waking Up' as DeploymentStatus })));
+        await sleep(2000);
 
-        const wolWaitSeconds = 30; 
+        const wolWaitSeconds = 30;
         addLog(`Waiting ${wolWaitSeconds} seconds for devices to boot...`, 'INFO');
         for (let i = wolWaitSeconds; i > 0; i -= 5) {
             if (isCancelledRef.current) {
@@ -504,48 +435,59 @@ const App: React.FC = () => {
                 break;
             }
 
-            setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Connecting' } : d));
-            
+            setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Connecting' as DeploymentStatus } : d));
+
             let isConnected = false;
             for (let attempt = 1; attempt <= maxRetries; attempt++) {
-                 if (isCancelledRef.current) break;
+                if (isCancelledRef.current) break;
 
                 await sleep(1000 + Math.random() * 500);
                 if (Math.random() > 0.3) {
                     isConnected = true;
-                    if(attempt > 1) {
+                    if (attempt > 1) {
                         addLog(`Successfully connected to ${device.hostname} on attempt ${attempt}.`, 'SUCCESS');
                     }
                     break;
                 } else {
                     if (attempt < maxRetries) {
                         addLog(`[${device.hostname}] Connection failed. Retrying... (Attempt ${attempt} of ${maxRetries})`, 'WARNING');
-                        setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Retrying...', retryAttempt: attempt } : d));
+                        setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Retrying...' as DeploymentStatus, retryAttempt: attempt } : d));
                         await sleep(retryDelay * 1000);
                     }
                 }
             }
 
             if (!isConnected) {
-                setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Offline' } : d));
+                setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Offline' as DeploymentStatus } : d));
                 addLog(`Host ${device.hostname} is not responding after ${maxRetries} attempts.`, 'ERROR');
                 continue;
             }
 
-            setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Checking Info' } : d));
+            setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Checking Info' as DeploymentStatus } : d));
             addLog(`Gathering metadata for ${device.hostname}...`);
             await sleep(1500 + Math.random() * 1000);
 
-            // Simulate gathering detailed metadata
             const ipAddress = `10.1.${Math.floor(Math.random() * 254) + 1}.${Math.floor(Math.random() * 254) + 1}`;
             const serialNumber = Math.random().toString(36).substring(2, 9).toUpperCase();
-            const model = device.deviceType === 'laptop'
-                ? ['Latitude 7420', 'Latitude 5430', 'Precision 5560'][Math.floor(Math.random() * 3)]
-                : ['OptiPlex 7090', 'OptiPlex 5000', 'Precision 3650'][Math.floor(Math.random() * 3)];
+            const modelMap: Record<DeviceFormFactor, string[]> = {
+                'laptop-14':  ['Latitude 5450', 'Latitude 7450', 'Latitude 5440'],
+                'laptop-16':  ['Latitude 9640', 'Precision 5690', 'Precision 5680'],
+                'detachable': ['Latitude 7350 Detachable', 'Latitude 7230 Rugged Extreme'],
+                'laptop':     ['Latitude 7420', 'Latitude 5430', 'Precision 5560'],
+                'sff':        ['OptiPlex 7020 SFF', 'OptiPlex 5000 SFF', 'OptiPlex 7010 SFF'],
+                'micro':      ['OptiPlex 7020 Micro', 'OptiPlex 7010 Micro', 'OptiPlex 3000 Micro'],
+                'tower':      ['OptiPlex 7020 Tower', 'Precision 3680 Tower', 'OptiPlex 5000 Tower'],
+                'wyse':       ['Wyse 5070', 'Wyse 5470', 'Wyse 3040'],
+                'vdi':        ['VDI Virtual Desktop', 'VMware Horizon Client', 'Citrix Workspace'],
+                'desktop':    ['OptiPlex 7090', 'OptiPlex 5000', 'Precision 3650'],
+            };
+            const deviceFormFactor = device.deviceType || 'desktop';
+            const models = modelMap[deviceFormFactor];
+            const model = models[Math.floor(Math.random() * models.length)];
             const ramAmount = [8, 16, 32, 64][Math.floor(Math.random() * 4)];
             const diskTotal = [256, 512, 1024][Math.floor(Math.random() * 3)];
             const diskFree = Math.floor(diskTotal * (0.1 + Math.random() * 0.8));
-            const encryptionStatus = Math.random() > 0.2 ? 'Enabled' : 'Disabled';
+            const encryptionStatus: 'Enabled' | 'Disabled' = Math.random() > 0.2 ? 'Enabled' : 'Disabled';
 
             const newMetadata = {
                 ipAddress,
@@ -560,25 +502,25 @@ const App: React.FC = () => {
             addLog(`[${device.hostname}] IP: ${ipAddress}, Model: ${model}, SN: ${serialNumber}`);
             addLog(`[${device.hostname}] RAM: ${ramAmount}GB, Disk: ${diskFree}GB/${diskTotal}GB Free, Encryption: ${encryptionStatus}`);
 
-            setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Checking BIOS' } : d));
+            setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Checking BIOS' as DeploymentStatus } : d));
             await sleep(1500 + Math.random() * 1000);
             const biosVersion = Math.random() > 0.3 ? TARGET_BIOS_VERSION : `A${Math.floor(18 + Math.random() * 6)}`;
             const isBiosUpToDate = biosVersion === TARGET_BIOS_VERSION;
             setDevices(prev => prev.map(d => d.id === device.id ? { ...d, biosVersion, isBiosUpToDate } : d));
             addLog(`[${device.hostname}] BIOS Version: ${biosVersion}`);
 
-            setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Checking DCU' } : d));
+            setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Checking DCU' as DeploymentStatus } : d));
             await sleep(1200 + Math.random() * 800);
             const dcuVersion = Math.random() > 0.3 ? TARGET_DCU_VERSION : `5.${Math.floor(Math.random() * 2)}.${Math.floor(Math.random() * 9)}`;
             const isDcuUpToDate = dcuVersion === TARGET_DCU_VERSION;
             setDevices(prev => prev.map(d => d.id === device.id ? { ...d, dcuVersion, isDcuUpToDate } : d));
             addLog(`[${device.hostname}] DCU Version: ${dcuVersion}`);
 
-            setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Checking Windows' } : d));
+            setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Checking Windows' as DeploymentStatus } : d));
             await sleep(1800 + Math.random() * 1200);
-            const winVersion = Math.random() > 0.3 ? TARGET_WIN_VERSION : ['22H2', '21H2'][Math.floor(Math.random()*2)];
+            const winVersion = Math.random() > 0.3 ? TARGET_WIN_VERSION : ['22H2', '21H2'][Math.floor(Math.random() * 2)];
             const isWinUpToDate = winVersion === TARGET_WIN_VERSION;
-            
+
             const allUpToDate = isBiosUpToDate && isDcuUpToDate && isWinUpToDate;
             const updatesNeeded = {
                 bios: !isBiosUpToDate,
@@ -591,19 +533,18 @@ const App: React.FC = () => {
                 winVersion,
                 isWinUpToDate,
                 updatesNeeded,
-                status: allUpToDate ? 'Success' : 'Scan Complete',
+                status: (allUpToDate ? 'Success' : 'Scan Complete') as DeploymentStatus,
             } : d));
-             addLog(`[${device.hostname}] Windows Version: ${winVersion}`);
+            addLog(`[${device.hostname}] Windows Version: ${winVersion}`);
             addLog(`Scan complete for ${device.hostname}.`, allUpToDate ? 'SUCCESS' : 'INFO');
         }
 
         if (!isCancelledRef.current) {
-             addLog("Deployment scan process complete.", 'INFO');
-             sendNotification('Deployment Complete', `Scan finished for ${parsedDevices.length} devices.`);
-             setDeploymentState(DeploymentState.Complete);
+            addLog("Deployment scan process complete.", 'INFO');
+            sendNotification('Deployment Complete', `Scan finished for ${parsedDevices.length} devices.`);
+            setDeploymentState(DeploymentState.Complete);
         }
-        
-        // Archive the final state of devices for history
+
         setDevices(currentDevices => {
             archiveCurrentRun(currentDevices);
             return currentDevices;
@@ -613,98 +554,105 @@ const App: React.FC = () => {
     const handleUpdateDevice = async (deviceId: number) => {
         const device = devices.find(d => d.id === deviceId);
         if (!device) return;
-    
+
+        if (activeScopePolicy && activeScopePolicy.enforceHostnameWhitelist) {
+            if (!activeScopePolicy.allowedHostnames.includes(device.hostname)) {
+                addLog(`BLOCKED: ${device.hostname} is not in the verified scope. Update denied.`, 'ERROR');
+                return;
+            }
+        }
+
         addLog(`Initiating updates for ${device.hostname}...`, 'INFO');
-        setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Updating', lastUpdateResult: undefined } : d));
+        setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Updating' as DeploymentStatus, lastUpdateResult: undefined } : d));
         await sleep(1000);
-    
+
         let needsReboot = false;
         const succeeded: string[] = [];
         const failed: string[] = [];
-    
+
         const componentsToUpdate = [
-            { name: 'BIOS', key: 'bios', versionKey: 'biosVersion', isUpToDateKey: 'isBiosUpToDate', needsUpdate: device.isBiosUpToDate === false, currentVersion: device.biosVersion, targetVersion: TARGET_BIOS_VERSION, requiresReboot: true },
-            { name: 'DCU', key: 'dcu', versionKey: 'dcuVersion', isUpToDateKey: 'isDcuUpToDate', needsUpdate: device.isDcuUpToDate === false, currentVersion: device.dcuVersion, targetVersion: TARGET_DCU_VERSION, requiresReboot: false },
-            { name: 'Windows', key: 'windows', versionKey: 'winVersion', isUpToDateKey: 'isWinUpToDate', needsUpdate: device.isWinUpToDate === false, currentVersion: device.winVersion, targetVersion: TARGET_WIN_VERSION, requiresReboot: false },
+            { name: 'BIOS', versionKey: 'biosVersion', isUpToDateKey: 'isBiosUpToDate', needsUpdate: device.isBiosUpToDate === false, currentVersion: device.biosVersion, targetVersion: TARGET_BIOS_VERSION, requiresReboot: true },
+            { name: 'DCU', versionKey: 'dcuVersion', isUpToDateKey: 'isDcuUpToDate', needsUpdate: device.isDcuUpToDate === false, currentVersion: device.dcuVersion, targetVersion: TARGET_DCU_VERSION, requiresReboot: false },
+            { name: 'Windows', versionKey: 'winVersion', isUpToDateKey: 'isWinUpToDate', needsUpdate: device.isWinUpToDate === false, currentVersion: device.winVersion, targetVersion: TARGET_WIN_VERSION, requiresReboot: false },
         ];
-    
+
         for (const comp of componentsToUpdate) {
             if (isCancelledRef.current) break;
             if (!comp.needsUpdate) continue;
-            
-            setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: `Updating ${comp.name}` } : d));
+
+            setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: `Updating ${comp.name}` as DeploymentStatus } : d));
             addLog(`[${device.hostname}] Phase: ${comp.name} Update. Status: Starting. Current version: ${comp.currentVersion}`, 'INFO');
-            
+
             await sleep(2000 + Math.random() * 1000);
-    
+
             if (isCancelledRef.current) break;
-    
-            const updateSucceeded = Math.random() > 0.15; // 85% success chance
-    
+
+            const updateSucceeded = Math.random() > 0.15;
+
             if (updateSucceeded) {
                 succeeded.push(comp.name);
                 if (comp.requiresReboot) {
                     needsReboot = true;
                 }
-                setDevices(prev => prev.map(d => d.id === deviceId ? { 
+                setDevices(prev => prev.map(d => d.id === deviceId ? {
                     ...d,
-                    [comp.versionKey]: comp.targetVersion, 
-                    [comp.isUpToDateKey]: true 
+                    [comp.versionKey]: comp.targetVersion,
+                    [comp.isUpToDateKey]: true
                 } : d));
                 addLog(`[${device.hostname}] Phase: ${comp.name} Update. Status: Complete. New version: ${comp.targetVersion}`, 'SUCCESS');
             } else {
                 failed.push(comp.name);
                 addLog(`[${device.hostname}] Phase: ${comp.name} Update. Status: FAILED.`, 'ERROR');
-                break; // Stop updating this device if one component fails
+                break;
             }
         }
-        
+
         if (isCancelledRef.current) {
-             addLog(`Update for ${device.hostname} was cancelled.`, 'WARNING');
-             return;
+            addLog(`Update for ${device.hostname} was cancelled.`, 'WARNING');
+            return;
         }
-    
+
         const finalUpdateResult = { succeeded, failed };
-    
+
         if (failed.length > 0) {
             addLog(`Update process for ${device.hostname} failed on ${failed[0]} component.`, 'ERROR');
-            setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Failed', lastUpdateResult: finalUpdateResult } : d));
+            setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Failed' as DeploymentStatus, lastUpdateResult: finalUpdateResult } : d));
         } else if (succeeded.length > 0) {
             const successSummary = `Updates finished for ${device.hostname}. Components updated: ${succeeded.join(', ')}.`;
             if (needsReboot) {
                 addLog(`${successSummary} A reboot is required to complete the installation.`, 'INFO');
-                setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Update Complete (Reboot Pending)', lastUpdateResult: finalUpdateResult } : d));
-                 if (autoRebootEnabled) {
+                setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Update Complete (Reboot Pending)' as DeploymentStatus, lastUpdateResult: finalUpdateResult } : d));
+                if (autoRebootEnabled) {
                     addLog(`[${device.hostname}] Auto-reboot is enabled. Initiating reboot now...`, 'INFO');
                     await handleRebootDevice(deviceId);
                 }
             } else {
                 addLog(`${successSummary} System is now compliant.`, 'SUCCESS');
-                setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Success', lastUpdateResult: finalUpdateResult } : d));
+                setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Success' as DeploymentStatus, lastUpdateResult: finalUpdateResult } : d));
             }
         } else {
             addLog(`No updates were needed for ${device.hostname}. System is already compliant.`, 'INFO');
-            setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Success' } : d));
+            setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Success' as DeploymentStatus } : d));
         }
     };
-    
+
     const handleRebootDevice = async (deviceId: number) => {
         const device = devices.find(d => d.id === deviceId);
         if (!device) return;
 
         addLog(`[${device.hostname}] Initiating reboot as required by recent updates.`, 'INFO');
-        setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Rebooting...' } : d));
-        
+        setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Rebooting...' as DeploymentStatus } : d));
+
         await sleep(8000 + Math.random() * 4000);
 
         if (isCancelledRef.current) {
             addLog(`[${device.hostname}] Reboot cancelled during process.`, 'WARNING');
-            setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Cancelled' } : d));
+            setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Cancelled' as DeploymentStatus } : d));
             return;
         }
 
         addLog(`[${device.hostname}] Reboot complete. System is now compliant.`, 'SUCCESS');
-        setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Success' } : d));
+        setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Success' as DeploymentStatus } : d));
     };
 
     const handleCancelDeployment = () => {
@@ -726,7 +674,7 @@ const App: React.FC = () => {
         setDevices(prev => prev.map(d => {
             if (deviceIds.has(d.id)) {
                 hostnames.push(d.hostname);
-                return { ...d, status: 'Waking Up' };
+                return { ...d, status: 'Waking Up' as DeploymentStatus };
             }
             return d;
         }));
@@ -752,11 +700,24 @@ const App: React.FC = () => {
     };
 
     const handleBulkUpdate = async () => {
-        addLog(`Initiating bulk update for ${selectedDeviceIds.size} devices...`, 'INFO');
-        const updatePromises = [...selectedDeviceIds].map(id => handleUpdateDevice(id));
-        await Promise.all(updatePromises);
-        addLog('Bulk update process complete.', 'SUCCESS');
-        setSelectedDeviceIds(new Set()); 
+        setPendingAction('bulkUpdate');
+        setIsScopeGuardOpen(true);
+    };
+
+    const handleScopeVerified = async (verifiedDevices: Device[], policy: ScopePolicy) => {
+        setIsScopeGuardOpen(false);
+        setActiveScopePolicy(policy);
+
+        if (pendingAction === 'bulkUpdate') {
+            const verifiedIds = new Set(verifiedDevices.map(d => d.id));
+            addLog(`Scope verified. Initiating bulk update for ${verifiedIds.size} verified devices...`, 'INFO');
+            const updatePromises = [...verifiedIds].map(id => handleUpdateDevice(id));
+            await Promise.all(updatePromises);
+            addLog('Bulk update process complete.', 'SUCCESS');
+            setSelectedDeviceIds(new Set());
+        }
+
+        setPendingAction(null);
     };
 
     const handleBulkCancel = () => {
@@ -772,6 +733,27 @@ const App: React.FC = () => {
         setSelectedDeviceIds(new Set());
     };
 
+    const handlePromoteDevices = (promotedDevices: Device[]) => {
+        const existingHostnames = new Set(devices.map(d => d.hostname));
+        const newDevices = promotedDevices.filter(d => !existingHostnames.has(d.hostname));
+
+        if (newDevices.length === 0) {
+            addLog('All promoted devices are already in the deployment list.', 'WARNING');
+            return;
+        }
+
+        const reindexed = newDevices.map((d, i) => ({
+            ...d,
+            id: devices.length + i,
+            status: 'Pending' as DeploymentStatus,
+            imagingStatus: 'Ready for Deployment' as const,
+        }));
+
+        setDevices(prev => [...prev, ...reindexed]);
+        addLog(`Promoted ${reindexed.length} device(s) from Image Monitor to Deployment Runner.`, 'SUCCESS');
+        setActiveView('deployment');
+    };
+
     const isReadyToDeploy = csvFile && batchFile;
 
     return (
@@ -780,136 +762,158 @@ const App: React.FC = () => {
                 selectedDeviceIds={selectedDeviceIds}
                 onWakeOnLan={handleWakeOnLan}
             />
-            <main className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-1 flex flex-col gap-8">
-                    <div className="bg-slate-800/50 p-6 rounded-lg shadow-lg border border-slate-700">
-                        <h2 className="text-xl font-bold text-cyan-400 mb-4 border-b border-slate-600 pb-2">Configuration</h2>
-                        <div className="space-y-6">
-                            <StepCard
-                                step="1"
-                                title="Select Device List"
-                                description="Upload a CSV file with 'Hostname' and 'MAC' columns."
-                            >
-                                <input type="file" accept=".csv" onChange={handleFileChange(setCsvFile)} className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100 w-full text-sm text-slate-400"/>
-                                {csvFile && <p className="text-xs text-green-400 mt-2">Selected: {csvFile.name}</p>}
-                            </StepCard>
-                            <StepCard
-                                step="2"
-                                title="Select Deployment Package"
-                                description="Choose the .bat or .cmd script to execute remotely."
-                            >
-                                <input type="file" accept=".bat,.cmd" onChange={handleFileChange(setBatchFile)} className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100 w-full text-sm text-slate-400"/>
-                                {batchFile && <p className="text-xs text-green-400 mt-2">Selected: {batchFile.name}</p>}
-                            </StepCard>
-                             <StepCard
-                                step="3"
-                                title="Enter Credentials"
-                                description="Secure credentials will be requested when you start the scan."
-                            >
-                                <p className="text-xs text-slate-500 pt-2">Authentication will be prompted before the scan begins.</p>
-                            </StepCard>
-                             <StepCard
-                                step="4"
-                                title="Advanced Settings"
-                                description="Configure connection retry and reboot behavior."
-                            >
-                                <div className="space-y-3 pt-2">
-                                     <div className="flex items-center justify-between">
-                                        <label htmlFor="maxRetries" className="text-sm text-slate-300">Max Retries</label>
-                                        <input 
-                                            type="number" 
-                                            id="maxRetries" 
-                                            value={maxRetries}
-                                            onChange={(e) => setMaxRetries(Math.max(1, parseInt(e.target.value, 10)))}
-                                            className="w-20 bg-slate-700 border border-slate-600 rounded-md px-2 py-1 text-sm text-center"
-                                        />
-                                    </div>
-                                     <div className="flex items-center justify-between">
-                                        <label htmlFor="retryDelay" className="text-sm text-slate-300">Retry Delay (sec)</label>
-                                        <input 
-                                            type="number" 
-                                            id="retryDelay"
-                                            value={retryDelay}
-                                            onChange={(e) => setRetryDelay(Math.max(1, parseInt(e.target.value, 10)))}
-                                            className="w-20 bg-slate-700 border border-slate-600 rounded-md px-2 py-1 text-sm text-center"
-                                        />
-                                    </div>
-                                    <div className="flex items-center justify-between">
-                                        <label htmlFor="autoReboot" className="text-sm text-slate-300 cursor-pointer">Auto Reboot</label>
-                                        <button
-                                            id="autoReboot"
-                                            role="switch"
-                                            aria-checked={autoRebootEnabled}
-                                            onClick={() => setAutoRebootEnabled(!autoRebootEnabled)}
-                                            className={`${
-                                                autoRebootEnabled ? 'bg-cyan-600' : 'bg-slate-600'
-                                            } relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 focus:ring-offset-slate-800`}
-                                        >
-                                            <span
-                                                className={`${
-                                                autoRebootEnabled ? 'translate-x-6' : 'translate-x-1'
-                                                } inline-block h-4 w-4 transform rounded-full bg-white transition-transform`}
-                                            />
-                                        </button>
-                                    </div>
-                                </div>
-                            </StepCard>
-                        </div>
-                    </div>
-                     <DeploymentHistory history={deploymentHistory} />
-                </div>
 
-                <div className="lg:col-span-2 flex flex-col gap-8">
-                    <div className="bg-slate-800/50 p-6 rounded-lg shadow-lg border border-slate-700">
-                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
-                            <h2 className="text-xl font-bold text-cyan-400 mb-2 sm:mb-0">Deployment Status</h2>
-                            {deploymentState === DeploymentState.Running ? (
-                                <button
-                                    onClick={handleCancelDeployment}
-                                    className="px-6 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition duration-200 shadow-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50"
-                                >
-                                    Cancel Scan
-                                </button>
-                            ) : (
-                                 <button
-                                    onClick={handleStartDeployment}
-                                    disabled={!isReadyToDeploy}
-                                    className="px-6 py-2 bg-cyan-600 text-white font-semibold rounded-lg hover:bg-cyan-700 disabled:bg-slate-600 disabled:cursor-not-allowed transition duration-200 shadow-md focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-opacity-50"
-                                >
-                                    Start System Scan
-                                </button>
-                            )}
-                        </div>
-                        <DeploymentProgress devices={devices} />
-                    </div>
-                    
-                    <BulkActions 
-                        selectedCount={selectedDeviceIds.size} 
-                        onUpdate={handleBulkUpdate} 
-                        onCancel={handleBulkCancel} 
-                    />
-
-                    <div className="bg-slate-800/50 p-6 rounded-lg shadow-lg border border-slate-700 flex-grow min-h-[400px] flex flex-col">
-                        <div className="flex justify-between items-center mb-4 border-b border-slate-600 pb-2">
-                            <h2 className="text-xl font-bold text-cyan-400">Live Logs & Device Status</h2>
-                        </div>
-                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 flex-grow min-h-0">
-                             <DeviceStatusTable 
-                                devices={devices} 
-                                onUpdateDevice={handleUpdateDevice} 
-                                onRebootDevice={handleRebootDevice}
-                                selectedDeviceIds={selectedDeviceIds}
-                                onDeviceSelect={handleDeviceSelection}
-                                onSelectAll={handleSelectAll}
-                             />
-                             <LogViewer logs={logs} />
-                        </div>
-                    </div>
-                </div>
-              </div>
+            <div className="mt-4 flex items-center gap-2 bg-slate-800/50 p-2 rounded-lg border border-slate-700 w-fit">
+                <button
+                    onClick={() => setActiveView('imaging')}
+                    className={`px-4 py-2 text-sm font-semibold rounded-md transition duration-200 ${
+                        activeView === 'imaging'
+                            ? 'bg-cyan-600 text-white shadow-md'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-700'
+                    }`}
+                >
+                    Image Monitor
+                </button>
+                <button
+                    onClick={() => setActiveView('deployment')}
+                    className={`px-4 py-2 text-sm font-semibold rounded-md transition duration-200 ${
+                        activeView === 'deployment'
+                            ? 'bg-cyan-600 text-white shadow-md'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-700'
+                    }`}
+                >
+                    Secure Deployment Runner
+                </button>
+                {sessionActive && (
+                    <span className="ml-4 text-xs text-green-400 flex items-center gap-1">
+                        <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                        Session Active
+                    </span>
+                )}
             </div>
-          </div>
+
+            {activeView === 'imaging' ? (
+                <div className="mt-8">
+                    <ImageMonitor
+                        onPromoteDevices={handlePromoteDevices}
+                        onLog={addLog}
+                    />
+                </div>
+            ) : (
+                <main className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div className="lg:col-span-1 flex flex-col gap-8">
+                        <div className="bg-slate-800/50 p-6 rounded-lg shadow-lg border border-slate-700">
+                            <h2 className="text-xl font-bold text-cyan-400 mb-4 border-b border-slate-600 pb-2">Configuration</h2>
+                            <div className="space-y-6">
+                                <StepCard step="1" title="Select Device List" description="Upload a CSV file with 'Hostname' and 'MAC' columns.">
+                                    <input type="file" accept=".csv" onChange={handleFileChange(setCsvFile)} className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100 w-full text-sm text-slate-400" />
+                                    {csvFile && <p className="text-xs text-green-400 mt-2">Selected: {csvFile.name}</p>}
+                                </StepCard>
+                                <StepCard step="2" title="Select Deployment Package" description="Choose the .bat or .cmd script to execute remotely.">
+                                    <input type="file" accept=".bat,.cmd" onChange={handleFileChange(setBatchFile)} className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100 w-full text-sm text-slate-400" />
+                                    {batchFile && (
+                                        <div className="flex items-center justify-between mt-2">
+                                            <p className="text-xs text-green-400">Selected: {batchFile.name}</p>
+                                            <button onClick={handleAnalyzeScript} className="text-xs text-amber-400 hover:text-amber-300 underline">
+                                                Analyze Safety
+                                            </button>
+                                        </div>
+                                    )}
+                                </StepCard>
+                                <StepCard step="3" title="Enter Credentials" description="Secure credentials will be requested when you start the scan.">
+                                    <p className="text-xs text-slate-500 pt-2">Authentication will be prompted before the scan begins. Credentials are never stored.</p>
+                                </StepCard>
+                                <StepCard step="4" title="Advanced Settings" description="Configure connection retry and reboot behavior.">
+                                    <div className="space-y-3 pt-2">
+                                        <div className="flex items-center justify-between">
+                                            <label htmlFor="maxRetries" className="text-sm text-slate-300">Max Retries</label>
+                                            <input type="number" id="maxRetries" value={maxRetries} onChange={(e) => setMaxRetries(Math.max(1, Math.min(10, parseInt(e.target.value, 10) || 1)))} className="w-20 bg-slate-700 border border-slate-600 rounded-md px-2 py-1 text-sm text-center" min={1} max={10} />
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <label htmlFor="retryDelay" className="text-sm text-slate-300">Retry Delay (sec)</label>
+                                            <input type="number" id="retryDelay" value={retryDelay} onChange={(e) => setRetryDelay(Math.max(1, Math.min(30, parseInt(e.target.value, 10) || 1)))} className="w-20 bg-slate-700 border border-slate-600 rounded-md px-2 py-1 text-sm text-center" min={1} max={30} />
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <label htmlFor="autoReboot" className="text-sm text-slate-300 cursor-pointer">Auto Reboot</label>
+                                            <button
+                                                id="autoReboot"
+                                                role="switch"
+                                                aria-checked={autoRebootEnabled}
+                                                onClick={() => setAutoRebootEnabled(!autoRebootEnabled)}
+                                                className={`${autoRebootEnabled ? 'bg-cyan-600' : 'bg-slate-600'} relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 focus:ring-offset-slate-800`}
+                                            >
+                                                <span className={`${autoRebootEnabled ? 'translate-x-6' : 'translate-x-1'} inline-block h-4 w-4 transform rounded-full bg-white transition-transform`} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                </StepCard>
+                            </div>
+                        </div>
+                        <DeploymentHistory history={deploymentHistory} />
+                    </div>
+
+                    <div className="lg:col-span-2 flex flex-col gap-8">
+                        <div className="bg-slate-800/50 p-6 rounded-lg shadow-lg border border-slate-700">
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
+                                <h2 className="text-xl font-bold text-cyan-400 mb-2 sm:mb-0">Deployment Status</h2>
+                                {deploymentState === DeploymentState.Running ? (
+                                    <button onClick={handleCancelDeployment} className="px-6 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition duration-200 shadow-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50">
+                                        Cancel Scan
+                                    </button>
+                                ) : (
+                                    <button onClick={handleStartDeployment} disabled={!isReadyToDeploy} className="px-6 py-2 bg-cyan-600 text-white font-semibold rounded-lg hover:bg-cyan-700 disabled:bg-slate-600 disabled:cursor-not-allowed transition duration-200 shadow-md focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-opacity-50">
+                                        Start System Scan
+                                    </button>
+                                )}
+                            </div>
+                            <DeploymentProgress devices={devices} />
+                        </div>
+
+                        <BulkActions selectedCount={selectedDeviceIds.size} onUpdate={handleBulkUpdate} onCancel={handleBulkCancel} />
+
+                        <div className="bg-slate-800/50 p-6 rounded-lg shadow-lg border border-slate-700 flex-grow min-h-[400px] flex flex-col">
+                            <div className="flex justify-between items-center mb-4 border-b border-slate-600 pb-2">
+                                <h2 className="text-xl font-bold text-cyan-400">Live Logs & Device Status</h2>
+                            </div>
+                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 flex-grow min-h-0">
+                                <DeviceStatusTable
+                                    devices={devices}
+                                    onUpdateDevice={handleUpdateDevice}
+                                    onRebootDevice={handleRebootDevice}
+                                    selectedDeviceIds={selectedDeviceIds}
+                                    onDeviceSelect={handleDeviceSelection}
+                                    onSelectAll={handleSelectAll}
+                                />
+                                <LogViewer logs={logs} />
+                            </div>
+                        </div>
+                    </div>
+                </main>
+            )}
+
+            <SecureCredentialModal
+                isOpen={isCredentialModalOpen}
+                onClose={() => setIsCredentialModalOpen(false)}
+                onConfirm={handleConfirmCredentialsAndDeploy}
+            />
+
+            <DeviceScopeGuard
+                isOpen={isScopeGuardOpen}
+                devices={devices}
+                selectedDeviceIds={selectedDeviceIds}
+                onVerificationComplete={handleScopeVerified}
+                onCancel={() => { setIsScopeGuardOpen(false); setPendingAction(null); }}
+                username={credentials.username || 'operator'}
+            />
+
+            <ScriptAnalysisModal
+                isOpen={isScriptAnalysisOpen}
+                result={scriptAnalysisResult}
+                isLoading={scriptAnalysisLoading}
+                onClose={() => setIsScriptAnalysisOpen(false)}
+            />
         </div>
-      )}
+    );
+};
 
 export default App;
