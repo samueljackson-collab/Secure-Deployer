@@ -560,7 +560,8 @@ const App: React.FC = () => {
 
             // Enforce MAC address whitelist
             if (activeScopePolicy.allowedMacs.length > 0) {
-                if (!activeScopePolicy.allowedMacs.includes(device.mac)) {
+                const normalizedAllowedMacs = activeScopePolicy.allowedMacs.map(normalizeMacAddress);
+                if (!normalizedAllowedMacs.includes(device.mac)) {
                     addLog(`BLOCKED: ${device.hostname} (MAC: ${device.mac}) is not in the verified MAC whitelist. Update denied.`, 'ERROR');
                     return;
                 }
