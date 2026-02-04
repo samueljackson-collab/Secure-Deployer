@@ -1,0 +1,76 @@
+# =============================================================================
+# P01 AWS Infrastructure - Example Variable Values
+# =============================================================================
+# Copy this file to terraform.tfvars and update the values for your
+# environment. NEVER commit terraform.tfvars to version control as it may
+# contain sensitive values.
+#
+# Usage:
+#   cp terraform.tfvars.example terraform.tfvars
+#   # Edit terraform.tfvars with your values
+#   terraform plan
+#
+# For sensitive values (db_username), prefer environment variables:
+#   export TF_VAR_db_username="admin"
+#   export TF_VAR_certificate_arn="arn:aws:acm:us-east-1:123456789012:certificate/abc-123"
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# General Settings
+# -----------------------------------------------------------------------------
+region       = "us-east-1"
+environment  = "production"
+project_name = "p01-infra"
+
+# -----------------------------------------------------------------------------
+# Network Settings
+# -----------------------------------------------------------------------------
+vpc_cidr             = "10.0.0.0/16"
+public_subnet_cidrs  = ["10.0.1.0/24", "10.0.2.0/24"]
+private_subnet_cidrs = ["10.0.16.0/20", "10.0.32.0/20"]
+
+# -----------------------------------------------------------------------------
+# Compute Settings
+# -----------------------------------------------------------------------------
+ami_id            = "ami-0abcdef1234567890"   # Replace with your hardened AMI
+instance_type     = "t3.medium"
+key_name          = ""                         # Leave empty to disable SSH (use SSM instead)
+app_port          = 8080
+health_check_path = "/health"
+
+# ASG scaling parameters
+asg_min_size         = 2
+asg_max_size         = 6
+asg_desired_capacity = 2
+cpu_target_value     = 70.0
+
+# -----------------------------------------------------------------------------
+# Database Settings
+# -----------------------------------------------------------------------------
+db_engine_version         = "15.4"
+db_instance_class         = "db.t3.medium"
+db_allocated_storage      = 50
+db_name                   = "appdb"
+db_port                   = 5432
+db_multi_az               = true
+db_backup_retention_period = 7
+
+# SENSITIVE: Set via environment variable instead:
+#   export TF_VAR_db_username="admin"
+# db_username = "admin"
+
+# -----------------------------------------------------------------------------
+# Storage Settings
+# -----------------------------------------------------------------------------
+s3_bucket_name = "p01-infra-production-assets-123456"  # Must be globally unique
+
+# -----------------------------------------------------------------------------
+# TLS Settings
+# -----------------------------------------------------------------------------
+# Provide a valid ACM certificate ARN for HTTPS on the ALB.
+# certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/abc-def-ghi"
+
+# -----------------------------------------------------------------------------
+# Observability Settings
+# -----------------------------------------------------------------------------
+enable_alb_access_logs = true
