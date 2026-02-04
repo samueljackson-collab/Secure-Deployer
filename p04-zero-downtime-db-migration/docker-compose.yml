@@ -1,0 +1,172 @@
+version: "3.9"
+
+services:
+  # --- Source PostgreSQL ---
+  source-db:
+    image: postgres:16-alpine
+    container_name: source-db
+    environment:
+      POSTGRES_USER: migration
+      POSTGRES_PASSWORD: migration_secret
+      POSTGRES_DB: sourcedb
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./init-source.sql:/docker-entrypoint-initdb.d/init-source.sql:ro
+      - source-data:/var/lib/postgresql/data
+    command:
+      - "postgres"
+      - "-c"
+      - "wal_level=logical"
+      - "-c"
+      - "max_replication_slots=4"
+      - "-c"
+      - "max_wal_senders=4"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U migration -d sourcedb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - migration-net
+
+  # --- Target PostgreSQL ---
+  target-db:
+    image: postgres:16-alpine
+    container_name: target-db
+    environment:
+      POSTGRES_USER: migration
+      POSTGRES_PASSWORD: migration_secret
+      POSTGRES_DB: targetdb
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./init-target.sql:/docker-entrypoint-initdb.d/init-target.sql:ro
+      - target-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U migration -d targetdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - migration-net
+
+  # --- Zookeeper ---
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    healthcheck:
+      test: ["CMD-SHELL", "echo ruok | nc localhost 2181 | grep imok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - migration-net
+
+  # --- Kafka Broker ---
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    ports:
+      - "9092:9092"
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    networks:
+      - migration-net
+
+  # --- Debezium Connect ---
+  debezium-connect:
+    image: debezium/connect:2.5
+    container_name: debezium-connect
+    depends_on:
+      kafka:
+        condition: service_healthy
+      source-db:
+        condition: service_healthy
+    environment:
+      BOOTSTRAP_SERVERS: kafka:29092
+      GROUP_ID: debezium-connect-group
+      CONFIG_STORAGE_TOPIC: _connect_configs
+      OFFSET_STORAGE_TOPIC: _connect_offsets
+      STATUS_STORAGE_TOPIC: _connect_statuses
+      CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      STATUS_STORAGE_REPLICATION_FACTOR: 1
+      KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+    ports:
+      - "8083:8083"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8083/connectors || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    networks:
+      - migration-net
+
+  # --- CDC Consumer ---
+  cdc-consumer:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM python:3.11-slim
+        WORKDIR /app
+        COPY requirements.txt .
+        RUN pip install --no-cache-dir -r requirements.txt
+        COPY consumer.py .
+        CMD ["python", "-u", "consumer.py"]
+    container_name: cdc-consumer
+    depends_on:
+      kafka:
+        condition: service_healthy
+      target-db:
+        condition: service_healthy
+      debezium-connect:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP: kafka:29092
+      KAFKA_GROUP_ID: cdc-consumer-group
+      KAFKA_TOPIC_PATTERN: "^cdc\\.public\\..*"
+      TARGET_DB_HOST: target-db
+      TARGET_DB_PORT: 5432
+      TARGET_DB_NAME: targetdb
+      TARGET_DB_USER: migration
+      TARGET_DB_PASSWORD: migration_secret
+      BATCH_SIZE: 100
+      CONSUMER_POLL_TIMEOUT: 1.0
+    restart: on-failure
+    networks:
+      - migration-net
+
+volumes:
+  source-data:
+  target-data:
+
+networks:
+  migration-net:
+    driver: bridge

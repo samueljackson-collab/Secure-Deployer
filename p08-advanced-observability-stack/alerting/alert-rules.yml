@@ -1,0 +1,135 @@
+# =============================================================================
+# Prometheus Alerting Rules
+#
+# Production alerting rules for infrastructure monitoring. These rules are
+# loaded by Prometheus via the rule_files configuration directive.
+# =============================================================================
+
+groups:
+  # ---------------------------------------------------------------------------
+  # Infrastructure Alerts
+  # ---------------------------------------------------------------------------
+  - name: infrastructure-alerts
+    interval: 30s
+    rules:
+      # -----------------------------------------------------------------------
+      # HighCPU — CPU usage exceeds 80% for 5 minutes
+      # -----------------------------------------------------------------------
+      - alert: HighCPU
+        expr: |
+          100 - (avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+          team: infrastructure
+          category: compute
+        annotations:
+          summary: "High CPU usage detected on {{ $labels.instance }}"
+          description: >-
+            CPU usage on instance {{ $labels.instance }} has exceeded 80%
+            for the last 5 minutes. Current value: {{ printf "%.1f" $value }}%.
+            Investigate running processes and consider scaling.
+          runbook_url: "https://wiki.internal/runbooks/high-cpu"
+          dashboard_url: "http://grafana:3000/d/node-exporter/node-overview?var-instance={{ $labels.instance }}"
+
+      # -----------------------------------------------------------------------
+      # HighMemory — Memory usage exceeds 85% for 5 minutes
+      # -----------------------------------------------------------------------
+      - alert: HighMemory
+        expr: |
+          (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          team: infrastructure
+          category: memory
+        annotations:
+          summary: "High memory usage detected on {{ $labels.instance }}"
+          description: >-
+            Memory usage on instance {{ $labels.instance }} has exceeded 85%
+            for the last 5 minutes. Current value: {{ printf "%.1f" $value }}%.
+            Check for memory leaks or OOM-prone workloads.
+          runbook_url: "https://wiki.internal/runbooks/high-memory"
+          dashboard_url: "http://grafana:3000/d/node-exporter/node-overview?var-instance={{ $labels.instance }}"
+
+      # -----------------------------------------------------------------------
+      # InstanceDown — Target unreachable for 2 minutes
+      # -----------------------------------------------------------------------
+      - alert: InstanceDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+          team: infrastructure
+          category: availability
+        annotations:
+          summary: "Instance {{ $labels.instance }} ({{ $labels.job }}) is down"
+          description: >-
+            The Prometheus target {{ $labels.instance }} in job
+            {{ $labels.job }} has been unreachable for more than 2 minutes.
+            Verify that the service is running and network connectivity is intact.
+          runbook_url: "https://wiki.internal/runbooks/instance-down"
+
+      # -----------------------------------------------------------------------
+      # DiskSpaceLow — Filesystem free space below 15% for 10 minutes
+      # -----------------------------------------------------------------------
+      - alert: DiskSpaceLow
+        expr: |
+          (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) * 100 < 15
+        for: 10m
+        labels:
+          severity: critical
+          team: infrastructure
+          category: storage
+        annotations:
+          summary: "Low disk space on {{ $labels.instance }} ({{ $labels.mountpoint }})"
+          description: >-
+            Filesystem {{ $labels.mountpoint }} on instance
+            {{ $labels.instance }} has less than 15% free space for the last
+            10 minutes. Current free: {{ printf "%.1f" $value }}%.
+            Clean up disk or expand the volume.
+          runbook_url: "https://wiki.internal/runbooks/disk-space-low"
+          dashboard_url: "http://grafana:3000/d/node-exporter/node-overview?var-instance={{ $labels.instance }}"
+
+  # ---------------------------------------------------------------------------
+  # Observability Self-Monitoring Alerts
+  # ---------------------------------------------------------------------------
+  - name: observability-self-monitoring
+    interval: 30s
+    rules:
+      # -----------------------------------------------------------------------
+      # PrometheusConfigReloadFailed
+      # -----------------------------------------------------------------------
+      - alert: PrometheusConfigReloadFailed
+        expr: prometheus_config_last_reload_successful == 0
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+          category: observability
+        annotations:
+          summary: "Prometheus configuration reload failed"
+          description: >-
+            Prometheus has failed to reload its configuration. The last
+            successful reload was at
+            {{ with query "prometheus_config_last_reload_success_timestamp_seconds" }}
+            {{ . | first | value | humanizeTimestamp }}{{ end }}.
+            Check the Prometheus logs for configuration syntax errors.
+
+      # -----------------------------------------------------------------------
+      # LokiIngestionRateHigh
+      # -----------------------------------------------------------------------
+      - alert: LokiIngestionRateHigh
+        expr: |
+          sum(rate(loki_distributor_bytes_received_total[5m])) > 10485760
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+          category: observability
+        annotations:
+          summary: "Loki ingestion rate exceeds 10 MB/s"
+          description: >-
+            Loki is ingesting data at a rate exceeding 10 MB/s for the last
+            10 minutes. This may indicate a log flood or misconfigured
+            application logging. Investigate high-volume log sources.
