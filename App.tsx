@@ -210,8 +210,7 @@ const App: React.FC = () => {
 
         try {
             const scriptContent = await batchFile.text();
-            const allowedHostnames = devices.map(d => d.hostname);
-            const result = analyzeScript(scriptContent, allowedHostnames);
+            const result = analyzeScript(scriptContent, activeScopePolicy);
             setScriptAnalysisResult(result);
 
             if (!result.isSafe) {
@@ -379,8 +378,7 @@ const App: React.FC = () => {
                     addLog(`Validated and loaded ${parsedDevices.length} devices from ${csvFile.name}.`, 'INFO');
 
                     const scriptContent = await batchFile.text();
-                    const allowedHostnames = parsedDevices.map(d => d.hostname);
-                    const safetyResult = analyzeScript(scriptContent, allowedHostnames);
+                    const safetyResult = analyzeScript(scriptContent, activeScopePolicy);
 
                     if (!safetyResult.isSafe) {
                         addLog(`DEPLOYMENT BLOCKED: Script contains ${safetyResult.blockedPatterns.length} dangerous pattern(s).`, 'ERROR');
@@ -599,6 +597,14 @@ const App: React.FC = () => {
             }
         }
 
+        // Check MAC address allowlist if policy is active
+        if (activeScopePolicy && activeScopePolicy.allowedMacs.length > 0) {
+            if (!activeScopePolicy.allowedMacs.includes(device.mac)) {
+                addLog(`BLOCKED: ${device.hostname} (MAC: ${device.mac}) is not in the allowed MAC address list. Update denied.`, 'ERROR');
+                return;
+            }
+        }
+
         addLog(`Initiating updates for ${device.hostname}...`, 'INFO');
         setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Updating' as DeploymentStatus, lastUpdateResult: undefined } : d));
         await sleep(1000);
@@ -742,6 +748,14 @@ const App: React.FC = () => {
     };
 
     const handleScopeVerified = async (verifiedDevices: Device[], policy: ScopePolicy) => {
+        // Enforce maxDeviceCount policy before updating state
+        if (policy.maxDeviceCount > 0 && verifiedDevices.length > policy.maxDeviceCount) {
+            addLog(`BLOCKED: Scope policy limits operations to ${policy.maxDeviceCount} devices, but ${verifiedDevices.length} were selected. Operation denied.`, 'ERROR');
+            setIsScopeGuardOpen(false);
+            setPendingAction(null);
+            return;
+        }
+
         setIsScopeGuardOpen(false);
         setActiveScopePolicy(policy);
 
