@@ -1,0 +1,2 @@
+# Producer dependencies — pin versions for reproducible builds
+kafka-python==2.0.2
