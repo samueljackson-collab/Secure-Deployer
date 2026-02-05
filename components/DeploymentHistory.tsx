@@ -12,9 +12,7 @@ const AnalyticsChart: React.FC<AnalyticsChartProps> = ({ title, data, keys, data
     const reversedData = [...data].reverse();
     const maxValue = Math.max(...reversedData.map(run => {
         const counts = run[dataKey];
-        if (!counts) return 0;
-        // FIX: Cast Object.values to number[] to ensure correct type for reduce, which resolves multiple downstream errors.
-        return (Object.values(counts) as number[]).reduce((a, b) => a + b, 0);
+        return Object.values(counts).reduce((a: number, b: number) => a + b, 0) as number;
     }), 1); // Use 1 as min to avoid division by zero
 
     return (
@@ -23,13 +21,12 @@ const AnalyticsChart: React.FC<AnalyticsChartProps> = ({ title, data, keys, data
             <div className="h-48 bg-slate-900/50 p-4 rounded-md flex justify-around items-end gap-2 border border-slate-700 relative">
                 {reversedData.map((run) => {
                     const countsForRun = run[dataKey];
-                    // FIX: Cast Object.values to number[] to ensure correct type for reduce.
-                    const totalForRun = countsForRun ? (Object.values(countsForRun) as number[]).reduce((a, b) => a + b, 0) : 0;
+                    const totalForRun: number = Object.values(countsForRun).reduce((a: number, b: number) => a + b, 0) as number;
                     return (
                         <div key={run.id} className="group relative flex-1 h-full flex flex-col-reverse items-center" title={run.endTime.toLocaleDateString()}>
                             {keys.map(key => {
-                                // FIX: Cast countsForRun to `any` to allow dynamic key access without type errors on the union type.
-                                const value = (countsForRun as any)?.[key.name] ?? 0;
+                                // Type-safe property access
+                                const value = countsForRun[key.name as keyof typeof countsForRun] ?? 0;
                                 const height = (value / maxValue) * 100;
                                 return (
                                     <div
@@ -42,8 +39,8 @@ const AnalyticsChart: React.FC<AnalyticsChartProps> = ({ title, data, keys, data
                             <div className="absolute bottom-full mb-2 w-max bg-slate-900 border border-slate-600 text-white text-xs rounded py-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg z-10">
                                 <p className="font-semibold">{run.endTime.toLocaleDateString()}</p>
                                 {keys.map(key => {
-                                     // FIX: Cast countsForRun to `any` to allow dynamic key access without type errors on the union type.
-                                     const value = (countsForRun as any)?.[key.name] ?? 0;
+                                     // Type-safe property access
+                                     const value = countsForRun[key.name as keyof typeof countsForRun] ?? 0;
                                      const percentage = totalForRun > 0 ? `(${(value / totalForRun * 100).toFixed(0)}%)` : '';
                                      return <p key={key.name}>{`${key.name.charAt(0).toUpperCase() + key.name.slice(1)}: ${value} ${percentage}`.trim()}</p>;
                                 })}

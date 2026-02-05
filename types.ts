@@ -113,12 +113,12 @@ export interface DeploymentRun {
   needsAction: number;
   failed: number;
   successRate: number;
-  updatesNeededCounts?: {
+  updatesNeededCounts: {
     bios: number;
     dcu: number;
     windows: number;
   };
-  failureCounts?: {
+  failureCounts: {
     offline: number;
     cancelled: number;
     failed: number;
