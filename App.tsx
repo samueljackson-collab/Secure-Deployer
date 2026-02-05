@@ -108,7 +108,7 @@ const sanitizeLogMessage = (message: string): string => {
  */
 const sanitizeHostname = (hostname: string): string => {
     if (!hostname) return '';
-    return hostname.replace(/[^a-zA-Z0-9\-_]/g, '').toUpperCase();
+    return hostname.replace(/[^a-zA-Z0-9\-_]/g, '');
 };
 
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
