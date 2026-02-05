@@ -5,9 +5,17 @@ interface BulkActionsProps {
     selectedCount: number;
     onUpdate: () => void;
     onCancel: () => void;
+    onValidate?: () => void;
+    onExecute?: () => void;
 }
 
-export const BulkActions: React.FC<BulkActionsProps> = ({ selectedCount, onUpdate, onCancel }) => {
+export const BulkActions: React.FC<BulkActionsProps> = ({ 
+    selectedCount, 
+    onUpdate, 
+    onCancel,
+    onValidate,
+    onExecute
+}) => {
     if (selectedCount === 0) {
         return null;
     }
@@ -18,12 +26,28 @@ export const BulkActions: React.FC<BulkActionsProps> = ({ selectedCount, onUpdat
                 {selectedCount} device{selectedCount > 1 ? 's' : ''} selected
             </p>
             <div className="flex items-center gap-4">
+                {onValidate && (
+                    <button
+                        onClick={onValidate}
+                        className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition duration-200 shadow-md"
+                    >
+                        Validate Selected
+                    </button>
+                )}
                 <button
                     onClick={onUpdate}
                     className="px-4 py-2 bg-cyan-600 text-white text-sm font-semibold rounded-lg hover:bg-cyan-700 transition duration-200 shadow-md"
                 >
                     Update Selected
                 </button>
+                {onExecute && (
+                    <button
+                        onClick={onExecute}
+                        className="px-4 py-2 bg-green-600 text-white text-sm font-semibold rounded-lg hover:bg-green-700 transition duration-200 shadow-md"
+                    >
+                        Execute Selected
+                    </button>
+                )}
                 <button
                     onClick={onCancel}
                     className="px-4 py-2 bg-red-600 text-white text-sm font-semibold rounded-lg hover:bg-red-700 transition duration-200 shadow-md"

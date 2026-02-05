@@ -102,6 +102,15 @@ const sanitizeLogMessage = (message: string): string => {
         .replace(/secret\s*[:=]\s*\S+/gi, 'secret: [REDACTED]');
 };
 
+/**
+ * Sanitizes hostname to prevent injection attacks
+ * Only allows alphanumeric characters, hyphens, and underscores
+ */
+const sanitizeHostname = (hostname: string): string => {
+    if (!hostname) return '';
+    return hostname.replace(/[^a-zA-Z0-9\-_]/g, '').toUpperCase();
+};
+
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 
 const TARGET_BIOS_VERSION = 'A25';
@@ -332,7 +341,7 @@ const App: React.FC = () => {
                     const parsedDevices: Device[] = [];
                     let invalidCount = 0;
                     results.data.forEach((row, index) => {
-                        const hostname = (row[hostnameCol] || '').trim();
+                        const hostname = sanitizeHostname((row[hostnameCol] || '').trim());
                         const rawMac = row[macCol] || '';
 
                         if (!hostname && !rawMac) {
