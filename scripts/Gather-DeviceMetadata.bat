@@ -23,7 +23,7 @@ REM
 REM  REQUIREMENTS:
 REM    - Windows PE or full Windows environment with PowerShell available
 REM    - Network connectivity to SHARE_PATH (if network copy is desired)
-REM    - No internet or AI services required
+REM    - No internet or external services required
 REM    - No external dependencies beyond built-in Windows components
 REM
 REM  OUTPUT:

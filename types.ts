@@ -13,7 +13,7 @@
  *   - All imaging-related fields on Device are optional because they
  *     are only populated when a device enters via the Image Monitor.
  *   - ScriptSafetyResult / ScriptFinding are the output of the
- *     deterministic (AI-free) script analyzer.
+ *     deterministic script analyzer.
  *   - ScopePolicy / ScopeVerification enforce that bulk operations
  *     only affect explicitly verified devices.
  */
@@ -125,7 +125,7 @@ export interface DeploymentRun {
   };
 }
 
-// Script safety analysis types (deterministic, no AI)
+// Script safety analysis types (deterministic)
 export interface ScriptSafetyResult {
   isSafe: boolean;
   riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
