@@ -10,6 +10,11 @@ import { SecureCredentialModal } from './components/SecureCredentialModal';
 import { ImageMonitor } from './components/ImageMonitor';
 import { DeviceScopeGuard } from './components/DeviceScopeGuard';
 import { ScriptAnalysisModal } from './components/ScriptAnalysisModal';
+import { ImagingScriptPage } from './components/ImagingScriptPage';
+import { BuildOutputPage } from './components/BuildOutputPage';
+import { TrendsAnalyticsPage } from './components/TrendsAnalyticsPage';
+import { AdminGateModal } from './components/AdminGateModal';
+import { ConfirmActionModal } from './components/ConfirmActionModal';
 import { analyzeScript } from './services/scriptSafetyAnalyzer';
 import type { Device, DeviceFormFactor, LogEntry, DeploymentStatus, Credentials, DeploymentRun, ScopePolicy, ScriptSafetyResult } from './types';
 import { DeploymentState } from './types';
@@ -117,10 +122,18 @@ const TARGET_BIOS_VERSION = 'A25';
 const TARGET_DCU_VERSION = '5.2.0';
 const TARGET_WIN_VERSION = '23H2';
 
+type PendingAdminAction =
+    | { type: 'startDeployment' }
+    | { type: 'bulkUpdate' }
+    | { type: 'wakeOnLan'; deviceIds: Set<number> }
+    | { type: 'updateDevice'; deviceId: number }
+    | { type: 'rebootDevice'; deviceId: number };
+
 const App: React.FC = () => {
     const [csvFile, setCsvFile] = useState<File | null>(null);
     const [batchFile, setBatchFile] = useState<File | null>(null);
     const [credentials, setCredentials] = useState<Credentials>({ username: '', password: '' });
+    const [operatorName, setOperatorName] = useState('');
     const [devices, setDevices] = useState<Device[]>([]);
     const [logs, setLogs] = useState<LogEntry[]>([]);
     const [deploymentState, setDeploymentState] = useState<DeploymentState>(DeploymentState.Idle);
@@ -131,7 +144,7 @@ const App: React.FC = () => {
     const [retryDelay, setRetryDelay] = useState(2);
     const [autoRebootEnabled, setAutoRebootEnabled] = useState(false);
 
-    const [activeView, setActiveView] = useState<'imaging' | 'deployment'>('imaging');
+    const [activeView, setActiveView] = useState<'imaging' | 'deployment' | 'imagingScript' | 'buildOutput' | 'trendsAnalytics'>('imaging');
 
     const [isScopeGuardOpen, setIsScopeGuardOpen] = useState(false);
     const [activeScopePolicy, setActiveScopePolicy] = useState<ScopePolicy | null>(null);
@@ -144,6 +157,10 @@ const App: React.FC = () => {
     const [sessionActive, setSessionActive] = useState(false);
     const sessionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastActivityRef = useRef<number>(Date.now());
+    const [isAdminVerified, setIsAdminVerified] = useState(false);
+    const [adminGateOpen, setAdminGateOpen] = useState(false);
+    const [pendingAdminAction, setPendingAdminAction] = useState<PendingAdminAction | null>(null);
+    const [confirmAction, setConfirmAction] = useState<PendingAdminAction | null>(null);
 
     const isCancelledRef = useRef(false);
 
@@ -156,7 +173,9 @@ const App: React.FC = () => {
         // This ensures the timer is refreshed on every activity event
         sessionTimerRef.current = setTimeout(() => {
             setCredentials({ username: '', password: '' });
+            setOperatorName('');
             setSessionActive(false);
+            setIsAdminVerified(false);
             addLog('Session expired due to inactivity. Please re-authenticate.', 'WARNING');
         }, SESSION_TIMEOUT_MS);
     }, []);
@@ -300,13 +319,14 @@ const App: React.FC = () => {
         }
 
         isCancelledRef.current = false;
-        setCredentials(sessionCredentials);
+        setOperatorName(username);
+        setCredentials({ username: '', password: '' });
         setSessionActive(true);
         resetSessionTimer();
         setDeploymentState(DeploymentState.Running);
         setLogs([]);
         setSelectedDeviceIds(new Set());
-        addLog("Deployment process initiated. Session authenticated.", 'INFO');
+        addLog("Deployment process initiated. Credentials cleared after authentication.", 'INFO');
 
         try {
             Papa.parse<Record<string, string>>(csvFile, {
@@ -339,9 +359,12 @@ const App: React.FC = () => {
                     }
 
                     const parsedDevices: Device[] = [];
+                    const seenHostnames = new Set<string>();
+                    const seenMacs = new Set<string>();
                     let invalidCount = 0;
                     results.data.forEach((row, index) => {
-                        const hostname = sanitizeHostname((row[hostnameCol] || '').trim());
+                        const rawHostname = (row[hostnameCol] || '').trim();
+                        const hostname = sanitizeHostname(rawHostname);
                         const rawMac = row[macCol] || '';
 
                         if (!hostname && !rawMac) {
@@ -356,11 +379,31 @@ const App: React.FC = () => {
                             return;
                         }
 
+                        if (rawHostname && rawHostname !== hostname) {
+                            addLog(`Sanitized hostname in row ${index + 2}: "${rawHostname}" → "${hostname}".`, 'WARNING');
+                        }
+
                         if (!isValidMacAddress(normalizedMac)) {
                             addLog(`[Validation Skip] Skipping device "${hostname}" from row ${index + 2}. Reason: Invalid MAC address format.`, 'WARNING');
                             invalidCount++;
                             return;
                         }
+
+                        const hostnameKey = hostname.toUpperCase();
+                        if (seenHostnames.has(hostnameKey)) {
+                            addLog(`[Validation Skip] Duplicate hostname "${hostname}" detected in row ${index + 2}.`, 'WARNING');
+                            invalidCount++;
+                            return;
+                        }
+
+                        if (seenMacs.has(normalizedMac)) {
+                            addLog(`[Validation Skip] Duplicate MAC address "${normalizedMac}" detected in row ${index + 2}.`, 'WARNING');
+                            invalidCount++;
+                            return;
+                        }
+
+                        seenHostnames.add(hostnameKey);
+                        seenMacs.add(normalizedMac);
 
                         const deviceType = detectDeviceType(hostname);
 
@@ -419,12 +462,26 @@ const App: React.FC = () => {
         }
     };
 
-    const handleStartDeployment = () => {
+    const startDeploymentFlow = () => {
         if (!csvFile || !batchFile) {
             addLog("Please select a device list and deployment package first.", 'ERROR');
             return;
         }
         setIsCredentialModalOpen(true);
+    };
+
+    const requestAdminAction = (action: PendingAdminAction) => {
+        setPendingAdminAction(action);
+        setAdminGateOpen(true);
+    };
+
+    const handleStartDeployment = () => {
+        const action: PendingAdminAction = { type: 'startDeployment' };
+        if (!isAdminVerified) {
+            requestAdminAction(action);
+            return;
+        }
+        setConfirmAction(action);
     };
 
     const runDeploymentFlow = async (parsedDevices: Device[]) => {
@@ -573,7 +630,7 @@ const App: React.FC = () => {
         });
     };
 
-    const handleUpdateDevice = async (deviceId: number) => {
+    const updateDeviceFlow = async (deviceId: number) => {
         const device = devices.find(d => d.id === deviceId);
         if (!device) return;
 
@@ -661,7 +718,16 @@ const App: React.FC = () => {
         }
     };
 
-    const handleRebootDevice = async (deviceId: number) => {
+    const handleUpdateDevice = async (deviceId: number) => {
+        const action: PendingAdminAction = { type: 'updateDevice', deviceId };
+        if (!isAdminVerified) {
+            requestAdminAction(action);
+            return;
+        }
+        setConfirmAction(action);
+    };
+
+    const rebootDeviceFlow = async (deviceId: number) => {
         const device = devices.find(d => d.id === deviceId);
         if (!device) return;
 
@@ -680,6 +746,15 @@ const App: React.FC = () => {
         setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Success' as DeploymentStatus } : d));
     };
 
+    const handleRebootDevice = async (deviceId: number) => {
+        const action: PendingAdminAction = { type: 'rebootDevice', deviceId };
+        if (!isAdminVerified) {
+            requestAdminAction(action);
+            return;
+        }
+        setConfirmAction(action);
+    };
+
     const handleCancelDeployment = () => {
         isCancelledRef.current = true;
         setDeploymentState(DeploymentState.Idle);
@@ -693,7 +768,7 @@ const App: React.FC = () => {
         sendNotification('Deployment Cancelled', 'The scan process was stopped by the user.');
     };
 
-    const handleWakeOnLan = (deviceIds: Set<number>) => {
+    const wakeOnLanFlow = (deviceIds: Set<number>) => {
         if (deviceIds.size === 0) return;
         const hostnames: string[] = [];
         setDevices(prev => prev.map(d => {
@@ -705,6 +780,15 @@ const App: React.FC = () => {
         }));
         addLog(`Sent Wake-on-LAN to ${deviceIds.size} device(s): ${hostnames.join(', ')}`, 'INFO');
         setSelectedDeviceIds(new Set());
+    };
+
+    const handleWakeOnLan = (deviceIds: Set<number>) => {
+        const action: PendingAdminAction = { type: 'wakeOnLan', deviceIds };
+        if (!isAdminVerified) {
+            requestAdminAction(action);
+            return;
+        }
+        setConfirmAction(action);
     };
 
     const handleDeviceSelection = (deviceId: number) => {
@@ -724,9 +808,18 @@ const App: React.FC = () => {
         }
     };
 
-    const handleBulkUpdate = async () => {
+    const bulkUpdateFlow = async () => {
         setPendingAction('bulkUpdate');
         setIsScopeGuardOpen(true);
+    };
+
+    const handleBulkUpdate = async () => {
+        const action: PendingAdminAction = { type: 'bulkUpdate' };
+        if (!isAdminVerified) {
+            requestAdminAction(action);
+            return;
+        }
+        setConfirmAction(action);
     };
 
     const handleScopeVerified = async (verifiedDevices: Device[], policy: ScopePolicy) => {
@@ -779,6 +872,69 @@ const App: React.FC = () => {
         setActiveView('deployment');
     };
 
+    const handleConfirmAction = async () => {
+        if (!confirmAction) return;
+        const action = confirmAction;
+        setConfirmAction(null);
+        switch (action.type) {
+            case 'startDeployment':
+                startDeploymentFlow();
+                break;
+            case 'bulkUpdate':
+                await bulkUpdateFlow();
+                break;
+            case 'wakeOnLan':
+                wakeOnLanFlow(action.deviceIds);
+                break;
+            case 'updateDevice':
+                await updateDeviceFlow(action.deviceId);
+                break;
+            case 'rebootDevice':
+                await rebootDeviceFlow(action.deviceId);
+                break;
+            default:
+                break;
+        }
+    };
+
+    const confirmDetails = (() => {
+        if (!confirmAction) return null;
+        switch (confirmAction.type) {
+            case 'startDeployment':
+                return {
+                    title: 'Confirm System Scan',
+                    description: 'This will initiate a scan and may send network commands to all listed devices.',
+                    count: devices.length,
+                };
+            case 'bulkUpdate':
+                return {
+                    title: 'Confirm Bulk Update',
+                    description: 'This will apply updates to the selected devices and can change device state.',
+                    count: selectedDeviceIds.size,
+                };
+            case 'wakeOnLan':
+                return {
+                    title: 'Confirm Wake-on-LAN',
+                    description: 'This will send Wake-on-LAN packets to the selected devices.',
+                    count: confirmAction.deviceIds.size,
+                };
+            case 'updateDevice':
+                return {
+                    title: 'Confirm Device Update',
+                    description: 'This will apply updates to the selected device and can change device state.',
+                    count: 1,
+                };
+            case 'rebootDevice':
+                return {
+                    title: 'Confirm Reboot',
+                    description: 'This will reboot the selected device and interrupt any active session.',
+                    count: 1,
+                };
+            default:
+                return null;
+        }
+    })();
+
     const isReadyToDeploy = csvFile && batchFile && (!scriptAnalysisResult || scriptAnalysisResult.isSafe);
 
     return (
@@ -788,7 +944,7 @@ const App: React.FC = () => {
                 onWakeOnLan={handleWakeOnLan}
             />
 
-            <div className="mt-4 flex items-center gap-2 bg-slate-800/50 p-2 rounded-lg border border-slate-700 w-fit">
+            <div className="mt-4 flex flex-wrap items-center gap-2 bg-slate-800/50 p-2 rounded-lg border border-slate-700 w-fit">
                 <button
                     onClick={() => setActiveView('imaging')}
                     className={`px-4 py-2 text-sm font-semibold rounded-md transition duration-200 ${
@@ -809,6 +965,36 @@ const App: React.FC = () => {
                 >
                     Secure Deployment Runner
                 </button>
+                <button
+                    onClick={() => setActiveView('imagingScript')}
+                    className={`px-4 py-2 text-sm font-semibold rounded-md transition duration-200 ${
+                        activeView === 'imagingScript'
+                            ? 'bg-cyan-600 text-white shadow-md'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-700'
+                    }`}
+                >
+                    Imaging Script
+                </button>
+                <button
+                    onClick={() => setActiveView('buildOutput')}
+                    className={`px-4 py-2 text-sm font-semibold rounded-md transition duration-200 ${
+                        activeView === 'buildOutput'
+                            ? 'bg-cyan-600 text-white shadow-md'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-700'
+                    }`}
+                >
+                    Build Output
+                </button>
+                <button
+                    onClick={() => setActiveView('trendsAnalytics')}
+                    className={`px-4 py-2 text-sm font-semibold rounded-md transition duration-200 ${
+                        activeView === 'trendsAnalytics'
+                            ? 'bg-cyan-600 text-white shadow-md'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-700'
+                    }`}
+                >
+                    Trends &amp; Analytics
+                </button>
                 {sessionActive && (
                     <span className="ml-4 text-xs text-green-400 flex items-center gap-1">
                         <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
@@ -817,14 +1003,16 @@ const App: React.FC = () => {
                 )}
             </div>
 
-            {activeView === 'imaging' ? (
+            {activeView === 'imaging' && (
                 <div className="mt-8">
                     <ImageMonitor
                         onPromoteDevices={handlePromoteDevices}
                         onLog={addLog}
                     />
                 </div>
-            ) : (
+            )}
+
+            {activeView === 'deployment' && (
                 <main className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
                     <div className="lg:col-span-1 flex flex-col gap-8">
                         <div className="bg-slate-800/50 p-6 rounded-lg shadow-lg border border-slate-700">
@@ -925,10 +1113,53 @@ const App: React.FC = () => {
                 </main>
             )}
 
+            {activeView === 'imagingScript' && (
+                <main className="mt-8">
+                    <ImagingScriptPage />
+                </main>
+            )}
+
+            {activeView === 'buildOutput' && (
+                <main className="mt-8">
+                    <BuildOutputPage />
+                </main>
+            )}
+
+            {activeView === 'trendsAnalytics' && (
+                <main className="mt-8">
+                    <TrendsAnalyticsPage />
+                </main>
+            )}
+
             <SecureCredentialModal
                 isOpen={isCredentialModalOpen}
                 onClose={() => setIsCredentialModalOpen(false)}
                 onConfirm={handleConfirmCredentialsAndDeploy}
+            />
+
+            <AdminGateModal
+                isOpen={adminGateOpen}
+                onConfirm={() => {
+                    setIsAdminVerified(true);
+                    setAdminGateOpen(false);
+                    if (pendingAdminAction) {
+                        setConfirmAction(pendingAdminAction);
+                        setPendingAdminAction(null);
+                    }
+                }}
+                onCancel={() => {
+                    setAdminGateOpen(false);
+                    setPendingAdminAction(null);
+                }}
+            />
+
+            <ConfirmActionModal
+                isOpen={confirmAction !== null}
+                title={confirmDetails?.title ?? 'Confirm Action'}
+                description={confirmDetails?.description ?? ''}
+                deviceCount={confirmDetails?.count ?? 0}
+                onConfirm={handleConfirmAction}
+                onCancel={() => setConfirmAction(null)}
             />
 
             <DeviceScopeGuard
@@ -937,7 +1168,7 @@ const App: React.FC = () => {
                 selectedDeviceIds={selectedDeviceIds}
                 onVerificationComplete={handleScopeVerified}
                 onCancel={() => { setIsScopeGuardOpen(false); setPendingAction(null); }}
-                username={credentials.username || 'operator'}
+                username={operatorName || 'operator'}
             />
 
             <ScriptAnalysisModal
