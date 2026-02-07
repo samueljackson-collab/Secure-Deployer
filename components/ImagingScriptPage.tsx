@@ -157,11 +157,20 @@ Start-Sleep -Seconds 3
 
 export const ImagingScriptPage: React.FC = () => {
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState<string | null>(null);
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(scriptContent);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 2000);
+    setCopyError(null);
+    try {
+      await navigator.clipboard.writeText(scriptContent);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy imaging script content.', error);
+      setCopied(false);
+      setCopyError('Unable to copy script to clipboard. Please try again.');
+      window.setTimeout(() => setCopyError(null), 4000);
+    }
   };
 
   return (
@@ -194,12 +203,17 @@ export const ImagingScriptPage: React.FC = () => {
         <div className="mt-6 bg-slate-900/50 border border-slate-700 rounded-lg p-4">
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm font-semibold text-slate-300">MetaGather.ps1</p>
-            <button
-              onClick={handleCopy}
-              className="px-3 py-1 text-xs font-semibold bg-cyan-600 text-white rounded-md hover:bg-cyan-700 transition"
-            >
-              {copied ? 'Copied' : 'Copy Script'}
-            </button>
+            <div className="flex items-center gap-3">
+              {copyError ? (
+                <span className="text-xs text-rose-400">{copyError}</span>
+              ) : null}
+              <button
+                onClick={handleCopy}
+                className="px-3 py-1 text-xs font-semibold bg-cyan-600 text-white rounded-md hover:bg-cyan-700 transition"
+              >
+                {copied ? 'Copied' : 'Copy Script'}
+              </button>
+            </div>
           </div>
           <pre className="text-xs text-slate-200 overflow-auto max-h-[420px]">
             <code>{scriptContent}</code>
