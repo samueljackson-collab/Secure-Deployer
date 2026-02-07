@@ -29,8 +29,7 @@ export const BuildOutputPage: React.FC = () => {
             <div className="mt-3 bg-slate-900/50 border border-slate-700 rounded-lg p-3">
               <p className="text-xs text-slate-400 mb-2">Build commands:</p>
               <pre className="text-xs text-slate-200">
-                <code>{`npm run build
-npm run build:portable`}</code>
+                <code>{'npm run build\nnpm run build:portable'}</code>
               </pre>
             </div>
           </div>
