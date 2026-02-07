@@ -15,6 +15,7 @@ const statusColors: Record<DeploymentStatus, string> = {
     'Checking Windows': 'text-sky-400 animate-pulse',
     'Scan Complete': 'text-yellow-400',
     Updating: 'text-blue-400 animate-pulse',
+    'Running Script': 'text-indigo-400 animate-pulse',
     'Updating BIOS': 'text-blue-400 animate-pulse',
     'Updating DCU': 'text-blue-400 animate-pulse',
     'Updating Windows': 'text-blue-400 animate-pulse',
