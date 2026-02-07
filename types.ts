@@ -84,7 +84,7 @@ export type DeviceFormFactor =
   | 'vdi'              // Virtual Desktop Infrastructure client
   | 'desktop';         // Generic desktop fallback
 
-export type DeploymentStatus = 'Pending' | 'Waking Up' | 'Connecting' | 'Retrying...' | 'Checking Info' | 'Checking BIOS' | 'Checking DCU' | 'Checking Windows' | 'Scan Complete' | 'Updating' | 'Updating BIOS' | 'Updating DCU' | 'Updating Windows' | 'Success' | 'Failed' | 'Offline' | 'Cancelled' | 'Update Complete (Reboot Pending)' | 'Rebooting...';
+export type DeploymentStatus = 'Pending' | 'Waking Up' | 'Connecting' | 'Retrying...' | 'Checking Info' | 'Checking BIOS' | 'Checking DCU' | 'Checking Windows' | 'Scan Complete' | 'Updating' | 'Updating BIOS' | 'Updating DCU' | 'Updating Windows' | 'Running Script' | 'Success' | 'Failed' | 'Offline' | 'Cancelled' | 'Update Complete (Reboot Pending)' | 'Rebooting...';
 
 export type ImagingStatus = 'Not Started' | 'Collecting Metadata' | 'Imaging In Progress' | 'Imaging Complete' | 'Imaging Failed' | 'Ready for Deployment';
 
@@ -169,6 +169,20 @@ export interface ScopeVerification {
   verifiedBy: string;
   reason?: string;
 }
+
+// Batch file execution queue types
+export type BatchFileStatus = 'pending' | 'running' | 'completed' | 'failed';
+
+export interface BatchFileEntry {
+  id: number;
+  file: File;
+  name: string;
+  status: BatchFileStatus;
+  /** Per-device execution status for this batch file */
+  deviceProgress: Record<number, BatchDeviceStatus>;
+}
+
+export type BatchDeviceStatus = 'pending' | 'running' | 'completed' | 'failed';
 
 // Imaging metadata from task sequence .bat script
 export interface ImagingMetadata {
