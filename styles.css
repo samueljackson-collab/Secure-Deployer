@@ -31,7 +31,17 @@
   .text-yellow-400,
   .text-orange-400,
   .text-red-400 {
-    color: var(--matrix-green) !important;
+    color: var(--matrix-green-soft) !important;
+  }
+
+  .text-slate-400,
+  .text-slate-500 {
+    font-weight: 500;
+  }
+
+  .text-xs.text-green-400,
+  .text-xs.text-emerald-400 {
+    font-weight: 600;
   }
 
   .bg-slate-900,
