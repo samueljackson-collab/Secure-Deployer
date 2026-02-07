@@ -106,11 +106,11 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
             <div className="p-3 bg-slate-800 border-b border-slate-700 flex justify-between items-center">
                 <h3 className="font-semibold text-slate-200">Device Status</h3>
                 <div className="flex items-center" title="Select or deselect all devices in the list">
-                    <label htmlFor="selectAll" className="text-xs text-slate-400 mr-2 cursor-pointer">Select All</label>
+                    <label htmlFor="selectAll" className={`text-xs text-slate-400 mr-2 ${devices.length === 0 || selectionDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>Select All</label>
                     <input 
                         type="checkbox" 
                         id="selectAll"
-                        className="h-4 w-4 rounded bg-slate-700 border-slate-600 text-cyan-500 focus:ring-cyan-600 cursor-pointer"
+                        className="h-4 w-4 rounded bg-slate-700 border-slate-600 text-cyan-500 focus:ring-cyan-600 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                         checked={allSelected}
                         onChange={(e) => {
                             if (!selectionDisabled) {
@@ -133,7 +133,7 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
                                 <div className="flex items-center gap-3">
                                     <input 
                                         type="checkbox" 
-                                        className="h-4 w-4 rounded bg-slate-700 border-slate-600 text-cyan-500 focus:ring-cyan-600"
+                                        className="h-4 w-4 rounded bg-slate-700 border-slate-600 text-cyan-500 focus:ring-cyan-600 disabled:cursor-not-allowed disabled:opacity-50"
                                         checked={isSelected}
                                         onChange={() => {
                                             if (!selectionDisabled) {
