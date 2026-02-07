@@ -40,8 +40,8 @@
     font-weight: 500;
   }
 
-  .text-xs.text-green-400,
-  .text-xs.text-emerald-400 {
+  :where(.text-xs).text-green-400,
+  :where(.text-xs).text-emerald-400 {
     font-weight: 600;
   }
 
