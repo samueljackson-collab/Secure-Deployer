@@ -36,6 +36,7 @@
 
   .text-slate-400,
   .text-slate-500 {
+    color: var(--matrix-green-soft) !important;
     font-weight: 500;
   }
 
