@@ -11,7 +11,7 @@ export const AdminGateModal: React.FC<AdminGateModalProps> = ({ isOpen, onConfir
   const [typedValue, setTypedValue] = useState('');
 
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) {
       setAcknowledged(false);
       setTypedValue('');
     }
