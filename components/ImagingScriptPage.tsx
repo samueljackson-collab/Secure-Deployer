@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 
 const scriptContent = `#Requires -Version 5.1
 <#
@@ -158,18 +158,46 @@ Start-Sleep -Seconds 3
 export const ImagingScriptPage: React.FC = () => {
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState<string | null>(null);
+  const copiedTimeoutRef = useRef<number | null>(null);
+  const errorTimeoutRef = useRef<number | null>(null);
+
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (copiedTimeoutRef.current !== null) {
+        window.clearTimeout(copiedTimeoutRef.current);
+      }
+      if (errorTimeoutRef.current !== null) {
+        window.clearTimeout(errorTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleCopy = async () => {
+    // Clear any pending timeouts
+    if (copiedTimeoutRef.current !== null) {
+      window.clearTimeout(copiedTimeoutRef.current);
+      copiedTimeoutRef.current = null;
+    }
+    if (errorTimeoutRef.current !== null) {
+      window.clearTimeout(errorTimeoutRef.current);
+      errorTimeoutRef.current = null;
+    }
+
     setCopyError(null);
     try {
       await navigator.clipboard.writeText(scriptContent);
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
+      copiedTimeoutRef.current = window.setTimeout(() => {
+        setCopied(false);
+      }, 2000);
     } catch (error) {
       console.error('Failed to copy imaging script content.', error);
       setCopied(false);
       setCopyError('Unable to copy script to clipboard. Please try again.');
-      window.setTimeout(() => setCopyError(null), 4000);
+      errorTimeoutRef.current = window.setTimeout(() => {
+        setCopyError(null);
+      }, 4000);
     }
   };
 
@@ -205,11 +233,19 @@ export const ImagingScriptPage: React.FC = () => {
             <p className="text-sm font-semibold text-slate-300">MetaGather.ps1</p>
             <div className="flex items-center gap-3">
               {copyError ? (
-                <span className="text-xs text-rose-400">{copyError}</span>
+                <span
+                  id="copy-error-message"
+                  role="alert"
+                  aria-live="assertive"
+                  className="text-xs text-rose-400"
+                >
+                  {copyError}
+                </span>
               ) : null}
               <button
                 onClick={handleCopy}
                 className="px-3 py-1 text-xs font-semibold bg-cyan-600 text-white rounded-md hover:bg-cyan-700 transition"
+                aria-describedby={copyError ? 'copy-error-message' : undefined}
               >
                 {copied ? 'Copied' : 'Copy Script'}
               </button>
