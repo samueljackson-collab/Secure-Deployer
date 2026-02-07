@@ -190,7 +190,6 @@ export const ImagingScriptPage: React.FC = () => {
       setCopied(true);
       copiedTimeoutRef.current = window.setTimeout(() => {
         setCopied(false);
-        copiedTimeoutRef.current = null;
       }, 2000);
     } catch (error) {
       console.error('Failed to copy imaging script content.', error);
@@ -198,7 +197,6 @@ export const ImagingScriptPage: React.FC = () => {
       setCopyError('Unable to copy script to clipboard. Please try again.');
       errorTimeoutRef.current = window.setTimeout(() => {
         setCopyError(null);
-        errorTimeoutRef.current = null;
       }, 4000);
     }
   };
