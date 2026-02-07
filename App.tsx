@@ -1105,6 +1105,7 @@ const App: React.FC = () => {
                                     selectedDeviceIds={selectedDeviceIds}
                                     onDeviceSelect={handleDeviceSelection}
                                     onSelectAll={handleSelectAll}
+                                    selectionDisabled={isScopeGuardOpen}
                                 />
                                 <LogViewer logs={logs} />
                             </div>

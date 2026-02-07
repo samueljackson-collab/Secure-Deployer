@@ -95,9 +95,10 @@ interface DeviceStatusTableProps {
     onRebootDevice: (deviceId: number) => void;
     onDeviceSelect: (deviceId: number) => void;
     onSelectAll: (select: boolean) => void;
+    selectionDisabled?: boolean;
 }
 
-export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, selectedDeviceIds, onUpdateDevice, onRebootDevice, onDeviceSelect, onSelectAll }) => {
+export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, selectedDeviceIds, onUpdateDevice, onRebootDevice, onDeviceSelect, onSelectAll, selectionDisabled = false }) => {
     const allSelected = devices.length > 0 && selectedDeviceIds.size === devices.length;
 
     return (
@@ -111,8 +112,12 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
                         id="selectAll"
                         className="h-4 w-4 rounded bg-slate-700 border-slate-600 text-cyan-500 focus:ring-cyan-600 cursor-pointer"
                         checked={allSelected}
-                        onChange={(e) => onSelectAll(e.target.checked)}
-                        disabled={devices.length === 0}
+                        onChange={(e) => {
+                            if (!selectionDisabled) {
+                                onSelectAll(e.target.checked);
+                            }
+                        }}
+                        disabled={devices.length === 0 || selectionDisabled}
                     />
                 </div>
             </div>
@@ -130,8 +135,13 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
                                         type="checkbox" 
                                         className="h-4 w-4 rounded bg-slate-700 border-slate-600 text-cyan-500 focus:ring-cyan-600"
                                         checked={isSelected}
-                                        onChange={() => onDeviceSelect(device.id)}
+                                        onChange={() => {
+                                            if (!selectionDisabled) {
+                                                onDeviceSelect(device.id);
+                                            }
+                                        }}
                                         aria-label={`Select device ${device.hostname}`}
+                                        disabled={selectionDisabled}
                                     />
                                     {device.deviceType && <DeviceIcon type={device.deviceType} />}
                                     <h4 className="font-bold text-slate-100 break-all">{device.hostname}</h4>

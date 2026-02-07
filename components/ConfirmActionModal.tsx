@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 interface ConfirmActionModalProps {
   isOpen: boolean;
@@ -18,6 +18,12 @@ export const ConfirmActionModal: React.FC<ConfirmActionModalProps> = ({
   onCancel,
 }) => {
   const [typedValue, setTypedValue] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      setTypedValue('');
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
