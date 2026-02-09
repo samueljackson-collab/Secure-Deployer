@@ -625,6 +625,7 @@ const App: React.FC = () => {
 
             const ipAddress = `10.1.${Math.floor(Math.random() * 254) + 1}.${Math.floor(Math.random() * 254) + 1}`;
             const serialNumber = Math.random().toString(36).substring(2, 9).toUpperCase();
+            const assetTag = `ASSET-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
             const modelMap: Record<DeviceFormFactor, string[]> = {
                 'laptop-14':  ['Latitude 5450', 'Latitude 7450', 'Latitude 5440'],
                 'laptop-16':  ['Latitude 9640', 'Precision 5690', 'Precision 5680'],
@@ -648,6 +649,7 @@ const App: React.FC = () => {
             const newMetadata = {
                 ipAddress,
                 serialNumber,
+                assetTag,
                 model,
                 ramAmount,
                 diskSpace: { total: diskTotal, free: diskFree },
@@ -655,7 +657,7 @@ const App: React.FC = () => {
             };
 
             setDevices(prev => prev.map(d => d.id === device.id ? { ...d, ...newMetadata } : d));
-            addLog(`[${device.hostname}] IP: ${ipAddress}, Model: ${model}, SN: ${serialNumber}`);
+            addLog(`[${device.hostname}] IP: ${ipAddress}, Model: ${model}, SN: ${serialNumber}, Asset Tag: ${assetTag}`);
             addLog(`[${device.hostname}] RAM: ${ramAmount}GB, Disk: ${diskFree}GB/${diskTotal}GB Free, Encryption: ${encryptionStatus}`);
 
             setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Checking BIOS' as DeploymentStatus } : d));
