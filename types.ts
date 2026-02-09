@@ -53,6 +53,7 @@ export interface Device {
   };
   ipAddress?: string;
   serialNumber?: string;
+  assetTag?: string;
   model?: string;
   ramAmount?: number;
   diskSpace?: {

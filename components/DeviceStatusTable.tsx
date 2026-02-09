@@ -167,6 +167,7 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
                                                 <DetailItem label="IP Address" value={device.ipAddress} />
                                                 <DetailItem label="Model" value={device.model} mono={false} />
                                                 <DetailItem label="Serial" value={device.serialNumber} />
+                                                <DetailItem label="Asset Tag" value={device.assetTag} />
                                                 <DetailItem label="RAM" value={device.ramAmount ? `${device.ramAmount} GB` : undefined} />
                                                 <DetailItem label="Disk" value={device.diskSpace ? `${device.diskSpace.free}GB / ${device.diskSpace.total}GB` : undefined} />
                                                 <DetailItem label="Encryption" value={<EncryptionStatus status={device.encryptionStatus} />} mono={false} />
