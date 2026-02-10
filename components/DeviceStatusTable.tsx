@@ -2,7 +2,7 @@
 
 import React from 'react';
 import type { Device, DeploymentStatus } from '../types';
-import { DeviceIcon } from './DeviceIcon';
+import { DeviceIcon, detectDeviceTypeFromHostname } from './DeviceIcon';
 
 const statusColors: Record<DeploymentStatus, string> = {
     Pending: 'text-slate-400',
@@ -144,7 +144,7 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
                                         aria-label={`Select device ${device.hostname}`}
                                         disabled={selectionDisabled}
                                     />
-                                    {device.deviceType && <DeviceIcon type={device.deviceType} />}
+                                    <DeviceIcon type={device.deviceType || detectDeviceTypeFromHostname(device.hostname)} />
                                     <h4 className="font-bold text-slate-100 break-all">{device.hostname}</h4>
                                 </div>
                                 <StatusBadge status={device.status} retryAttempt={device.retryAttempt} />
