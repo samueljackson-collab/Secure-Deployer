@@ -1,9 +1,11 @@
 import React, { useState, useCallback } from 'react';
 import type { Device, ImagingMetadata, ImagingStatus } from '../types';
+import { DeviceIcon, detectDeviceTypeFromHostname } from './DeviceIcon';
 
 interface ImageMonitorProps {
   onPromoteDevices: (devices: Device[]) => void;
   onLog: (message: string, level: 'INFO' | 'WARNING' | 'ERROR' | 'SUCCESS') => void;
+  onRenameDevice?: (deviceId: number, hostname: string) => void;
 }
 
 const IMAGING_STATUS_STYLES: Record<ImagingStatus, string> = {
@@ -81,6 +83,7 @@ const metadataToDevice = (metadata: ImagingMetadata): Device => {
     hostname: metadata.hostname,
     mac: normalizeMac(metadata.macAddress),
     status: 'Pending',
+    deviceType: detectDeviceTypeFromHostname(metadata.hostname),
     biosVersion: metadata.biosVersion || undefined,
     serialNumber: metadata.serialNumber || undefined,
     model: metadata.model || undefined,
@@ -136,11 +139,13 @@ const ImagingProgressBar: React.FC<{ progress: number; status: ImagingStatus }> 
   );
 };
 
-export const ImageMonitor: React.FC<ImageMonitorProps> = ({ onPromoteDevices, onLog }) => {
+export const ImageMonitor: React.FC<ImageMonitorProps> = ({ onPromoteDevices, onLog, onRenameDevice }) => {
   const [imagingDevices, setImagingDevices] = useState<Device[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [isDragOver, setIsDragOver] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingHostname, setEditingHostname] = useState('');
 
   const validateMetadata = useCallback((data: unknown): { valid: boolean; metadata: ImagingMetadata | null; error: string } => {
     if (!data || typeof data !== 'object') {
@@ -347,6 +352,35 @@ export const ImageMonitor: React.FC<ImageMonitorProps> = ({ onPromoteDevices, on
     });
   }, []);
 
+  const handleStartRename = useCallback((device: Device) => {
+    setEditingId(device.id);
+    setEditingHostname(device.hostname);
+  }, []);
+
+  const handleCancelRename = useCallback(() => {
+    setEditingId(null);
+    setEditingHostname('');
+  }, []);
+
+  const handleCommitRename = useCallback((deviceId: number) => {
+    const sanitized = editingHostname.trim().replace(/[^a-zA-Z0-9\-_]/g, '');
+    if (!sanitized) {
+      handleCancelRename();
+      return;
+    }
+
+    setImagingDevices((prev) =>
+      prev.map((d) =>
+        d.id === deviceId
+          ? { ...d, hostname: sanitized, deviceType: detectDeviceTypeFromHostname(sanitized) }
+          : d
+      )
+    );
+
+    onRenameDevice?.(deviceId, sanitized);
+    handleCancelRename();
+  }, [editingHostname, handleCancelRename, onRenameDevice]);
+
   const handleSelectAllReady = useCallback(() => {
     const readyIds = imagingDevices
       .filter((d) => d.imagingStatus === 'Ready for Deployment')
@@ -388,13 +422,16 @@ export const ImageMonitor: React.FC<ImageMonitorProps> = ({ onPromoteDevices, on
   }, [imagingDevices, selectedIds, onPromoteDevices, onLog]);
 
   const handleRemoveDevice = useCallback((deviceId: number) => {
+    if (editingId === deviceId) {
+      handleCancelRename();
+    }
     setImagingDevices((prev) => prev.filter((d) => d.id !== deviceId));
     setSelectedIds((prev) => {
       const next = new Set(prev);
       next.delete(deviceId);
       return next;
     });
-  }, []);
+  }, [editingId, handleCancelRename]);
 
   const handlePromoteSingle = useCallback((deviceId: number) => {
     const device = imagingDevices.find((d) => d.id === deviceId);
@@ -422,11 +459,12 @@ export const ImageMonitor: React.FC<ImageMonitorProps> = ({ onPromoteDevices, on
   }, [imagingDevices, onPromoteDevices, onLog]);
 
   const handleClearAll = useCallback(() => {
+    handleCancelRename();
     setImagingDevices([]);
     setSelectedIds(new Set());
     setValidationErrors([]);
     onLog('Cleared all imaging devices from monitor.', 'INFO');
-  }, [onLog]);
+  }, [handleCancelRename, onLog]);
 
   const readyCount = imagingDevices.filter((d) => d.imagingStatus === 'Ready for Deployment').length;
   const inProgressCount = imagingDevices.filter((d) => d.imagingStatus === 'Imaging In Progress').length;
@@ -639,7 +677,37 @@ export const ImageMonitor: React.FC<ImageMonitorProps> = ({ onPromoteDevices, on
                         aria-label={`Select device ${device.hostname}`}
                       />
                       <div className="min-w-0">
-                        <h4 className="font-bold text-slate-100 text-sm truncate">{device.hostname}</h4>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <DeviceIcon type={device.deviceType || detectDeviceTypeFromHostname(device.hostname)} />
+                          {editingId === device.id ? (
+                            <input
+                              value={editingHostname}
+                              onChange={(e) => setEditingHostname(e.target.value)}
+                              onBlur={() => handleCommitRename(device.id)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  handleCommitRename(device.id);
+                                }
+                                if (e.key === 'Escape') {
+                                  handleCancelRename();
+                                }
+                              }}
+                              autoFocus
+                              className="bg-slate-800 border border-cyan-500 rounded px-2 py-0.5 text-sm text-slate-100 w-56 max-w-full"
+                              aria-label={`Edit hostname for ${device.hostname}`}
+                            />
+                          ) : (
+                            <>
+                              <h4 className="font-bold text-slate-100 text-sm truncate">{device.hostname}</h4>
+                              <button
+                                onClick={() => handleStartRename(device)}
+                                className="text-xs px-2 py-0.5 rounded border border-slate-600 text-slate-300 hover:text-cyan-300 hover:border-cyan-500"
+                              >
+                                Edit
+                              </button>
+                            </>
+                          )}
+                        </div>
                         {device.imagingTaskSequence && (
                           <p className="text-xs text-slate-500 truncate">
                             Task Sequence: {device.imagingTaskSequence}

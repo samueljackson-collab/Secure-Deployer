@@ -8,6 +8,7 @@ import { BulkActions } from './components/BulkActions';
 import { DeploymentHistory } from './components/DeploymentHistory';
 import { SecureCredentialModal } from './components/SecureCredentialModal';
 import { ImageMonitor } from './components/ImageMonitor';
+import { detectDeviceTypeFromHostname } from './components/DeviceIcon';
 import { DeviceScopeGuard } from './components/DeviceScopeGuard';
 import { ScriptAnalysisModal } from './components/ScriptAnalysisModal';
 import { BatchFileQueue } from './components/BatchFileQueue';
@@ -17,7 +18,7 @@ import { TrendsAnalyticsPage } from './components/TrendsAnalyticsPage';
 import { AdminGateModal } from './components/AdminGateModal';
 import { ConfirmActionModal } from './components/ConfirmActionModal';
 import { analyzeScript } from './services/scriptSafetyAnalyzer';
-import type { Device, DeviceFormFactor, LogEntry, DeploymentStatus, Credentials, DeploymentRun, ScopePolicy, ScriptSafetyResult, BatchFileEntry, BatchDeviceStatus } from './types';
+import type { Device, LogEntry, DeploymentStatus, Credentials, DeploymentRun, ScopePolicy, ScriptSafetyResult, BatchFileEntry, BatchDeviceStatus } from './types';
 import { DeploymentState } from './types';
 import Papa from 'papaparse';
 
@@ -32,73 +33,6 @@ const isValidMacAddress = (mac: string): boolean => {
     if (!mac) return false;
     const normalized = mac.replace(/[:\-.\s]/g, '').toUpperCase();
     return /^[0-9A-F]{12}$/.test(normalized);
-};
-
-/**
- * Detects the Dell business device form factor from hostname naming conventions.
- *
- * Enterprise hostname patterns (examples):
- *   ELSLE / ESLSC / L14 / LAT14            → laptop-14  (Standard 14" Latitude)
- *   EPLPR / L16 / LAT16 / PRE16 / PRE56    → laptop-16  (Pro 16" / Precision Mobile)
- *   EDTCH / DET / 2IN1 / DTCH              → detachable (Latitude Detachable 2-in-1)
- *   WYSE / WYS / THIN / TC                 → wyse       (Wyse Thin Client)
- *   VDI / VIRT / VD-                        → vdi        (Virtual Desktop)
- *   EWSSF / SFF                             → sff        (Standard Form Factor)
- *   EWSMF / EWSMC / MFF / MICRO            → micro      (Micro Form Factor)
- *   EWSTW / TWR / TOWER                    → tower      (Tower)
- *   EWSLE / other desktop patterns          → desktop    (Generic desktop fallback)
- *   Remaining laptops without size hint     → laptop     (Generic laptop fallback)
- *
- * Order matters: more specific patterns are tested before generic fallbacks.
- */
-const detectDeviceType = (hostname: string): DeviceFormFactor => {
-    const upper = hostname.toUpperCase();
-
-    // --- Thin Clients & VDI (check first - they are distinct categories) ---
-    if (upper.includes('WYSE') || upper.includes('WYS') || upper.includes('THIN') || /\bTC\d/.test(upper)) {
-        return 'wyse';
-    }
-    if (upper.includes('VDI') || upper.includes('VIRT') || /\bVD[-_]/.test(upper)) {
-        return 'vdi';
-    }
-
-    // --- Detachable 2-in-1 ---
-    if (upper.includes('EDTCH') || upper.includes('DET') || upper.includes('2IN1') || upper.includes('DTCH')) {
-        return 'detachable';
-    }
-
-    // --- Pro 16" Laptop (Precision Mobile / large Latitude) ---
-    if (upper.includes('EPLPR') || upper.includes('L16') || upper.includes('LAT16') || upper.includes('PRE16') || upper.includes('PRE56') || upper.includes('PRE57')) {
-        return 'laptop-16';
-    }
-
-    // --- Standard 14" Laptop ---
-    if (upper.includes('ELSLE') || upper.includes('ESLSC') || upper.includes('L14') || upper.includes('LAT14') || upper.includes('LAT54') || upper.includes('LAT74')) {
-        return 'laptop-14';
-    }
-
-    // --- Tower desktop ---
-    if (upper.includes('EWSTW') || upper.includes('TWR') || upper.includes('TOWER') || upper.includes('PRETW')) {
-        return 'tower';
-    }
-
-    // --- Micro Form Factor desktop ---
-    if (upper.includes('EWSMF') || upper.includes('EWSMC') || upper.includes('MFF') || upper.includes('MICRO')) {
-        return 'micro';
-    }
-
-    // --- Standard Form Factor desktop ---
-    if (upper.includes('EWSSF') || upper.includes('SFF')) {
-        return 'sff';
-    }
-
-    // --- Generic laptop (any remaining laptop-like hostname) ---
-    if (upper.includes('LAT') || upper.includes('LAPTOP') || upper.includes('NB') || upper.includes('PRE5') || upper.includes('PRE7')) {
-        return 'laptop';
-    }
-
-    // --- Generic desktop (any remaining desktop-like hostname, including EWSLE) ---
-    return 'desktop';
 };
 
 const sanitizeLogMessage = (message: string): string => {
@@ -469,7 +403,7 @@ const App: React.FC = () => {
                         seenHostnames.add(hostnameKey);
                         seenMacs.add(normalizedMac);
 
-                        const deviceType = detectDeviceType(hostname);
+                        const deviceType = detectDeviceTypeFromHostname(hostname);
 
                         parsedDevices.push({
                             id: index,
@@ -1043,12 +977,27 @@ const App: React.FC = () => {
             id: devices.length + i,
             status: 'Pending' as DeploymentStatus,
             imagingStatus: 'Ready for Deployment' as const,
+            deviceType: d.deviceType || detectDeviceTypeFromHostname(d.hostname),
         }));
 
         setDevices(prev => [...prev, ...reindexed]);
         addLog(`Promoted ${reindexed.length} device(s) from Image Monitor to Deployment Runner.`, 'SUCCESS');
         setActiveView('deployment');
     };
+
+    const handleRenameImagingDevice = useCallback((deviceId: number, hostname: string) => {
+        const sanitized = sanitizeHostname(hostname);
+        if (!sanitized) {
+            addLog('Hostname rename skipped: hostname cannot be empty after sanitization.', 'WARNING');
+            return;
+        }
+
+        setDevices(prev => prev.map(device =>
+            device.id === deviceId
+                ? { ...device, hostname: sanitized, deviceType: detectDeviceTypeFromHostname(sanitized) }
+                : device
+        ));
+    }, [addLog]);
 
     const handleConfirmAction = async () => {
         if (!confirmAction) return;
@@ -1186,6 +1135,7 @@ const App: React.FC = () => {
                     <ImageMonitor
                         onPromoteDevices={handlePromoteDevices}
                         onLog={addLog}
+                        onRenameDevice={handleRenameImagingDevice}
                     />
                 </div>
             )}
