@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 interface AdminGateModalProps {
   isOpen: boolean;
@@ -9,6 +9,13 @@ interface AdminGateModalProps {
 export const AdminGateModal: React.FC<AdminGateModalProps> = ({ isOpen, onConfirm, onCancel }) => {
   const [acknowledged, setAcknowledged] = useState(false);
   const [typedValue, setTypedValue] = useState('');
+
+  useEffect(() => {
+    if (!isOpen) {
+      setAcknowledged(false);
+      setTypedValue('');
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

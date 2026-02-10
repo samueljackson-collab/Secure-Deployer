@@ -8,15 +8,17 @@ import { BulkActions } from './components/BulkActions';
 import { DeploymentHistory } from './components/DeploymentHistory';
 import { SecureCredentialModal } from './components/SecureCredentialModal';
 import { ImageMonitor } from './components/ImageMonitor';
+import { detectDeviceTypeFromHostname } from './components/DeviceIcon';
 import { DeviceScopeGuard } from './components/DeviceScopeGuard';
 import { ScriptAnalysisModal } from './components/ScriptAnalysisModal';
+import { BatchFileQueue } from './components/BatchFileQueue';
 import { ImagingScriptPage } from './components/ImagingScriptPage';
 import { BuildOutputPage } from './components/BuildOutputPage';
 import { TrendsAnalyticsPage } from './components/TrendsAnalyticsPage';
 import { AdminGateModal } from './components/AdminGateModal';
 import { ConfirmActionModal } from './components/ConfirmActionModal';
 import { analyzeScript } from './services/scriptSafetyAnalyzer';
-import type { Device, DeviceFormFactor, LogEntry, DeploymentStatus, Credentials, DeploymentRun, ScopePolicy, ScriptSafetyResult } from './types';
+import type { Device, LogEntry, DeploymentStatus, Credentials, DeploymentRun, ScopePolicy, ScriptSafetyResult, BatchFileEntry, BatchDeviceStatus } from './types';
 import { DeploymentState } from './types';
 import Papa from 'papaparse';
 
@@ -33,73 +35,6 @@ const isValidMacAddress = (mac: string): boolean => {
     if (!mac) return false;
     const normalized = mac.replace(/[:\-.\s]/g, '').toUpperCase();
     return /^[0-9A-F]{12}$/.test(normalized);
-};
-
-/**
- * Detects the Dell business device form factor from hostname naming conventions.
- *
- * Enterprise hostname patterns (examples):
- *   ELSLE / ESLSC / L14 / LAT14            → laptop-14  (Standard 14" Latitude)
- *   EPLPR / L16 / LAT16 / PRE16 / PRE56    → laptop-16  (Pro 16" / Precision Mobile)
- *   EDTCH / DET / 2IN1 / DTCH              → detachable (Latitude Detachable 2-in-1)
- *   WYSE / WYS / THIN / TC                 → wyse       (Wyse Thin Client)
- *   VDI / VIRT / VD-                        → vdi        (Virtual Desktop)
- *   EWSSF / SFF                             → sff        (Standard Form Factor)
- *   EWSMF / EWSMC / MFF / MICRO            → micro      (Micro Form Factor)
- *   EWSTW / TWR / TOWER                    → tower      (Tower)
- *   EWSLE / other desktop patterns          → desktop    (Generic desktop fallback)
- *   Remaining laptops without size hint     → laptop     (Generic laptop fallback)
- *
- * Order matters: more specific patterns are tested before generic fallbacks.
- */
-const detectDeviceType = (hostname: string): DeviceFormFactor => {
-    const upper = hostname.toUpperCase();
-
-    // --- Thin Clients & VDI (check first - they are distinct categories) ---
-    if (upper.includes('WYSE') || upper.includes('WYS') || upper.includes('THIN') || /\bTC\d/.test(upper)) {
-        return 'wyse';
-    }
-    if (upper.includes('VDI') || upper.includes('VIRT') || /\bVD[-_]/.test(upper)) {
-        return 'vdi';
-    }
-
-    // --- Detachable 2-in-1 ---
-    if (upper.includes('EDTCH') || upper.includes('DET') || upper.includes('2IN1') || upper.includes('DTCH')) {
-        return 'detachable';
-    }
-
-    // --- Pro 16" Laptop (Precision Mobile / large Latitude) ---
-    if (upper.includes('EPLPR') || upper.includes('L16') || upper.includes('LAT16') || upper.includes('PRE16') || upper.includes('PRE56') || upper.includes('PRE57')) {
-        return 'laptop-16';
-    }
-
-    // --- Standard 14" Laptop ---
-    if (upper.includes('ELSLE') || upper.includes('ESLSC') || upper.includes('L14') || upper.includes('LAT14') || upper.includes('LAT54') || upper.includes('LAT74')) {
-        return 'laptop-14';
-    }
-
-    // --- Tower desktop ---
-    if (upper.includes('EWSTW') || upper.includes('TWR') || upper.includes('TOWER') || upper.includes('PRETW')) {
-        return 'tower';
-    }
-
-    // --- Micro Form Factor desktop ---
-    if (upper.includes('EWSMF') || upper.includes('EWSMC') || upper.includes('MFF') || upper.includes('MICRO')) {
-        return 'micro';
-    }
-
-    // --- Standard Form Factor desktop ---
-    if (upper.includes('EWSSF') || upper.includes('SFF')) {
-        return 'sff';
-    }
-
-    // --- Generic laptop (any remaining laptop-like hostname) ---
-    if (upper.includes('LAT') || upper.includes('LAPTOP') || upper.includes('NB') || upper.includes('PRE5') || upper.includes('PRE7')) {
-        return 'laptop';
-    }
-
-    // --- Generic desktop (any remaining desktop-like hostname, including EWSLE) ---
-    return 'desktop';
 };
 
 const sanitizeLogMessage = (message: string): string => {
@@ -136,7 +71,8 @@ const App: React.FC = () => {
     // Developer note: UI state below mirrors the main workflow phases:
     // config (file selection), auth (credentials), scan/update execution, then reporting.
     const [csvFile, setCsvFile] = useState<File | null>(null);
-    const [batchFile, setBatchFile] = useState<File | null>(null);
+    const [batchFiles, setBatchFiles] = useState<File[]>([]);
+    const [batchQueue, setBatchQueue] = useState<BatchFileEntry[]>([]);
     const [credentials, setCredentials] = useState<Credentials>({ username: '', password: '' });
     const [operatorName, setOperatorName] = useState('');
     const [devices, setDevices] = useState<Device[]>([]);
@@ -231,11 +167,54 @@ const App: React.FC = () => {
     const handleFileChange = (setter: React.Dispatch<React.SetStateAction<File | null>>) => (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             setter(e.target.files[0]);
-            // Reset script analysis when a new batch file is selected
-            if (setter === setBatchFile) {
-                setScriptAnalysisResult(null);
-            }
         }
+    };
+
+    const handleBatchFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files.length > 0) {
+            const fileList: File[] = Array.from(e.target.files);
+            setBatchFiles(prev => {
+                const existingNames = new Set(prev.map(f => f.name));
+                return [...prev, ...fileList.filter(f => !existingNames.has(f.name))];
+            });
+            setBatchQueue(prev => {
+                const existingNames = new Set(prev.map(entry => entry.name));
+                const newEntries: BatchFileEntry[] = fileList
+                    .filter(f => !existingNames.has(f.name))
+                    .map((file, i) => ({
+                        id: Date.now() + i,
+                        file,
+                        name: file.name,
+                        status: 'pending' as const,
+                        deviceProgress: {},
+                    }));
+                return [...prev, ...newEntries];
+            });
+            setScriptAnalysisResult(null);
+            e.target.value = '';
+        }
+    };
+
+    const handleRemoveBatchFile = (id: number) => {
+        setBatchQueue(prev => prev.filter(entry => entry.id !== id));
+        setBatchFiles(prev => {
+            const removedEntry = batchQueue.find(entry => entry.id === id);
+            if (!removedEntry) return prev;
+            return prev.filter(f => f.name !== removedEntry.name);
+        });
+        setScriptAnalysisResult(null);
+    };
+
+    const handleMoveBatchFile = (id: number, direction: 'up' | 'down') => {
+        setBatchQueue(prev => {
+            const idx = prev.findIndex(entry => entry.id === id);
+            if (idx < 0) return prev;
+            const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+            if (swapIdx < 0 || swapIdx >= prev.length) return prev;
+            const next = [...prev];
+            [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
+            return next;
+        });
     };
 
     const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -248,23 +227,42 @@ const App: React.FC = () => {
         setIsScriptAnalysisOpen(true);
 
         try {
-            const scriptContent = await batchFile.text();
             const allowedHostnames = devices.map(d => d.hostname);
-            const result = analyzeScript(scriptContent, allowedHostnames);
-            setScriptAnalysisResult(result);
+            let worstResult: ScriptSafetyResult | null = null;
 
-            if (!result.isSafe) {
-                addLog(`SCRIPT BLOCKED: ${result.blockedPatterns.length} dangerous pattern(s) detected. Risk level: ${result.riskLevel}`, 'ERROR');
-            } else if (result.riskLevel === 'MEDIUM' || result.riskLevel === 'HIGH') {
-                addLog(`Script analysis: ${result.findings.length} finding(s). Risk level: ${result.riskLevel}. Review recommended.`, 'WARNING');
-            } else {
-                addLog('Script analysis complete. No critical issues found.', 'SUCCESS');
+            for (const entry of batchQueue) {
+                const scriptContent = await entry.file.text();
+                const result = analyzeScript(scriptContent, allowedHostnames);
+
+                if (!worstResult || !result.isSafe || riskOrder(result.riskLevel) > riskOrder(worstResult.riskLevel)) {
+                    worstResult = {
+                        ...result,
+                        summary: batchQueue.length > 1
+                            ? `Analysis of ${batchQueue.length} batch files. Showing worst result from: ${entry.name}`
+                            : result.summary,
+                    };
+                }
+
+                if (!result.isSafe) {
+                    addLog(`SCRIPT BLOCKED [${entry.name}]: ${result.blockedPatterns.length} dangerous pattern(s) detected. Risk level: ${result.riskLevel}`, 'ERROR');
+                } else if (result.riskLevel === 'MEDIUM' || result.riskLevel === 'HIGH') {
+                    addLog(`Script analysis [${entry.name}]: ${result.findings.length} finding(s). Risk level: ${result.riskLevel}. Review recommended.`, 'WARNING');
+                } else {
+                    addLog(`Script analysis [${entry.name}]: No critical issues found.`, 'SUCCESS');
+                }
             }
+
+            setScriptAnalysisResult(worstResult);
         } catch (error) {
             addLog(`Script analysis failed: ${error instanceof Error ? error.message : String(error)}`, 'ERROR');
         } finally {
             setScriptAnalysisLoading(false);
         }
+    };
+
+    const riskOrder = (level: ScriptSafetyResult['riskLevel']): number => {
+        const order: Record<ScriptSafetyResult['riskLevel'], number> = { LOW: 0, MEDIUM: 1, HIGH: 2, CRITICAL: 3 };
+        return order[level];
     };
 
     const archiveCurrentRun = (currentDevices: Device[]) => {
@@ -307,8 +305,8 @@ const App: React.FC = () => {
     const handleConfirmCredentialsAndDeploy = async (sessionCredentials: Credentials) => {
         // Developer note: validates credentials locally, parses CSV, and kicks off flow.
         setIsCredentialModalOpen(false);
-        if (!csvFile || !batchFile) {
-            addLog("CSV or Batch file is missing.", 'ERROR');
+        if (!csvFile || batchQueue.length === 0) {
+            addLog("CSV or Batch file(s) missing.", 'ERROR');
             return;
         }
 
@@ -317,15 +315,15 @@ const App: React.FC = () => {
         const username = sessionCredentials.username.trim();
         const password = sessionCredentials.password;
 
-        const usernamePattern = /^[A-Za-z0-9@._\\-\\\\]{3,256}$/;
+        const usernamePattern = /^[A-Za-z0-9@._\-\\]{3,256}$/;
         if (!usernamePattern.test(username)) {
-            addLog("Invalid username format. Use 3-256 characters: letters, numbers, and @ . _ - \\\\ only.", 'ERROR');
+            addLog("Invalid username format. Use 3-256 characters: letters, numbers, and @ . _ - \\ only.", 'ERROR');
             return;
         }
 
         const MIN_PASSWORD_LENGTH = 12;
         const passwordTooShortOrLong = password.length < MIN_PASSWORD_LENGTH || password.length > 256;
-        const passwordComplexityPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^\\da-zA-Z]).+$/;
+        const passwordComplexityPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\da-zA-Z]).+$/;
         if (passwordTooShortOrLong || !passwordComplexityPattern.test(password)) {
             addLog("Invalid password format. Password must be 12-256 characters and include upper case, lower case, number, and special character.", 'ERROR');
             return;
@@ -419,7 +417,7 @@ const App: React.FC = () => {
                         seenHostnames.add(hostnameKey);
                         seenMacs.add(normalizedMac);
 
-                        const deviceType = detectDeviceType(hostname);
+                        const deviceType = detectDeviceTypeFromHostname(hostname);
 
                         parsedDevices.push({
                             id: index,
@@ -444,26 +442,39 @@ const App: React.FC = () => {
                     setDevices(parsedDevices);
                     addLog(`Validated and loaded ${parsedDevices.length} devices from ${csvFile.name}.`, 'INFO');
 
-                    const scriptContent = await batchFile.text();
                     const allowedHostnames = parsedDevices.map(d => d.hostname);
-                    const safetyResult = analyzeScript(scriptContent, allowedHostnames);
 
-                    if (!safetyResult.isSafe) {
-                        addLog(`DEPLOYMENT BLOCKED: Script contains ${safetyResult.blockedPatterns.length} dangerous pattern(s).`, 'ERROR');
-                        safetyResult.blockedPatterns.forEach(p => addLog(`  BLOCKED: ${p}`, 'ERROR'));
-                        setScriptAnalysisResult(safetyResult);
-                        setIsScriptAnalysisOpen(true);
-                        setDeploymentState(DeploymentState.Idle);
-                        sendNotification('Deployment Blocked', 'Script failed safety analysis.');
-                        return;
+                    // Analyze all batch files for safety before starting
+                    for (const entry of batchQueue) {
+                        const scriptContent = await entry.file.text();
+                        const safetyResult = analyzeScript(scriptContent, allowedHostnames);
+
+                        if (!safetyResult.isSafe) {
+                            addLog(`DEPLOYMENT BLOCKED [${entry.name}]: Script contains ${safetyResult.blockedPatterns.length} dangerous pattern(s).`, 'ERROR');
+                            safetyResult.blockedPatterns.forEach(p => addLog(`  BLOCKED: ${p}`, 'ERROR'));
+                            setScriptAnalysisResult(safetyResult);
+                            setIsScriptAnalysisOpen(true);
+                            setDeploymentState(DeploymentState.Idle);
+                            sendNotification('Deployment Blocked', `Script ${entry.name} failed safety analysis.`);
+                            return;
+                        }
+
+                        if (safetyResult.scopeViolations.length > 0) {
+                            addLog(`SCOPE WARNING [${entry.name}]: Script may target devices outside the selected list.`, 'WARNING');
+                            safetyResult.scopeViolations.forEach(v => addLog(`  SCOPE: ${v}`, 'WARNING'));
+                        }
+
+                        addLog(`Script safety check passed for ${entry.name}. Risk level: ${safetyResult.riskLevel}`, 'SUCCESS');
                     }
 
-                    if (safetyResult.scopeViolations.length > 0) {
-                        addLog('SCOPE WARNING: Script may target devices outside the selected list.', 'WARNING');
-                        safetyResult.scopeViolations.forEach(v => addLog(`  SCOPE: ${v}`, 'WARNING'));
-                    }
-
-                    addLog(`Script safety check passed. Risk level: ${safetyResult.riskLevel}`, 'SUCCESS');
+                    // Initialize batch queue device progress for all files
+                    const initialDeviceProgress: Record<number, BatchDeviceStatus> = {};
+                    parsedDevices.forEach(d => { initialDeviceProgress[d.id] = 'pending'; });
+                    setBatchQueue(prev => prev.map(entry => ({
+                        ...entry,
+                        status: 'pending' as const,
+                        deviceProgress: { ...initialDeviceProgress },
+                    })));
 
                     await runDeploymentFlow(parsedDevices);
                 }
@@ -568,6 +579,7 @@ const App: React.FC = () => {
 
             const ipAddress = `10.1.${Math.floor(Math.random() * 254) + 1}.${Math.floor(Math.random() * 254) + 1}`;
             const serialNumber = Math.random().toString(36).substring(2, 9).toUpperCase();
+            const assetTag = `ASSET-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
             const modelMap: Record<DeviceFormFactor, string[]> = {
                 // Developer note: mock inventory metadata used for demo/UX coverage.
                 'laptop-14':  ['Latitude 5450', 'Latitude 7450', 'Latitude 5440'],
@@ -592,6 +604,7 @@ const App: React.FC = () => {
             const newMetadata = {
                 ipAddress,
                 serialNumber,
+                assetTag,
                 model,
                 ramAmount,
                 diskSpace: { total: diskTotal, free: diskFree },
@@ -599,7 +612,7 @@ const App: React.FC = () => {
             };
 
             setDevices(prev => prev.map(d => d.id === device.id ? { ...d, ...newMetadata } : d));
-            addLog(`[${device.hostname}] IP: ${ipAddress}, Model: ${model}, SN: ${serialNumber}`);
+            addLog(`[${device.hostname}] IP: ${ipAddress}, Model: ${model}, SN: ${serialNumber}, Asset Tag: ${assetTag}`);
             addLog(`[${device.hostname}] RAM: ${ramAmount}GB, Disk: ${diskFree}GB/${diskTotal}GB Free, Encryption: ${encryptionStatus}`);
 
             setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Checking BIOS' as DeploymentStatus } : d));
@@ -639,9 +652,33 @@ const App: React.FC = () => {
             addLog(`Scan complete for ${device.hostname}.`, allUpToDate ? 'SUCCESS' : 'INFO');
         }
 
+        if (isCancelledRef.current) {
+            setDevices(currentDevices => {
+                archiveCurrentRun(currentDevices);
+                return currentDevices;
+            });
+            return;
+        }
+
+        addLog("Scan phase complete. Starting batch file execution queue...", 'INFO');
+
+        // Collect IDs of devices that are online (successfully connected)
+        const connectedDeviceIds = new Set<number>();
+        setDevices(prev => {
+            prev.forEach(d => {
+                if (!['Offline', 'Failed', 'Cancelled'].includes(d.status)) {
+                    connectedDeviceIds.add(d.id);
+                }
+            });
+            return prev;
+        });
+
+        // Run each batch file sequentially across all connected devices
+        await runBatchFileQueue(connectedDeviceIds);
+
         if (!isCancelledRef.current) {
-            addLog("Deployment scan process complete.", 'INFO');
-            sendNotification('Deployment Complete', `Scan finished for ${parsedDevices.length} devices.`);
+            addLog("Deployment process complete.", 'INFO');
+            sendNotification('Deployment Complete', `All batch files executed across ${connectedDeviceIds.size} device(s).`);
             setDeploymentState(DeploymentState.Complete);
         }
 
@@ -649,6 +686,79 @@ const App: React.FC = () => {
             archiveCurrentRun(currentDevices);
             return currentDevices;
         });
+    };
+
+    const runBatchFileQueue = async (connectedDeviceIds: Set<number>) => {
+        for (let fileIdx = 0; fileIdx < batchQueue.length; fileIdx++) {
+            if (isCancelledRef.current) break;
+
+            const entry = batchQueue[fileIdx];
+            addLog(`Starting batch file ${fileIdx + 1}/${batchQueue.length}: ${entry.name}`, 'INFO');
+
+            // Mark this file as running
+            setBatchQueue(prev => prev.map((e, i) => i === fileIdx ? { ...e, status: 'running' as const } : e));
+
+            let anyFailed = false;
+
+            // Execute on each connected device sequentially (one device at a time per file)
+            for (const deviceId of connectedDeviceIds) {
+                if (isCancelledRef.current) break;
+
+                // Mark device as running for this file
+                setBatchQueue(prev => prev.map((e, i) => {
+                    if (i !== fileIdx) return e;
+                    return { ...e, deviceProgress: { ...e.deviceProgress, [deviceId]: 'running' as BatchDeviceStatus } };
+                }));
+
+                setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Running Script' as DeploymentStatus } : d));
+
+                const device = devices.find(d => d.id === deviceId);
+                const hostname = device?.hostname || `Device #${deviceId}`;
+                addLog(`[${hostname}] Executing ${entry.name}...`, 'INFO');
+
+                // Simulate batch file execution (2-5 seconds per device)
+                await sleep(2000 + Math.random() * 3000);
+
+                if (isCancelledRef.current) break;
+
+                // Simulate success/failure (90% success rate)
+                const succeeded = Math.random() > 0.10;
+
+                if (succeeded) {
+                    setBatchQueue(prev => prev.map((e, i) => {
+                        if (i !== fileIdx) return e;
+                        return { ...e, deviceProgress: { ...e.deviceProgress, [deviceId]: 'completed' as BatchDeviceStatus } };
+                    }));
+                    addLog(`[${hostname}] ${entry.name} completed successfully.`, 'SUCCESS');
+                } else {
+                    anyFailed = true;
+                    setBatchQueue(prev => prev.map((e, i) => {
+                        if (i !== fileIdx) return e;
+                        return { ...e, deviceProgress: { ...e.deviceProgress, [deviceId]: 'failed' as BatchDeviceStatus } };
+                    }));
+                    addLog(`[${hostname}] ${entry.name} failed.`, 'ERROR');
+                }
+            }
+
+            // Mark file as completed or failed
+            setBatchQueue(prev => prev.map((e, i) => {
+                if (i !== fileIdx) return e;
+                const fileStatus: BatchFileEntry['status'] = isCancelledRef.current || anyFailed ? 'failed' : 'completed';
+                return { ...e, status: fileStatus };
+            }));
+
+            if (!isCancelledRef.current) {
+                addLog(`Batch file ${entry.name} execution finished.`, anyFailed ? 'WARNING' : 'SUCCESS');
+            }
+        }
+
+        // Reset all device statuses to final state after batch execution
+        if (!isCancelledRef.current) {
+            setDevices(prev => prev.map(d => {
+                if (['Offline', 'Failed', 'Cancelled'].includes(d.status)) return d;
+                return { ...d, status: 'Success' as DeploymentStatus };
+            }));
+        }
     };
 
     const updateDeviceFlow = async (deviceId: number) => {
@@ -783,14 +893,16 @@ const App: React.FC = () => {
         // this handler immediately marks active transient states as Cancelled in UI.
         isCancelledRef.current = true;
         setDeploymentState(DeploymentState.Idle);
-        const cancellableStatuses: DeploymentStatus[] = ['Connecting', 'Retrying...', 'Updating', 'Waking Up', 'Checking Info', 'Checking BIOS', 'Checking DCU', 'Checking Windows', 'Updating BIOS', 'Updating DCU', 'Updating Windows', 'Rebooting...'];
+        const cancellableStatuses: DeploymentStatus[] = ['Connecting', 'Retrying...', 'Updating', 'Waking Up', 'Checking Info', 'Checking BIOS', 'Checking DCU', 'Checking Windows', 'Updating BIOS', 'Updating DCU', 'Updating Windows', 'Running Script', 'Rebooting...'];
         setDevices(prev => {
             const updatedDevices = prev.map((d): Device => cancellableStatuses.includes(d.status) ? { ...d, status: 'Cancelled' } : d);
             archiveCurrentRun(updatedDevices);
             return updatedDevices;
         });
+        // Mark any running batch files as failed on cancel
+        setBatchQueue(prev => prev.map(e => e.status === 'running' ? { ...e, status: 'failed' as const } : e));
         addLog('Deployment has been cancelled by the user.', 'WARNING');
-        sendNotification('Deployment Cancelled', 'The scan process was stopped by the user.');
+        sendNotification('Deployment Cancelled', 'The deployment process was stopped by the user.');
     };
 
     const wakeOnLanFlow = (deviceIds: Set<number>) => {
@@ -867,7 +979,7 @@ const App: React.FC = () => {
 
     const handleBulkCancel = () => {
         addLog(`Cancelling tasks for ${selectedDeviceIds.size} selected devices...`, 'WARNING');
-        const cancellableStatuses: DeploymentStatus[] = ['Connecting', 'Retrying...', 'Updating', 'Waking Up', 'Checking Info', 'Checking BIOS', 'Checking DCU', 'Checking Windows', 'Updating BIOS', 'Updating DCU', 'Updating Windows'];
+        const cancellableStatuses: DeploymentStatus[] = ['Connecting', 'Retrying...', 'Updating', 'Waking Up', 'Checking Info', 'Checking BIOS', 'Checking DCU', 'Checking Windows', 'Updating BIOS', 'Updating DCU', 'Updating Windows', 'Running Script'];
         setDevices(prev =>
             prev.map((d): Device =>
                 selectedDeviceIds.has(d.id) && cancellableStatuses.includes(d.status)
@@ -892,12 +1004,27 @@ const App: React.FC = () => {
             id: devices.length + i,
             status: 'Pending' as DeploymentStatus,
             imagingStatus: 'Ready for Deployment' as const,
+            deviceType: d.deviceType || detectDeviceTypeFromHostname(d.hostname),
         }));
 
         setDevices(prev => [...prev, ...reindexed]);
         addLog(`Promoted ${reindexed.length} device(s) from Image Monitor to Deployment Runner.`, 'SUCCESS');
         setActiveView('deployment');
     };
+
+    const handleRenameImagingDevice = useCallback((deviceId: number, hostname: string) => {
+        const sanitized = sanitizeHostname(hostname);
+        if (!sanitized) {
+            addLog('Hostname rename skipped: hostname cannot be empty after sanitization.', 'WARNING');
+            return;
+        }
+
+        setDevices(prev => prev.map(device =>
+            device.id === deviceId
+                ? { ...device, hostname: sanitized, deviceType: detectDeviceTypeFromHostname(sanitized) }
+                : device
+        ));
+    }, [addLog]);
 
     const handleConfirmAction = async () => {
         // Developer note: central dispatcher after admin gating + confirmation.
@@ -963,7 +1090,7 @@ const App: React.FC = () => {
         }
     })();
 
-    const isReadyToDeploy = csvFile && batchFile && (!scriptAnalysisResult || scriptAnalysisResult.isSafe);
+    const isReadyToDeploy = csvFile && batchQueue.length > 0 && (!scriptAnalysisResult || scriptAnalysisResult.isSafe);
 
     return (
         <div className="min-h-screen bg-slate-900 text-slate-200 font-sans p-4 sm:p-6 lg:p-8">
@@ -1036,6 +1163,7 @@ const App: React.FC = () => {
                     <ImageMonitor
                         onPromoteDevices={handlePromoteDevices}
                         onLog={addLog}
+                        onRenameDevice={handleRenameImagingDevice}
                     />
                 </div>
             )}
@@ -1050,14 +1178,23 @@ const App: React.FC = () => {
                                     <input type="file" accept=".csv" onChange={handleFileChange(setCsvFile)} className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100 w-full text-sm text-slate-400" />
                                     {csvFile && <p className="text-xs text-green-400 mt-2">Selected: {csvFile.name}</p>}
                                 </StepCard>
-                                <StepCard step="2" title="Select Deployment Package" description="Choose the .bat or .cmd script to execute remotely.">
-                                    <input type="file" accept=".bat,.cmd" onChange={handleFileChange(setBatchFile)} className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100 w-full text-sm text-slate-400" />
-                                    {batchFile && (
-                                        <div className="flex items-center justify-between mt-2">
-                                            <p className="text-xs text-green-400">Selected: {batchFile.name}</p>
-                                            <button onClick={handleAnalyzeScript} className="text-xs text-amber-400 hover:text-amber-300 underline">
-                                                Analyze Safety
-                                            </button>
+                                <StepCard step="2" title="Select Batch Files" description="Choose .bat or .cmd scripts to execute in sequence. Files run one after another.">
+                                    <input type="file" accept=".bat,.cmd" multiple onChange={handleBatchFilesChange} className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100 w-full text-sm text-slate-400" />
+                                    {batchQueue.length > 0 && (
+                                        <div className="mt-3 space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <p className="text-xs text-green-400">{batchQueue.length} file{batchQueue.length !== 1 ? 's' : ''} queued</p>
+                                                <button onClick={handleAnalyzeScript} className="text-xs text-amber-400 hover:text-amber-300 underline">
+                                                    Analyze Safety
+                                                </button>
+                                            </div>
+                                            <BatchFileQueue
+                                                entries={batchQueue}
+                                                onRemove={handleRemoveBatchFile}
+                                                onMoveUp={(id) => handleMoveBatchFile(id, 'up')}
+                                                onMoveDown={(id) => handleMoveBatchFile(id, 'down')}
+                                                disabled={deploymentState === DeploymentState.Running}
+                                            />
                                         </div>
                                     )}
                                 </StepCard>
@@ -1133,6 +1270,7 @@ const App: React.FC = () => {
                                     selectedDeviceIds={selectedDeviceIds}
                                     onDeviceSelect={handleDeviceSelection}
                                     onSelectAll={handleSelectAll}
+                                    selectionDisabled={isScopeGuardOpen}
                                 />
                                 <LogViewer logs={logs} />
                             </div>

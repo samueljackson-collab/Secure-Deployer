@@ -25,6 +25,69 @@ interface DeviceIconProps {
     type: DeviceFormFactor;
 }
 
+/**
+ * Deterministic hostname/device-code parser for Dell enterprise form factors.
+ *
+ * Examples:
+ *   ELSLE / ESLSC / ELSLT => laptop-14
+ *   ELSL16 / EPLPR        => laptop-16
+ *   EWSMF                 => micro
+ *   EWSSF / EWS           => sff
+ *   EWSTW                 => tower
+ */
+export const detectDeviceTypeFromHostname = (hostname: string): DeviceFormFactor => {
+    const upper = hostname.toUpperCase().trim();
+    const normalized = upper.replace(/[^A-Z0-9]/g, '');
+
+    if (!normalized) return 'desktop';
+
+    const second = normalized[1];
+
+    // Explicit endpoint categories (legacy + current naming).
+    if (second === 'V' || /(WYSE|THIN|TC\d+|VDI|VIRT)/.test(normalized)) {
+        return second === 'V' ? 'vdi' : (/(WYSE|THIN|TC\d+)/.test(normalized) ? 'wyse' : 'vdi');
+    }
+
+    // Tablet designation from naming standard.
+    if (second === 'T' || /(DETACH|DTCH|2IN1)/.test(normalized)) {
+        return 'detachable';
+    }
+
+    // Laptop designation from naming standard.
+    // Common examples: ELSLE, ESLSC, ELSSC, EPLPR, ELSL16
+    if (second === 'L' || /(ELSLE|ESLSC|ELSSC|ELSLT|ELSL16|LAPTOP|NOTEBOOK|LAT)/.test(normalized)) {
+        if (/(16|L16|LAT16|PRE16|PRE56|PRE57|EPLPR|ELSL16)/.test(normalized)) {
+            return 'laptop-16';
+        }
+        if (/(14|L14|LAT14|ELSLE|ESLSC|ELSSC|ELSLT)/.test(normalized)) {
+            return 'laptop-14';
+        }
+        return 'laptop-14';
+    }
+
+    // Workstation/desktop designation from naming standard.
+    // Common examples: EWSSC..., EWSMF..., EWSTW...
+    if (second === 'W' || normalized.startsWith('EWS')) {
+        if (/(MF|MC|MFF|MICRO|EWSMF|EWSMC)/.test(normalized)) {
+            return 'micro';
+        }
+        if (/(TW|TWR|TOWER|EWSTW|PRETW)/.test(normalized)) {
+            return 'tower';
+        }
+        if (/(SFF|EWSSF|EWS)/.test(normalized)) {
+            return 'sff';
+        }
+        return 'sff';
+    }
+
+    // Legacy/edge fallbacks.
+    if (/(MFF|MICRO)/.test(normalized)) return 'micro';
+    if (/(TWR|TOWER)/.test(normalized)) return 'tower';
+    if (/(SFF|DESKTOP|WORKSTATION)/.test(normalized)) return 'sff';
+
+    return 'desktop';
+};
+
 /** Human-readable label used for the SVG <title> (accessibility). */
 const FORM_FACTOR_LABELS: Record<DeviceFormFactor, string> = {
     'laptop-14':  'Standard 14″ Laptop',

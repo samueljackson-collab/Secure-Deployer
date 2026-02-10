@@ -2,7 +2,7 @@
 
 import React from 'react';
 import type { Device, DeploymentStatus } from '../types';
-import { DeviceIcon } from './DeviceIcon';
+import { DeviceIcon, detectDeviceTypeFromHostname } from './DeviceIcon';
 
 // Developer note: map every deployment status to a visual severity/phase cue
 // so operators can scan a large list without expanding each card.
@@ -17,6 +17,7 @@ const statusColors: Record<DeploymentStatus, string> = {
     'Checking Windows': 'text-sky-400 animate-pulse',
     'Scan Complete': 'text-yellow-400',
     Updating: 'text-blue-400 animate-pulse',
+    'Running Script': 'text-indigo-400 animate-pulse',
     'Updating BIOS': 'text-blue-400 animate-pulse',
     'Updating DCU': 'text-blue-400 animate-pulse',
     'Updating Windows': 'text-blue-400 animate-pulse',
@@ -98,9 +99,10 @@ interface DeviceStatusTableProps {
     onRebootDevice: (deviceId: number) => void;
     onDeviceSelect: (deviceId: number) => void;
     onSelectAll: (select: boolean) => void;
+    selectionDisabled?: boolean;
 }
 
-export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, selectedDeviceIds, onUpdateDevice, onRebootDevice, onDeviceSelect, onSelectAll }) => {
+export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, selectedDeviceIds, onUpdateDevice, onRebootDevice, onDeviceSelect, onSelectAll, selectionDisabled = false }) => {
     const allSelected = devices.length > 0 && selectedDeviceIds.size === devices.length;
 
     return (
@@ -108,14 +110,18 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
             <div className="p-3 bg-slate-800 border-b border-slate-700 flex justify-between items-center">
                 <h3 className="font-semibold text-slate-200">Device Status</h3>
                 <div className="flex items-center" title="Select or deselect all devices in the list">
-                    <label htmlFor="selectAll" className="text-xs text-slate-400 mr-2 cursor-pointer">Select All</label>
+                    <label htmlFor="selectAll" className={`text-xs text-slate-400 mr-2 ${devices.length === 0 || selectionDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>Select All</label>
                     <input 
                         type="checkbox" 
                         id="selectAll"
-                        className="h-4 w-4 rounded bg-slate-700 border-slate-600 text-cyan-500 focus:ring-cyan-600 cursor-pointer"
+                        className="h-4 w-4 rounded bg-slate-700 border-slate-600 text-cyan-500 focus:ring-cyan-600 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                         checked={allSelected}
-                        onChange={(e) => onSelectAll(e.target.checked)}
-                        disabled={devices.length === 0}
+                        onChange={(e) => {
+                            if (!selectionDisabled) {
+                                onSelectAll(e.target.checked);
+                            }
+                        }}
+                        disabled={devices.length === 0 || selectionDisabled}
                     />
                 </div>
             </div>
@@ -133,12 +139,17 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
                                 <div className="flex items-center gap-3">
                                     <input 
                                         type="checkbox" 
-                                        className="h-4 w-4 rounded bg-slate-700 border-slate-600 text-cyan-500 focus:ring-cyan-600"
+                                        className="h-4 w-4 rounded bg-slate-700 border-slate-600 text-cyan-500 focus:ring-cyan-600 disabled:cursor-not-allowed disabled:opacity-50"
                                         checked={isSelected}
-                                        onChange={() => onDeviceSelect(device.id)}
+                                        onChange={() => {
+                                            if (!selectionDisabled) {
+                                                onDeviceSelect(device.id);
+                                            }
+                                        }}
                                         aria-label={`Select device ${device.hostname}`}
+                                        disabled={selectionDisabled}
                                     />
-                                    {device.deviceType && <DeviceIcon type={device.deviceType} />}
+                                    <DeviceIcon type={device.deviceType || detectDeviceTypeFromHostname(device.hostname)} />
                                     <h4 className="font-bold text-slate-100 break-all">{device.hostname}</h4>
                                 </div>
                                 <StatusBadge status={device.status} retryAttempt={device.retryAttempt} />
@@ -161,6 +172,7 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
                                                 <DetailItem label="IP Address" value={device.ipAddress} />
                                                 <DetailItem label="Model" value={device.model} mono={false} />
                                                 <DetailItem label="Serial" value={device.serialNumber} />
+                                                <DetailItem label="Asset Tag" value={device.assetTag} />
                                                 <DetailItem label="RAM" value={device.ramAmount ? `${device.ramAmount} GB` : undefined} />
                                                 <DetailItem label="Disk" value={device.diskSpace ? `${device.diskSpace.free}GB / ${device.diskSpace.total}GB` : undefined} />
                                                 <DetailItem label="Encryption" value={<EncryptionStatus status={device.encryptionStatus} />} mono={false} />
