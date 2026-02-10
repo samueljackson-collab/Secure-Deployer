@@ -21,6 +21,8 @@ import { DeploymentState } from './types';
 import Papa from 'papaparse';
 
 // --- Utility Functions ---
+// Developer note: These helpers normalize incoming device metadata so downstream logic
+// can focus on business rules (deployment flow) instead of repeated parsing.
 
 const normalizeMacAddress = (mac: string): string => {
     if (!mac) return '';
@@ -101,6 +103,7 @@ const detectDeviceType = (hostname: string): DeviceFormFactor => {
 };
 
 const sanitizeLogMessage = (message: string): string => {
+    // Developer note: scrub common secret patterns before logs are stored or rendered.
     return message
         .replace(/password\s*[:=]\s*\S+/gi, 'password: [REDACTED]')
         .replace(/token\s*[:=]\s*\S+/gi, 'token: [REDACTED]')
@@ -130,6 +133,8 @@ type PendingAdminAction =
     | { type: 'rebootDevice'; deviceId: number };
 
 const App: React.FC = () => {
+    // Developer note: UI state below mirrors the main workflow phases:
+    // config (file selection), auth (credentials), scan/update execution, then reporting.
     const [csvFile, setCsvFile] = useState<File | null>(null);
     const [batchFile, setBatchFile] = useState<File | null>(null);
     const [credentials, setCredentials] = useState<Credentials>({ username: '', password: '' });
@@ -172,6 +177,7 @@ const App: React.FC = () => {
         // Always set timer when this function is called, regardless of current sessionActive state
         // This ensures the timer is refreshed on every activity event
         sessionTimerRef.current = setTimeout(() => {
+            // Developer note: on timeout we wipe operator context and prompt re-auth.
             setCredentials({ username: '', password: '' });
             setOperatorName('');
             setSessionActive(false);
@@ -208,12 +214,16 @@ const App: React.FC = () => {
     }, []);
 
     const sendNotification = (title: string, body: string) => {
+        // Developer note: notifications are best-effort operator signals only; all
+        // authoritative state still comes from table/log updates in the active session.
         if ('Notification' in window && Notification.permission === 'granted') {
             new Notification(title, { body, icon: '/favicon.svg' });
         }
     };
 
     const addLog = useCallback((message: string, level: LogEntry['level'] = 'INFO') => {
+        // Developer note: all app logs funnel through this helper so redaction policy
+        // is applied consistently, regardless of where messages originate.
         const sanitized = sanitizeLogMessage(message);
         setLogs(prev => [...prev, { timestamp: new Date(), message: sanitized, level }]);
     }, []);
@@ -231,6 +241,7 @@ const App: React.FC = () => {
     const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
     const handleAnalyzeScript = async () => {
+        // Developer note: this is a pre-flight safety check for uploaded scripts.
         if (!batchFile) return;
 
         setScriptAnalysisLoading(true);
@@ -257,6 +268,7 @@ const App: React.FC = () => {
     };
 
     const archiveCurrentRun = (currentDevices: Device[]) => {
+        // Developer note: snapshot aggregate metrics so the history panel can render.
         if (currentDevices.length === 0) return;
 
         const total = currentDevices.length;
@@ -293,6 +305,7 @@ const App: React.FC = () => {
     };
 
     const handleConfirmCredentialsAndDeploy = async (sessionCredentials: Credentials) => {
+        // Developer note: validates credentials locally, parses CSV, and kicks off flow.
         setIsCredentialModalOpen(false);
         if (!csvFile || !batchFile) {
             addLog("CSV or Batch file is missing.", 'ERROR');
@@ -333,6 +346,7 @@ const App: React.FC = () => {
                 header: true,
                 skipEmptyLines: true,
                 complete: async (results) => {
+                    // Developer note: normalize device records and guard against CSV errors.
                     if (results.errors.length > 0) {
                         addLog(`CSV parsing errors: ${results.errors.length} error(s) found.`, 'ERROR');
                         sendNotification('Critical Error', 'Failed to parse device list CSV.');
@@ -463,6 +477,8 @@ const App: React.FC = () => {
     };
 
     const startDeploymentFlow = () => {
+        // Developer note: this function only opens credential capture; actual device
+        // processing starts after credential confirmation and CSV/script validation.
         if (!csvFile || !batchFile) {
             addLog("Please select a device list and deployment package first.", 'ERROR');
             return;
@@ -471,6 +487,8 @@ const App: React.FC = () => {
     };
 
     const requestAdminAction = (action: PendingAdminAction) => {
+        // Developer note: stage privileged actions so admin gate can approve and return
+        // to the exact pending intent without reconstructing arguments.
         setPendingAdminAction(action);
         setAdminGateOpen(true);
     };
@@ -485,6 +503,7 @@ const App: React.FC = () => {
     };
 
     const runDeploymentFlow = async (parsedDevices: Device[]) => {
+        // Developer note: main scan sequence (WoL → device metadata → compliance checks).
         if (isCancelledRef.current) return;
 
         addLog("Sending Wake-on-LAN packets...", 'INFO');
@@ -508,6 +527,7 @@ const App: React.FC = () => {
 
         addLog("Starting system scan on individual devices...", 'INFO');
         for (const device of parsedDevices) {
+            // Developer note: each device is scanned independently, with retry logic.
             if (isCancelledRef.current) {
                 addLog('Deployment cancelled by user.', 'WARNING');
                 setDeploymentState(DeploymentState.Idle);
@@ -549,6 +569,7 @@ const App: React.FC = () => {
             const ipAddress = `10.1.${Math.floor(Math.random() * 254) + 1}.${Math.floor(Math.random() * 254) + 1}`;
             const serialNumber = Math.random().toString(36).substring(2, 9).toUpperCase();
             const modelMap: Record<DeviceFormFactor, string[]> = {
+                // Developer note: mock inventory metadata used for demo/UX coverage.
                 'laptop-14':  ['Latitude 5450', 'Latitude 7450', 'Latitude 5440'],
                 'laptop-16':  ['Latitude 9640', 'Precision 5690', 'Precision 5680'],
                 'detachable': ['Latitude 7350 Detachable', 'Latitude 7230 Rugged Extreme'],
@@ -631,6 +652,7 @@ const App: React.FC = () => {
     };
 
     const updateDeviceFlow = async (deviceId: number) => {
+        // Developer note: update flow runs after scans and can be scoped by policy.
         const device = devices.find(d => d.id === deviceId);
         if (!device) return;
 
@@ -653,6 +675,7 @@ const App: React.FC = () => {
         const failed: string[] = [];
 
         const componentsToUpdate = [
+            // Developer note: track per-component update status for logging + UI state.
             { name: 'BIOS', versionKey: 'biosVersion', isUpToDateKey: 'isBiosUpToDate', needsUpdate: device.isBiosUpToDate === false, currentVersion: device.biosVersion, targetVersion: TARGET_BIOS_VERSION, requiresReboot: true },
             { name: 'DCU', versionKey: 'dcuVersion', isUpToDateKey: 'isDcuUpToDate', needsUpdate: device.isDcuUpToDate === false, currentVersion: device.dcuVersion, targetVersion: TARGET_DCU_VERSION, requiresReboot: false },
             { name: 'Windows', versionKey: 'winVersion', isUpToDateKey: 'isWinUpToDate', needsUpdate: device.isWinUpToDate === false, currentVersion: device.winVersion, targetVersion: TARGET_WIN_VERSION, requiresReboot: false },
@@ -756,6 +779,8 @@ const App: React.FC = () => {
     };
 
     const handleCancelDeployment = () => {
+        // Developer note: cancellation is cooperative; loops check isCancelledRef and
+        // this handler immediately marks active transient states as Cancelled in UI.
         isCancelledRef.current = true;
         setDeploymentState(DeploymentState.Idle);
         const cancellableStatuses: DeploymentStatus[] = ['Connecting', 'Retrying...', 'Updating', 'Waking Up', 'Checking Info', 'Checking BIOS', 'Checking DCU', 'Checking Windows', 'Updating BIOS', 'Updating DCU', 'Updating Windows', 'Rebooting...'];
@@ -823,6 +848,8 @@ const App: React.FC = () => {
     };
 
     const handleScopeVerified = async (verifiedDevices: Device[], policy: ScopePolicy) => {
+        // Developer note: scope guard returns an immutable approval snapshot used
+        // for the current bulk action run; it is reset after completion.
         setIsScopeGuardOpen(false);
         setActiveScopePolicy(policy);
 
@@ -873,6 +900,7 @@ const App: React.FC = () => {
     };
 
     const handleConfirmAction = async () => {
+        // Developer note: central dispatcher after admin gating + confirmation.
         if (!confirmAction) return;
         const action = confirmAction;
         setConfirmAction(null);

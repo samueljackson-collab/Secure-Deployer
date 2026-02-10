@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 
 export const BuildOutputPage: React.FC = () => {
+  // Developer note: this screen is educational/demo-only; real packaging happens
+  // via CLI scripts so release output stays reproducible and auditable.
   const [simulated, setSimulated] = useState(false);
 
   return (

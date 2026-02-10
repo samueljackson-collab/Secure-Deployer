@@ -71,6 +71,8 @@ const generateDeviceId = (): number => {
 };
 
 const metadataToDevice = (metadata: ImagingMetadata): Device => {
+  // Developer note: convert imaging payloads into shared Device shape so promoted
+  // devices can move into deployment UI without extra mapping logic.
   const progress = typeof metadata.imageProgress === 'number'
     ? Math.max(0, Math.min(100, metadata.imageProgress))
     : 0;
@@ -143,6 +145,8 @@ export const ImageMonitor: React.FC<ImageMonitorProps> = ({ onPromoteDevices, on
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
   const validateMetadata = useCallback((data: unknown): { valid: boolean; metadata: ImagingMetadata | null; error: string } => {
+    // Developer note: validation returns structured outcome (not thrown errors) so
+    // batch imports can continue and report every bad entry in one pass.
     if (!data || typeof data !== 'object') {
       return { valid: false, metadata: null, error: 'Invalid JSON structure: expected an object.' };
     }
@@ -187,6 +191,8 @@ export const ImageMonitor: React.FC<ImageMonitorProps> = ({ onPromoteDevices, on
   }, []);
 
   const processMetadataFiles = useCallback((files: File[]) => {
+    // Developer note: batch parser is intentionally tolerant (skip bad files, keep good)
+    // because imaging teams often drop mixed-quality exports at once.
     const errors: string[] = [];
     let loadedCount = 0;
     let skippedCount = 0;

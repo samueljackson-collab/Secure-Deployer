@@ -9,6 +9,8 @@ interface StepCardProps {
 }
 
 export const StepCard: React.FC<StepCardProps> = ({ step, title, description, children }) => {
+    // Developer note: StepCard is intentionally presentation-only so workflow logic
+    // remains in App.tsx and this stays reusable for onboarding-style sections.
     return (
         <div className="flex items-start space-x-4">
             <div className="flex-shrink-0 w-8 h-8 bg-cyan-600 rounded-full flex items-center justify-center font-bold text-white">

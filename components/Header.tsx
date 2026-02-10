@@ -2,6 +2,8 @@
 
 import React from 'react';
 
+// Developer note: Header keeps global controls lightweight so operators can
+// always wake selected machines without leaving the current view.
 interface HeaderProps {
     selectedDeviceIds: Set<number>;
     onWakeOnLan: (deviceIds: Set<number>) => void;

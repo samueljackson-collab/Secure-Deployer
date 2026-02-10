@@ -16,6 +16,8 @@ export const BulkActions: React.FC<BulkActionsProps> = ({
     onValidate,
     onExecute
 }) => {
+    // Developer note: hide the entire control bar for zero selection to prevent
+    // accidental bulk intents and keep visual noise low in idle states.
     if (selectedCount === 0) {
         return null;
     }

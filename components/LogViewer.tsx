@@ -24,6 +24,8 @@ const levelButtonClasses: Record<LogEntry['level'], string> = {
     ERROR: 'bg-red-600 hover:bg-red-500',
 };
 
+// Developer note: stable level order keeps button layout predictable and aligns
+// with the visual severity progression used across the dashboard.
 const LOG_LEVELS: LogEntry['level'][] = ['INFO', 'SUCCESS', 'WARNING', 'ERROR'];
 
 export const LogViewer: React.FC<{ logs: LogEntry[] }> = ({ logs }) => {
@@ -42,6 +44,8 @@ export const LogViewer: React.FC<{ logs: LogEntry[] }> = ({ logs }) => {
         });
     };
 
+    // Developer note: filtering is client-side against in-memory logs; this keeps
+// toggles instant and avoids coupling log rendering to backend pagination.
     const filteredLogs = logs.filter(log => filters.has(log.level));
 
     useEffect(() => {

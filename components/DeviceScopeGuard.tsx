@@ -10,6 +10,8 @@ interface DeviceScopeGuardProps {
   username: string;
 }
 
+// Developer note: hard cap prevents accidental broad-scope operations even if
+// a user enters an excessive value in the policy input.
 const HARD_MAX_DEVICE_COUNT = 200;
 const DEFAULT_MAX_DEVICE_COUNT = 50;
 
@@ -70,6 +72,8 @@ export const DeviceScopeGuard: React.FC<DeviceScopeGuardProps> = ({
 
   // Overall readiness
   const isWithinMax = selectedCount <= maxDeviceCount;
+  // Developer note: readiness deliberately requires checklist + count confirmation +
+  // max-scope bound so no single accidental click can authorize bulk execution.
   const isReadyToConfirm =
     allDevicesChecked && countConfirmed && selectedCount > 0 && isWithinMax;
 
@@ -97,6 +101,8 @@ export const DeviceScopeGuard: React.FC<DeviceScopeGuardProps> = ({
   };
 
   const handleConfirm = () => {
+    // Developer note: confirmation emits both verified devices and policy snapshot
+    // so downstream update flow can enforce exactly what was approved.
     if (!isReadyToConfirm) return;
 
     const now = new Date();
