@@ -8,6 +8,8 @@ interface DeploymentProgressProps {
 }
 
 export const DeploymentProgress: React.FC<DeploymentProgressProps> = ({ devices }) => {
+    // Developer note: progress is based on terminal states (success, needs action, failure)
+    // so operators get an at-a-glance completion signal during long scans.
     if (devices.length === 0) {
         return <div className="text-center text-slate-400 py-4">Waiting for system scan to start...</div>;
     }

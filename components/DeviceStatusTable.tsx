@@ -4,6 +4,8 @@ import React from 'react';
 import type { Device, DeploymentStatus } from '../types';
 import { DeviceIcon, detectDeviceTypeFromHostname } from './DeviceIcon';
 
+// Developer note: map every deployment status to a visual severity/phase cue
+// so operators can scan a large list without expanding each card.
 const statusColors: Record<DeploymentStatus, string> = {
     Pending: 'text-slate-400',
     'Waking Up': 'text-yellow-400 animate-pulse',
@@ -73,6 +75,7 @@ const EncryptionStatus: React.FC<{ status?: 'Enabled' | 'Disabled' | 'Unknown' }
 
 
 const UpdateResult: React.FC<{ result: Device['lastUpdateResult'] }> = ({ result }) => {
+    // Developer note: summarize per-device component outcomes after update flow.
     if (!result || (result.succeeded.length === 0 && result.failed.length === 0)) {
         return null;
     }
@@ -124,6 +127,8 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
             </div>
             <div className="overflow-y-auto flex-grow p-3 space-y-3">
                 {devices.map(device => {
+                    // Developer note: card body intentionally gates details/actions by status
+                    // to avoid presenting update buttons before scan metadata exists.
                     const needsUpdate = device.isBiosUpToDate === false || device.isDcuUpToDate === false || device.isWinUpToDate === false;
                     const showDetails = !['Pending', 'Waking Up'].includes(device.status);
                     const isSelected = selectedDeviceIds.has(device.id);

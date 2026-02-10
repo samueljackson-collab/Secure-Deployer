@@ -29,6 +29,8 @@
  * populated for devices that entered via Image Monitor promotion.
  */
 export interface Device {
+  // Developer note: this is intentionally a superset model shared by imaging and
+  // deployment flows to reduce adapter code between pages and modals.
   id: number;
   hostname: string;
   mac: string;
@@ -150,6 +152,8 @@ export interface ScriptFinding {
 // level (see scriptSafetyAnalyzer.ts) before deployment begins.
 // Only enforceHostnameWhitelist is enforced at runtime during device updates.
 export interface ScopePolicy {
+  // Developer note: this structure is persisted in UI state as the source-of-truth
+  // approval contract for the currently authorized bulk action.
   allowedHostnames: string[];
   allowedMacs: string[];
   maxDeviceCount: number;

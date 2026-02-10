@@ -824,8 +824,12 @@ export function analyzeScript(
   const blockedPatterns: string[] = [];
   const scopeViolations: string[] = [];
 
+  // Developer note: normalize hostnames once so checks stay deterministic even when
+  // CSV/device inputs vary in case or include incidental whitespace.
   const normalizedAllowed = new Set(allowedHostnames.map((h) => h.toUpperCase().trim()));
 
+  // Developer note: line-based scanning intentionally preserves order/line numbers
+  // so findings can be explained to operators with precise remediation context.
   const lines = scriptContent.split(/\r?\n/);
 
   // Track the worst severity found across all lines
@@ -952,6 +956,8 @@ export function analyzeScript(
   }
 
   // --- Determine overall safety ---
+  // Developer note: deployment safety decision is binary: any BLOCKED finding halts
+  // execution even when other results are informational or warning-only.
   const hasBlocked = blockedPatterns.length > 0;
   const isSafe = !hasBlocked;
   const riskLevel = severityToRiskLevel(overallWorstSeverity);

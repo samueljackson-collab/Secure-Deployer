@@ -21,6 +21,8 @@ export const ConfirmActionModal: React.FC<ConfirmActionModalProps> = ({
 
   if (!isOpen) return null;
 
+  // Developer note: typed confirmation is a deliberate friction step for high-impact
+  // actions, mirroring operational runbooks used in deployment environments.
   const isReady = typedValue.trim().toUpperCase() === 'CONFIRM';
 
   return (
