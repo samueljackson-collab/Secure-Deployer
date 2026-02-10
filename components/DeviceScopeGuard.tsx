@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import type { Device, ScopePolicy, ScopeVerification } from '../types';
+import type { Device, ScopePolicy } from '../types';
 
 interface DeviceScopeGuardProps {
   devices: Device[];
