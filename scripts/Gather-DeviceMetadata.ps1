@@ -8,7 +8,7 @@
     and outputs a JSON file that conforms to the ImagingMetadata interface
     used by the Secure-Deployer Image Monitor.
 
-    The script is completely self-contained. It does NOT use any AI services,
+    The script is completely self-contained. It does NOT use any external services,
     internet connectivity, or cloud APIs. All data is gathered from the local
     system using built-in Windows Management Instrumentation (WMI) classes.
 

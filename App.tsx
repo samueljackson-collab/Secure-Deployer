@@ -10,8 +10,14 @@ import { SecureCredentialModal } from './components/SecureCredentialModal';
 import { ImageMonitor } from './components/ImageMonitor';
 import { DeviceScopeGuard } from './components/DeviceScopeGuard';
 import { ScriptAnalysisModal } from './components/ScriptAnalysisModal';
+import { BatchFileQueue } from './components/BatchFileQueue';
+import { ImagingScriptPage } from './components/ImagingScriptPage';
+import { BuildOutputPage } from './components/BuildOutputPage';
+import { TrendsAnalyticsPage } from './components/TrendsAnalyticsPage';
+import { AdminGateModal } from './components/AdminGateModal';
+import { ConfirmActionModal } from './components/ConfirmActionModal';
 import { analyzeScript } from './services/scriptSafetyAnalyzer';
-import type { Device, DeviceFormFactor, LogEntry, DeploymentStatus, Credentials, DeploymentRun, ScopePolicy, ScriptSafetyResult } from './types';
+import type { Device, DeviceFormFactor, LogEntry, DeploymentStatus, Credentials, DeploymentRun, ScopePolicy, ScriptSafetyResult, BatchFileEntry, BatchDeviceStatus } from './types';
 import { DeploymentState } from './types';
 import Papa from 'papaparse';
 
@@ -117,10 +123,19 @@ const TARGET_BIOS_VERSION = 'A25';
 const TARGET_DCU_VERSION = '5.2.0';
 const TARGET_WIN_VERSION = '23H2';
 
+type PendingAdminAction =
+    | { type: 'startDeployment' }
+    | { type: 'bulkUpdate' }
+    | { type: 'wakeOnLan'; deviceIds: Set<number> }
+    | { type: 'updateDevice'; deviceId: number }
+    | { type: 'rebootDevice'; deviceId: number };
+
 const App: React.FC = () => {
     const [csvFile, setCsvFile] = useState<File | null>(null);
-    const [batchFile, setBatchFile] = useState<File | null>(null);
+    const [batchFiles, setBatchFiles] = useState<File[]>([]);
+    const [batchQueue, setBatchQueue] = useState<BatchFileEntry[]>([]);
     const [credentials, setCredentials] = useState<Credentials>({ username: '', password: '' });
+    const [operatorName, setOperatorName] = useState('');
     const [devices, setDevices] = useState<Device[]>([]);
     const [logs, setLogs] = useState<LogEntry[]>([]);
     const [deploymentState, setDeploymentState] = useState<DeploymentState>(DeploymentState.Idle);
@@ -131,7 +146,7 @@ const App: React.FC = () => {
     const [retryDelay, setRetryDelay] = useState(2);
     const [autoRebootEnabled, setAutoRebootEnabled] = useState(false);
 
-    const [activeView, setActiveView] = useState<'imaging' | 'deployment'>('imaging');
+    const [activeView, setActiveView] = useState<'imaging' | 'deployment' | 'imagingScript' | 'buildOutput' | 'trendsAnalytics'>('imaging');
 
     const [isScopeGuardOpen, setIsScopeGuardOpen] = useState(false);
     const [activeScopePolicy, setActiveScopePolicy] = useState<ScopePolicy | null>(null);
@@ -144,6 +159,10 @@ const App: React.FC = () => {
     const [sessionActive, setSessionActive] = useState(false);
     const sessionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastActivityRef = useRef<number>(Date.now());
+    const [isAdminVerified, setIsAdminVerified] = useState(false);
+    const [adminGateOpen, setAdminGateOpen] = useState(false);
+    const [pendingAdminAction, setPendingAdminAction] = useState<PendingAdminAction | null>(null);
+    const [confirmAction, setConfirmAction] = useState<PendingAdminAction | null>(null);
 
     const isCancelledRef = useRef(false);
 
@@ -156,7 +175,9 @@ const App: React.FC = () => {
         // This ensures the timer is refreshed on every activity event
         sessionTimerRef.current = setTimeout(() => {
             setCredentials({ username: '', password: '' });
+            setOperatorName('');
             setSessionActive(false);
+            setIsAdminVerified(false);
             addLog('Session expired due to inactivity. Please re-authenticate.', 'WARNING');
         }, SESSION_TIMEOUT_MS);
     }, []);
@@ -202,39 +223,101 @@ const App: React.FC = () => {
     const handleFileChange = (setter: React.Dispatch<React.SetStateAction<File | null>>) => (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             setter(e.target.files[0]);
-            // Reset script analysis when a new batch file is selected
-            if (setter === setBatchFile) {
-                setScriptAnalysisResult(null);
-            }
         }
+    };
+
+    const handleBatchFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files.length > 0) {
+            const fileList: File[] = Array.from(e.target.files);
+            setBatchFiles(prev => {
+                const existingNames = new Set(prev.map(f => f.name));
+                return [...prev, ...fileList.filter(f => !existingNames.has(f.name))];
+            });
+            setBatchQueue(prev => {
+                const existingNames = new Set(prev.map(entry => entry.name));
+                const newEntries: BatchFileEntry[] = fileList
+                    .filter(f => !existingNames.has(f.name))
+                    .map((file, i) => ({
+                        id: Date.now() + i,
+                        file,
+                        name: file.name,
+                        status: 'pending' as const,
+                        deviceProgress: {},
+                    }));
+                return [...prev, ...newEntries];
+            });
+            setScriptAnalysisResult(null);
+            e.target.value = '';
+        }
+    };
+
+    const handleRemoveBatchFile = (id: number) => {
+        setBatchQueue(prev => prev.filter(entry => entry.id !== id));
+        setBatchFiles(prev => {
+            const removedEntry = batchQueue.find(entry => entry.id === id);
+            if (!removedEntry) return prev;
+            return prev.filter(f => f.name !== removedEntry.name);
+        });
+        setScriptAnalysisResult(null);
+    };
+
+    const handleMoveBatchFile = (id: number, direction: 'up' | 'down') => {
+        setBatchQueue(prev => {
+            const idx = prev.findIndex(entry => entry.id === id);
+            if (idx < 0) return prev;
+            const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+            if (swapIdx < 0 || swapIdx >= prev.length) return prev;
+            const next = [...prev];
+            [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
+            return next;
+        });
     };
 
     const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
     const handleAnalyzeScript = async () => {
-        if (!batchFile) return;
+        if (batchQueue.length === 0) return;
 
         setScriptAnalysisLoading(true);
         setIsScriptAnalysisOpen(true);
 
         try {
-            const scriptContent = await batchFile.text();
             const allowedHostnames = devices.map(d => d.hostname);
-            const result = analyzeScript(scriptContent, allowedHostnames);
-            setScriptAnalysisResult(result);
+            let worstResult: ScriptSafetyResult | null = null;
 
-            if (!result.isSafe) {
-                addLog(`SCRIPT BLOCKED: ${result.blockedPatterns.length} dangerous pattern(s) detected. Risk level: ${result.riskLevel}`, 'ERROR');
-            } else if (result.riskLevel === 'MEDIUM' || result.riskLevel === 'HIGH') {
-                addLog(`Script analysis: ${result.findings.length} finding(s). Risk level: ${result.riskLevel}. Review recommended.`, 'WARNING');
-            } else {
-                addLog('Script analysis complete. No critical issues found.', 'SUCCESS');
+            for (const entry of batchQueue) {
+                const scriptContent = await entry.file.text();
+                const result = analyzeScript(scriptContent, allowedHostnames);
+
+                if (!worstResult || !result.isSafe || riskOrder(result.riskLevel) > riskOrder(worstResult.riskLevel)) {
+                    worstResult = {
+                        ...result,
+                        summary: batchQueue.length > 1
+                            ? `Analysis of ${batchQueue.length} batch files. Showing worst result from: ${entry.name}`
+                            : result.summary,
+                    };
+                }
+
+                if (!result.isSafe) {
+                    addLog(`SCRIPT BLOCKED [${entry.name}]: ${result.blockedPatterns.length} dangerous pattern(s) detected. Risk level: ${result.riskLevel}`, 'ERROR');
+                } else if (result.riskLevel === 'MEDIUM' || result.riskLevel === 'HIGH') {
+                    addLog(`Script analysis [${entry.name}]: ${result.findings.length} finding(s). Risk level: ${result.riskLevel}. Review recommended.`, 'WARNING');
+                } else {
+                    addLog(`Script analysis [${entry.name}]: No critical issues found.`, 'SUCCESS');
+                }
             }
+
+            setScriptAnalysisResult(worstResult);
         } catch (error) {
             addLog(`Script analysis failed: ${error instanceof Error ? error.message : String(error)}`, 'ERROR');
         } finally {
             setScriptAnalysisLoading(false);
         }
+    };
+
+    const riskOrder = (level: ScriptSafetyResult['riskLevel']): number => {
+        const order: Record<ScriptSafetyResult['riskLevel'], number> = { LOW: 0, MEDIUM: 1, HIGH: 2, CRITICAL: 3 };
+        return order[level];
     };
 
     const archiveCurrentRun = (currentDevices: Device[]) => {
@@ -275,8 +358,8 @@ const App: React.FC = () => {
 
     const handleConfirmCredentialsAndDeploy = async (sessionCredentials: Credentials) => {
         setIsCredentialModalOpen(false);
-        if (!csvFile || !batchFile) {
-            addLog("CSV or Batch file is missing.", 'ERROR');
+        if (!csvFile || batchQueue.length === 0) {
+            addLog("CSV or Batch file(s) missing.", 'ERROR');
             return;
         }
 
@@ -300,13 +383,14 @@ const App: React.FC = () => {
         }
 
         isCancelledRef.current = false;
-        setCredentials(sessionCredentials);
+        setOperatorName(username);
+        setCredentials({ username: '', password: '' });
         setSessionActive(true);
         resetSessionTimer();
         setDeploymentState(DeploymentState.Running);
         setLogs([]);
         setSelectedDeviceIds(new Set());
-        addLog("Deployment process initiated. Session authenticated.", 'INFO');
+        addLog("Deployment process initiated. Credentials cleared after authentication.", 'INFO');
 
         try {
             Papa.parse<Record<string, string>>(csvFile, {
@@ -339,9 +423,12 @@ const App: React.FC = () => {
                     }
 
                     const parsedDevices: Device[] = [];
+                    const seenHostnames = new Set<string>();
+                    const seenMacs = new Set<string>();
                     let invalidCount = 0;
                     results.data.forEach((row, index) => {
-                        const hostname = sanitizeHostname((row[hostnameCol] || '').trim());
+                        const rawHostname = (row[hostnameCol] || '').trim();
+                        const hostname = sanitizeHostname(rawHostname);
                         const rawMac = row[macCol] || '';
 
                         if (!hostname && !rawMac) {
@@ -356,11 +443,31 @@ const App: React.FC = () => {
                             return;
                         }
 
+                        if (rawHostname && rawHostname !== hostname) {
+                            addLog(`Sanitized hostname in row ${index + 2}: "${rawHostname}" → "${hostname}".`, 'WARNING');
+                        }
+
                         if (!isValidMacAddress(normalizedMac)) {
                             addLog(`[Validation Skip] Skipping device "${hostname}" from row ${index + 2}. Reason: Invalid MAC address format.`, 'WARNING');
                             invalidCount++;
                             return;
                         }
+
+                        const hostnameKey = hostname.toUpperCase();
+                        if (seenHostnames.has(hostnameKey)) {
+                            addLog(`[Validation Skip] Duplicate hostname "${hostname}" detected in row ${index + 2}.`, 'WARNING');
+                            invalidCount++;
+                            return;
+                        }
+
+                        if (seenMacs.has(normalizedMac)) {
+                            addLog(`[Validation Skip] Duplicate MAC address "${normalizedMac}" detected in row ${index + 2}.`, 'WARNING');
+                            invalidCount++;
+                            return;
+                        }
+
+                        seenHostnames.add(hostnameKey);
+                        seenMacs.add(normalizedMac);
 
                         const deviceType = detectDeviceType(hostname);
 
@@ -387,26 +494,39 @@ const App: React.FC = () => {
                     setDevices(parsedDevices);
                     addLog(`Validated and loaded ${parsedDevices.length} devices from ${csvFile.name}.`, 'INFO');
 
-                    const scriptContent = await batchFile.text();
                     const allowedHostnames = parsedDevices.map(d => d.hostname);
-                    const safetyResult = analyzeScript(scriptContent, allowedHostnames);
 
-                    if (!safetyResult.isSafe) {
-                        addLog(`DEPLOYMENT BLOCKED: Script contains ${safetyResult.blockedPatterns.length} dangerous pattern(s).`, 'ERROR');
-                        safetyResult.blockedPatterns.forEach(p => addLog(`  BLOCKED: ${p}`, 'ERROR'));
-                        setScriptAnalysisResult(safetyResult);
-                        setIsScriptAnalysisOpen(true);
-                        setDeploymentState(DeploymentState.Idle);
-                        sendNotification('Deployment Blocked', 'Script failed safety analysis.');
-                        return;
+                    // Analyze all batch files for safety before starting
+                    for (const entry of batchQueue) {
+                        const scriptContent = await entry.file.text();
+                        const safetyResult = analyzeScript(scriptContent, allowedHostnames);
+
+                        if (!safetyResult.isSafe) {
+                            addLog(`DEPLOYMENT BLOCKED [${entry.name}]: Script contains ${safetyResult.blockedPatterns.length} dangerous pattern(s).`, 'ERROR');
+                            safetyResult.blockedPatterns.forEach(p => addLog(`  BLOCKED: ${p}`, 'ERROR'));
+                            setScriptAnalysisResult(safetyResult);
+                            setIsScriptAnalysisOpen(true);
+                            setDeploymentState(DeploymentState.Idle);
+                            sendNotification('Deployment Blocked', `Script ${entry.name} failed safety analysis.`);
+                            return;
+                        }
+
+                        if (safetyResult.scopeViolations.length > 0) {
+                            addLog(`SCOPE WARNING [${entry.name}]: Script may target devices outside the selected list.`, 'WARNING');
+                            safetyResult.scopeViolations.forEach(v => addLog(`  SCOPE: ${v}`, 'WARNING'));
+                        }
+
+                        addLog(`Script safety check passed for ${entry.name}. Risk level: ${safetyResult.riskLevel}`, 'SUCCESS');
                     }
 
-                    if (safetyResult.scopeViolations.length > 0) {
-                        addLog('SCOPE WARNING: Script may target devices outside the selected list.', 'WARNING');
-                        safetyResult.scopeViolations.forEach(v => addLog(`  SCOPE: ${v}`, 'WARNING'));
-                    }
-
-                    addLog(`Script safety check passed. Risk level: ${safetyResult.riskLevel}`, 'SUCCESS');
+                    // Initialize batch queue device progress for all files
+                    const initialDeviceProgress: Record<number, BatchDeviceStatus> = {};
+                    parsedDevices.forEach(d => { initialDeviceProgress[d.id] = 'pending'; });
+                    setBatchQueue(prev => prev.map(entry => ({
+                        ...entry,
+                        status: 'pending' as const,
+                        deviceProgress: { ...initialDeviceProgress },
+                    })));
 
                     await runDeploymentFlow(parsedDevices);
                 }
@@ -419,12 +539,26 @@ const App: React.FC = () => {
         }
     };
 
-    const handleStartDeployment = () => {
-        if (!csvFile || !batchFile) {
-            addLog("Please select a device list and deployment package first.", 'ERROR');
+    const startDeploymentFlow = () => {
+        if (!csvFile || batchQueue.length === 0) {
+            addLog("Please select a device list and at least one batch file.", 'ERROR');
             return;
         }
         setIsCredentialModalOpen(true);
+    };
+
+    const requestAdminAction = (action: PendingAdminAction) => {
+        setPendingAdminAction(action);
+        setAdminGateOpen(true);
+    };
+
+    const handleStartDeployment = () => {
+        const action: PendingAdminAction = { type: 'startDeployment' };
+        if (!isAdminVerified) {
+            requestAdminAction(action);
+            return;
+        }
+        setConfirmAction(action);
     };
 
     const runDeploymentFlow = async (parsedDevices: Device[]) => {
@@ -491,6 +625,7 @@ const App: React.FC = () => {
 
             const ipAddress = `10.1.${Math.floor(Math.random() * 254) + 1}.${Math.floor(Math.random() * 254) + 1}`;
             const serialNumber = Math.random().toString(36).substring(2, 9).toUpperCase();
+            const assetTag = `ASSET-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
             const modelMap: Record<DeviceFormFactor, string[]> = {
                 'laptop-14':  ['Latitude 5450', 'Latitude 7450', 'Latitude 5440'],
                 'laptop-16':  ['Latitude 9640', 'Precision 5690', 'Precision 5680'],
@@ -514,6 +649,7 @@ const App: React.FC = () => {
             const newMetadata = {
                 ipAddress,
                 serialNumber,
+                assetTag,
                 model,
                 ramAmount,
                 diskSpace: { total: diskTotal, free: diskFree },
@@ -521,7 +657,7 @@ const App: React.FC = () => {
             };
 
             setDevices(prev => prev.map(d => d.id === device.id ? { ...d, ...newMetadata } : d));
-            addLog(`[${device.hostname}] IP: ${ipAddress}, Model: ${model}, SN: ${serialNumber}`);
+            addLog(`[${device.hostname}] IP: ${ipAddress}, Model: ${model}, SN: ${serialNumber}, Asset Tag: ${assetTag}`);
             addLog(`[${device.hostname}] RAM: ${ramAmount}GB, Disk: ${diskFree}GB/${diskTotal}GB Free, Encryption: ${encryptionStatus}`);
 
             setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'Checking BIOS' as DeploymentStatus } : d));
@@ -561,9 +697,33 @@ const App: React.FC = () => {
             addLog(`Scan complete for ${device.hostname}.`, allUpToDate ? 'SUCCESS' : 'INFO');
         }
 
+        if (isCancelledRef.current) {
+            setDevices(currentDevices => {
+                archiveCurrentRun(currentDevices);
+                return currentDevices;
+            });
+            return;
+        }
+
+        addLog("Scan phase complete. Starting batch file execution queue...", 'INFO');
+
+        // Collect IDs of devices that are online (successfully connected)
+        const connectedDeviceIds = new Set<number>();
+        setDevices(prev => {
+            prev.forEach(d => {
+                if (!['Offline', 'Failed', 'Cancelled'].includes(d.status)) {
+                    connectedDeviceIds.add(d.id);
+                }
+            });
+            return prev;
+        });
+
+        // Run each batch file sequentially across all connected devices
+        await runBatchFileQueue(connectedDeviceIds);
+
         if (!isCancelledRef.current) {
-            addLog("Deployment scan process complete.", 'INFO');
-            sendNotification('Deployment Complete', `Scan finished for ${parsedDevices.length} devices.`);
+            addLog("Deployment process complete.", 'INFO');
+            sendNotification('Deployment Complete', `All batch files executed across ${connectedDeviceIds.size} device(s).`);
             setDeploymentState(DeploymentState.Complete);
         }
 
@@ -573,7 +733,80 @@ const App: React.FC = () => {
         });
     };
 
-    const handleUpdateDevice = async (deviceId: number) => {
+    const runBatchFileQueue = async (connectedDeviceIds: Set<number>) => {
+        for (let fileIdx = 0; fileIdx < batchQueue.length; fileIdx++) {
+            if (isCancelledRef.current) break;
+
+            const entry = batchQueue[fileIdx];
+            addLog(`Starting batch file ${fileIdx + 1}/${batchQueue.length}: ${entry.name}`, 'INFO');
+
+            // Mark this file as running
+            setBatchQueue(prev => prev.map((e, i) => i === fileIdx ? { ...e, status: 'running' as const } : e));
+
+            let anyFailed = false;
+
+            // Execute on each connected device sequentially (one device at a time per file)
+            for (const deviceId of connectedDeviceIds) {
+                if (isCancelledRef.current) break;
+
+                // Mark device as running for this file
+                setBatchQueue(prev => prev.map((e, i) => {
+                    if (i !== fileIdx) return e;
+                    return { ...e, deviceProgress: { ...e.deviceProgress, [deviceId]: 'running' as BatchDeviceStatus } };
+                }));
+
+                setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Running Script' as DeploymentStatus } : d));
+
+                const device = devices.find(d => d.id === deviceId);
+                const hostname = device?.hostname || `Device #${deviceId}`;
+                addLog(`[${hostname}] Executing ${entry.name}...`, 'INFO');
+
+                // Simulate batch file execution (2-5 seconds per device)
+                await sleep(2000 + Math.random() * 3000);
+
+                if (isCancelledRef.current) break;
+
+                // Simulate success/failure (90% success rate)
+                const succeeded = Math.random() > 0.10;
+
+                if (succeeded) {
+                    setBatchQueue(prev => prev.map((e, i) => {
+                        if (i !== fileIdx) return e;
+                        return { ...e, deviceProgress: { ...e.deviceProgress, [deviceId]: 'completed' as BatchDeviceStatus } };
+                    }));
+                    addLog(`[${hostname}] ${entry.name} completed successfully.`, 'SUCCESS');
+                } else {
+                    anyFailed = true;
+                    setBatchQueue(prev => prev.map((e, i) => {
+                        if (i !== fileIdx) return e;
+                        return { ...e, deviceProgress: { ...e.deviceProgress, [deviceId]: 'failed' as BatchDeviceStatus } };
+                    }));
+                    addLog(`[${hostname}] ${entry.name} failed.`, 'ERROR');
+                }
+            }
+
+            // Mark file as completed or failed
+            setBatchQueue(prev => prev.map((e, i) => {
+                if (i !== fileIdx) return e;
+                const fileStatus: BatchFileEntry['status'] = isCancelledRef.current || anyFailed ? 'failed' : 'completed';
+                return { ...e, status: fileStatus };
+            }));
+
+            if (!isCancelledRef.current) {
+                addLog(`Batch file ${entry.name} execution finished.`, anyFailed ? 'WARNING' : 'SUCCESS');
+            }
+        }
+
+        // Reset all device statuses to final state after batch execution
+        if (!isCancelledRef.current) {
+            setDevices(prev => prev.map(d => {
+                if (['Offline', 'Failed', 'Cancelled'].includes(d.status)) return d;
+                return { ...d, status: 'Success' as DeploymentStatus };
+            }));
+        }
+    };
+
+    const updateDeviceFlow = async (deviceId: number) => {
         const device = devices.find(d => d.id === deviceId);
         if (!device) return;
 
@@ -661,7 +894,16 @@ const App: React.FC = () => {
         }
     };
 
-    const handleRebootDevice = async (deviceId: number) => {
+    const handleUpdateDevice = async (deviceId: number) => {
+        const action: PendingAdminAction = { type: 'updateDevice', deviceId };
+        if (!isAdminVerified) {
+            requestAdminAction(action);
+            return;
+        }
+        setConfirmAction(action);
+    };
+
+    const rebootDeviceFlow = async (deviceId: number) => {
         const device = devices.find(d => d.id === deviceId);
         if (!device) return;
 
@@ -680,20 +922,31 @@ const App: React.FC = () => {
         setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, status: 'Success' as DeploymentStatus } : d));
     };
 
+    const handleRebootDevice = async (deviceId: number) => {
+        const action: PendingAdminAction = { type: 'rebootDevice', deviceId };
+        if (!isAdminVerified) {
+            requestAdminAction(action);
+            return;
+        }
+        setConfirmAction(action);
+    };
+
     const handleCancelDeployment = () => {
         isCancelledRef.current = true;
         setDeploymentState(DeploymentState.Idle);
-        const cancellableStatuses: DeploymentStatus[] = ['Connecting', 'Retrying...', 'Updating', 'Waking Up', 'Checking Info', 'Checking BIOS', 'Checking DCU', 'Checking Windows', 'Updating BIOS', 'Updating DCU', 'Updating Windows', 'Rebooting...'];
+        const cancellableStatuses: DeploymentStatus[] = ['Connecting', 'Retrying...', 'Updating', 'Waking Up', 'Checking Info', 'Checking BIOS', 'Checking DCU', 'Checking Windows', 'Updating BIOS', 'Updating DCU', 'Updating Windows', 'Running Script', 'Rebooting...'];
         setDevices(prev => {
             const updatedDevices = prev.map((d): Device => cancellableStatuses.includes(d.status) ? { ...d, status: 'Cancelled' } : d);
             archiveCurrentRun(updatedDevices);
             return updatedDevices;
         });
+        // Mark any running batch files as failed on cancel
+        setBatchQueue(prev => prev.map(e => e.status === 'running' ? { ...e, status: 'failed' as const } : e));
         addLog('Deployment has been cancelled by the user.', 'WARNING');
-        sendNotification('Deployment Cancelled', 'The scan process was stopped by the user.');
+        sendNotification('Deployment Cancelled', 'The deployment process was stopped by the user.');
     };
 
-    const handleWakeOnLan = (deviceIds: Set<number>) => {
+    const wakeOnLanFlow = (deviceIds: Set<number>) => {
         if (deviceIds.size === 0) return;
         const hostnames: string[] = [];
         setDevices(prev => prev.map(d => {
@@ -705,6 +958,15 @@ const App: React.FC = () => {
         }));
         addLog(`Sent Wake-on-LAN to ${deviceIds.size} device(s): ${hostnames.join(', ')}`, 'INFO');
         setSelectedDeviceIds(new Set());
+    };
+
+    const handleWakeOnLan = (deviceIds: Set<number>) => {
+        const action: PendingAdminAction = { type: 'wakeOnLan', deviceIds };
+        if (!isAdminVerified) {
+            requestAdminAction(action);
+            return;
+        }
+        setConfirmAction(action);
     };
 
     const handleDeviceSelection = (deviceId: number) => {
@@ -724,9 +986,18 @@ const App: React.FC = () => {
         }
     };
 
-    const handleBulkUpdate = async () => {
+    const bulkUpdateFlow = async () => {
         setPendingAction('bulkUpdate');
         setIsScopeGuardOpen(true);
+    };
+
+    const handleBulkUpdate = async () => {
+        const action: PendingAdminAction = { type: 'bulkUpdate' };
+        if (!isAdminVerified) {
+            requestAdminAction(action);
+            return;
+        }
+        setConfirmAction(action);
     };
 
     const handleScopeVerified = async (verifiedDevices: Device[], policy: ScopePolicy) => {
@@ -747,7 +1018,7 @@ const App: React.FC = () => {
 
     const handleBulkCancel = () => {
         addLog(`Cancelling tasks for ${selectedDeviceIds.size} selected devices...`, 'WARNING');
-        const cancellableStatuses: DeploymentStatus[] = ['Connecting', 'Retrying...', 'Updating', 'Waking Up', 'Checking Info', 'Checking BIOS', 'Checking DCU', 'Checking Windows', 'Updating BIOS', 'Updating DCU', 'Updating Windows'];
+        const cancellableStatuses: DeploymentStatus[] = ['Connecting', 'Retrying...', 'Updating', 'Waking Up', 'Checking Info', 'Checking BIOS', 'Checking DCU', 'Checking Windows', 'Updating BIOS', 'Updating DCU', 'Updating Windows', 'Running Script'];
         setDevices(prev =>
             prev.map((d): Device =>
                 selectedDeviceIds.has(d.id) && cancellableStatuses.includes(d.status)
@@ -779,7 +1050,70 @@ const App: React.FC = () => {
         setActiveView('deployment');
     };
 
-    const isReadyToDeploy = csvFile && batchFile && (!scriptAnalysisResult || scriptAnalysisResult.isSafe);
+    const handleConfirmAction = async () => {
+        if (!confirmAction) return;
+        const action = confirmAction;
+        setConfirmAction(null);
+        switch (action.type) {
+            case 'startDeployment':
+                startDeploymentFlow();
+                break;
+            case 'bulkUpdate':
+                await bulkUpdateFlow();
+                break;
+            case 'wakeOnLan':
+                wakeOnLanFlow(action.deviceIds);
+                break;
+            case 'updateDevice':
+                await updateDeviceFlow(action.deviceId);
+                break;
+            case 'rebootDevice':
+                await rebootDeviceFlow(action.deviceId);
+                break;
+            default:
+                break;
+        }
+    };
+
+    const confirmDetails = (() => {
+        if (!confirmAction) return null;
+        switch (confirmAction.type) {
+            case 'startDeployment':
+                return {
+                    title: 'Confirm System Scan',
+                    description: 'This will initiate a scan and may send network commands to all listed devices.',
+                    count: devices.length,
+                };
+            case 'bulkUpdate':
+                return {
+                    title: 'Confirm Bulk Update',
+                    description: 'This will apply updates to the selected devices and can change device state.',
+                    count: selectedDeviceIds.size,
+                };
+            case 'wakeOnLan':
+                return {
+                    title: 'Confirm Wake-on-LAN',
+                    description: 'This will send Wake-on-LAN packets to the selected devices.',
+                    count: confirmAction.deviceIds.size,
+                };
+            case 'updateDevice':
+                return {
+                    title: 'Confirm Device Update',
+                    description: 'This will apply updates to the selected device and can change device state.',
+                    count: 1,
+                };
+            case 'rebootDevice':
+                return {
+                    title: 'Confirm Reboot',
+                    description: 'This will reboot the selected device and interrupt any active session.',
+                    count: 1,
+                };
+            default:
+                return null;
+        }
+    })();
+
+    const isReadyToDeploy = csvFile && batchQueue.length > 0 && (!scriptAnalysisResult || scriptAnalysisResult.isSafe);
 
     return (
         <div className="min-h-screen bg-slate-900 text-slate-200 font-sans p-4 sm:p-6 lg:p-8">
@@ -788,7 +1122,7 @@ const App: React.FC = () => {
                 onWakeOnLan={handleWakeOnLan}
             />
 
-            <div className="mt-4 flex items-center gap-2 bg-slate-800/50 p-2 rounded-lg border border-slate-700 w-fit">
+            <div className="mt-4 flex flex-wrap items-center gap-2 bg-slate-800/50 p-2 rounded-lg border border-slate-700 w-fit">
                 <button
                     onClick={() => setActiveView('imaging')}
                     className={`px-4 py-2 text-sm font-semibold rounded-md transition duration-200 ${
@@ -809,6 +1143,36 @@ const App: React.FC = () => {
                 >
                     Secure Deployment Runner
                 </button>
+                <button
+                    onClick={() => setActiveView('imagingScript')}
+                    className={`px-4 py-2 text-sm font-semibold rounded-md transition duration-200 ${
+                        activeView === 'imagingScript'
+                            ? 'bg-cyan-600 text-white shadow-md'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-700'
+                    }`}
+                >
+                    Imaging Script
+                </button>
+                <button
+                    onClick={() => setActiveView('buildOutput')}
+                    className={`px-4 py-2 text-sm font-semibold rounded-md transition duration-200 ${
+                        activeView === 'buildOutput'
+                            ? 'bg-cyan-600 text-white shadow-md'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-700'
+                    }`}
+                >
+                    Build Output
+                </button>
+                <button
+                    onClick={() => setActiveView('trendsAnalytics')}
+                    className={`px-4 py-2 text-sm font-semibold rounded-md transition duration-200 ${
+                        activeView === 'trendsAnalytics'
+                            ? 'bg-cyan-600 text-white shadow-md'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-700'
+                    }`}
+                >
+                    Trends &amp; Analytics
+                </button>
                 {sessionActive && (
                     <span className="ml-4 text-xs text-green-400 flex items-center gap-1">
                         <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
@@ -817,14 +1181,16 @@ const App: React.FC = () => {
                 )}
             </div>
 
-            {activeView === 'imaging' ? (
+            {activeView === 'imaging' && (
                 <div className="mt-8">
                     <ImageMonitor
                         onPromoteDevices={handlePromoteDevices}
                         onLog={addLog}
                     />
                 </div>
-            ) : (
+            )}
+
+            {activeView === 'deployment' && (
                 <main className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
                     <div className="lg:col-span-1 flex flex-col gap-8">
                         <div className="bg-slate-800/50 p-6 rounded-lg shadow-lg border border-slate-700">
@@ -834,14 +1200,23 @@ const App: React.FC = () => {
                                     <input type="file" accept=".csv" onChange={handleFileChange(setCsvFile)} className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100 w-full text-sm text-slate-400" />
                                     {csvFile && <p className="text-xs text-green-400 mt-2">Selected: {csvFile.name}</p>}
                                 </StepCard>
-                                <StepCard step="2" title="Select Deployment Package" description="Choose the .bat or .cmd script to execute remotely.">
-                                    <input type="file" accept=".bat,.cmd" onChange={handleFileChange(setBatchFile)} className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100 w-full text-sm text-slate-400" />
-                                    {batchFile && (
-                                        <div className="flex items-center justify-between mt-2">
-                                            <p className="text-xs text-green-400">Selected: {batchFile.name}</p>
-                                            <button onClick={handleAnalyzeScript} className="text-xs text-amber-400 hover:text-amber-300 underline">
-                                                Analyze Safety
-                                            </button>
+                                <StepCard step="2" title="Select Batch Files" description="Choose .bat or .cmd scripts to execute in sequence. Files run one after another.">
+                                    <input type="file" accept=".bat,.cmd" multiple onChange={handleBatchFilesChange} className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100 w-full text-sm text-slate-400" />
+                                    {batchQueue.length > 0 && (
+                                        <div className="mt-3 space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <p className="text-xs text-green-400">{batchQueue.length} file{batchQueue.length !== 1 ? 's' : ''} queued</p>
+                                                <button onClick={handleAnalyzeScript} className="text-xs text-amber-400 hover:text-amber-300 underline">
+                                                    Analyze Safety
+                                                </button>
+                                            </div>
+                                            <BatchFileQueue
+                                                entries={batchQueue}
+                                                onRemove={handleRemoveBatchFile}
+                                                onMoveUp={(id) => handleMoveBatchFile(id, 'up')}
+                                                onMoveDown={(id) => handleMoveBatchFile(id, 'down')}
+                                                disabled={deploymentState === DeploymentState.Running}
+                                            />
                                         </div>
                                     )}
                                 </StepCard>
@@ -917,11 +1292,30 @@ const App: React.FC = () => {
                                     selectedDeviceIds={selectedDeviceIds}
                                     onDeviceSelect={handleDeviceSelection}
                                     onSelectAll={handleSelectAll}
+                                    selectionDisabled={isScopeGuardOpen}
                                 />
                                 <LogViewer logs={logs} />
                             </div>
                         </div>
                     </div>
+                </main>
+            )}
+
+            {activeView === 'imagingScript' && (
+                <main className="mt-8">
+                    <ImagingScriptPage />
+                </main>
+            )}
+
+            {activeView === 'buildOutput' && (
+                <main className="mt-8">
+                    <BuildOutputPage />
+                </main>
+            )}
+
+            {activeView === 'trendsAnalytics' && (
+                <main className="mt-8">
+                    <TrendsAnalyticsPage />
                 </main>
             )}
 
@@ -931,13 +1325,38 @@ const App: React.FC = () => {
                 onConfirm={handleConfirmCredentialsAndDeploy}
             />
 
+            <AdminGateModal
+                isOpen={adminGateOpen}
+                onConfirm={() => {
+                    setIsAdminVerified(true);
+                    setAdminGateOpen(false);
+                    if (pendingAdminAction) {
+                        setConfirmAction(pendingAdminAction);
+                        setPendingAdminAction(null);
+                    }
+                }}
+                onCancel={() => {
+                    setAdminGateOpen(false);
+                    setPendingAdminAction(null);
+                }}
+            />
+
+            <ConfirmActionModal
+                isOpen={confirmAction !== null}
+                title={confirmDetails?.title ?? 'Confirm Action'}
+                description={confirmDetails?.description ?? ''}
+                deviceCount={confirmDetails?.count ?? 0}
+                onConfirm={handleConfirmAction}
+                onCancel={() => setConfirmAction(null)}
+            />
+
             <DeviceScopeGuard
                 isOpen={isScopeGuardOpen}
                 devices={devices}
                 selectedDeviceIds={selectedDeviceIds}
                 onVerificationComplete={handleScopeVerified}
                 onCancel={() => { setIsScopeGuardOpen(false); setPendingAction(null); }}
-                username={credentials.username || 'operator'}
+                username={operatorName || 'operator'}
             />
 
             <ScriptAnalysisModal

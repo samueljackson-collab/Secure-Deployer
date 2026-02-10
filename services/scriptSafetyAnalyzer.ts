@@ -1,13 +1,13 @@
 /**
  * scriptSafetyAnalyzer.ts
  *
- * DETERMINISTIC, AI-FREE script safety analyzer for hospital network deployments.
+ * DETERMINISTIC script safety analyzer for hospital network deployments.
  * Analyzes .bat, .cmd, and PowerShell scripts for dangerous patterns that could
  * affect hospital systems beyond targeted devices.
  *
  * Design principles:
  *   - False negatives are WORSE than false positives on a hospital network.
- *   - Every check is purely regex/string-based; no AI or network calls.
+ *   - Every check is purely regex/string-based; no network calls.
  *   - All pattern lists are intentionally broad to catch obfuscation attempts.
  */
 
@@ -810,7 +810,7 @@ function severityToRiskLevel(severity: ScriptFinding['severity']): ScriptSafetyR
  * Analyzes a .bat, .cmd, or PowerShell script for dangerous patterns that could
  * affect hospital systems beyond the targeted devices.
  *
- * This is DETERMINISTIC and AI-FREE. It uses only regex pattern matching.
+ * This is DETERMINISTIC. It uses only regex pattern matching.
  *
  * @param scriptContent  The raw text content of the script.
  * @param allowedHostnames  List of hostnames that the script is permitted to target.

@@ -13,7 +13,7 @@
  *   - All imaging-related fields on Device are optional because they
  *     are only populated when a device enters via the Image Monitor.
  *   - ScriptSafetyResult / ScriptFinding are the output of the
- *     deterministic (AI-free) script analyzer.
+ *     deterministic script analyzer.
  *   - ScopePolicy / ScopeVerification enforce that bulk operations
  *     only affect explicitly verified devices.
  */
@@ -53,6 +53,7 @@ export interface Device {
   };
   ipAddress?: string;
   serialNumber?: string;
+  assetTag?: string;
   model?: string;
   ramAmount?: number;
   diskSpace?: {
@@ -84,7 +85,7 @@ export type DeviceFormFactor =
   | 'vdi'              // Virtual Desktop Infrastructure client
   | 'desktop';         // Generic desktop fallback
 
-export type DeploymentStatus = 'Pending' | 'Waking Up' | 'Connecting' | 'Retrying...' | 'Checking Info' | 'Checking BIOS' | 'Checking DCU' | 'Checking Windows' | 'Scan Complete' | 'Updating' | 'Updating BIOS' | 'Updating DCU' | 'Updating Windows' | 'Success' | 'Failed' | 'Offline' | 'Cancelled' | 'Update Complete (Reboot Pending)' | 'Rebooting...';
+export type DeploymentStatus = 'Pending' | 'Waking Up' | 'Connecting' | 'Retrying...' | 'Checking Info' | 'Checking BIOS' | 'Checking DCU' | 'Checking Windows' | 'Scan Complete' | 'Updating' | 'Updating BIOS' | 'Updating DCU' | 'Updating Windows' | 'Running Script' | 'Success' | 'Failed' | 'Offline' | 'Cancelled' | 'Update Complete (Reboot Pending)' | 'Rebooting...';
 
 export type ImagingStatus = 'Not Started' | 'Collecting Metadata' | 'Imaging In Progress' | 'Imaging Complete' | 'Imaging Failed' | 'Ready for Deployment';
 
@@ -125,7 +126,7 @@ export interface DeploymentRun {
   };
 }
 
-// Script safety analysis types (deterministic, no AI)
+// Script safety analysis types (deterministic)
 export interface ScriptSafetyResult {
   isSafe: boolean;
   riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
@@ -169,6 +170,20 @@ export interface ScopeVerification {
   verifiedBy: string;
   reason?: string;
 }
+
+// Batch file execution queue types
+export type BatchFileStatus = 'pending' | 'running' | 'completed' | 'failed';
+
+export interface BatchFileEntry {
+  id: number;
+  file: File;
+  name: string;
+  status: BatchFileStatus;
+  /** Per-device execution status for this batch file */
+  deviceProgress: Record<number, BatchDeviceStatus>;
+}
+
+export type BatchDeviceStatus = 'pending' | 'running' | 'completed' | 'failed';
 
 // Imaging metadata from task sequence .bat script
 export interface ImagingMetadata {

@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import type { Device, ScopePolicy } from '../types';
+import React, { useState, useMemo, useEffect } from 'react';
+import type { Device, ScopePolicy, ScopeVerification } from '../types';
 
 interface DeviceScopeGuardProps {
   devices: Device[];
@@ -41,6 +41,17 @@ export const DeviceScopeGuard: React.FC<DeviceScopeGuardProps> = ({
     () => devices.filter((d) => selectedDeviceIds.has(d.id)),
     [devices, selectedDeviceIds],
   );
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setCheckedDeviceIds(new Set());
+    setConfirmationCount('');
+    setBlockBroadcast(true);
+    setBlockCriticalServices(true);
+    setBlockRegistryWrites(true);
+    setEnforceHostnameWhitelist(true);
+    setMaxDeviceCount(DEFAULT_MAX_DEVICE_COUNT);
+  }, [isOpen, selectedDeviceIds]);
 
   const selectedCount = selectedDevices.length;
 
@@ -125,6 +136,11 @@ export const DeviceScopeGuard: React.FC<DeviceScopeGuardProps> = ({
   const handleCancel = () => {
     setCheckedDeviceIds(new Set());
     setConfirmationCount('');
+    setBlockBroadcast(true);
+    setBlockCriticalServices(true);
+    setBlockRegistryWrites(true);
+    setEnforceHostnameWhitelist(true);
+    setMaxDeviceCount(DEFAULT_MAX_DEVICE_COUNT);
     onCancel();
   };
 
