@@ -38,6 +38,7 @@ interface DeviceIconProps {
 export const detectDeviceTypeFromHostname = (hostname: string): DeviceFormFactor => {
     const upper = hostname.toUpperCase().trim();
     const normalized = upper.replace(/[^A-Z0-9]/g, '');
+    const tokens = upper.split(/[^A-Z0-9]+/).filter(Boolean);
 
     if (!normalized) return 'desktop';
 
@@ -56,7 +57,10 @@ export const detectDeviceTypeFromHostname = (hostname: string): DeviceFormFactor
     // Laptop designation from naming standard.
     // Common examples: ELSLE, ESLSC, ELSSC, EPLPR, ELSL16
     if (second === 'L' || /(ELSLE|ESLSC|ELSSC|ELSLT|ELSL16|LAPTOP|NOTEBOOK|LAT)/.test(normalized)) {
-        if (/(16|L16|LAT16|PRE16|PRE56|PRE57|EPLPR|ELSL16)/.test(normalized)) {
+        const isLaptop16 = tokens.some((token) =>
+            /^(L16|LAT16|EPLPR|ELSL16)[A-Z0-9]*$/.test(token) || /^(PRE16|PRE56|PRE57)\d*$/.test(token)
+        );
+        if (isLaptop16) {
             return 'laptop-16';
         }
         if (/(14|L14|LAT14|ELSLE|ESLSC|ELSSC|ELSLT)/.test(normalized)) {
