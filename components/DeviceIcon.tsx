@@ -62,7 +62,7 @@ export const detectDeviceTypeFromHostname = (hostname: string): DeviceFormFactor
         if (/(14|L14|LAT14|ELSLE|ESLSC|ELSSC|ELSLT)/.test(normalized)) {
             return 'laptop-14';
         }
-        return 'laptop-14';
+        return 'laptop';
     }
 
     // Workstation/desktop designation from naming standard.
