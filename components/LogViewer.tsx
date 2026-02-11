@@ -45,7 +45,7 @@ export const LogViewer: React.FC<{ logs: LogEntry[] }> = ({ logs }) => {
     };
 
     // Developer note: filtering is client-side against in-memory logs; this keeps
-// toggles instant and avoids coupling log rendering to backend pagination.
+    // toggles instant and avoids coupling log rendering to backend pagination.
     const filteredLogs = logs.filter(log => filters.has(log.level));
 
     useEffect(() => {
