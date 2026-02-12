@@ -1,10 +1,11 @@
+
 import React, { useState } from 'react';
 import type { DeploymentRun } from '../types';
 import { HistoryChart, AnalyticsChart, calculateAnalytics } from './DeploymentAnalytics';
 
 const HistoryItem: React.FC<{ run: DeploymentRun }> = ({ run }) => {
     const barColor = run.successRate >= 90 ? 'bg-[#39FF14]' : run.successRate >= 60 ? 'bg-yellow-500' : 'bg-red-500';
-
+    
     return (
         <div className="bg-black/50 p-3 rounded-md border border-gray-800">
             <div className="flex justify-between items-center text-xs text-gray-400 mb-2 font-bold">
@@ -14,7 +15,7 @@ const HistoryItem: React.FC<{ run: DeploymentRun }> = ({ run }) => {
             <div>
                 <div className="flex justify-between mb-1">
                     <span className="text-sm font-bold text-gray-300">Success Rate</span>
-                    <span className={`text-sm font-bold ${barColor.replace('bg-', 'text-')}`}>{Math.round(run.successRate)}%</span>
+                    <span className={`text-sm font-bold ${barColor.replace('bg-','text-')}`}>{Math.round(run.successRate)}%</span>
                 </div>
                 <div className="w-full bg-gray-700 rounded-full h-2">
                     <div className={`${barColor} h-2 rounded-full`} style={{ width: `${run.successRate}%` }}></div>
@@ -35,27 +36,28 @@ const HistoryItem: React.FC<{ run: DeploymentRun }> = ({ run }) => {
                 </div>
             </div>
         </div>
-    );
-};
+    )
+}
 
-export const DeploymentHistory: React.FC<{ history: DeploymentRun[] }> = ({ history }) => {
+export const DeploymentHistory: React.FC<{ history: DeploymentRun[] }> = React.memo(({ history }) => {
     const [isExpanded, setIsExpanded] = useState(true);
     const analytics = calculateAnalytics(history);
 
     const TrendIndicator = () => {
-        if (!analytics || history.length < 2) return <span className="text-gray-400 font-bold">-</span>;
-        if (Math.abs(analytics.trend) < 1) {
+         if (!analytics || history.length < 2) return <span className="text-gray-400 font-bold">-</span>;
+         if (Math.abs(analytics.trend) < 1) {
             return <span className="text-gray-400 font-bold">~{analytics.trend.toFixed(1)}% (Stable)</span>;
         }
         if (analytics.trend > 0) {
             return <span className="text-[#39FF14] font-bold">↑{analytics.trend.toFixed(1)}% (Improving)</span>;
         }
         return <span className="text-red-400 font-bold">↓{analytics.trend.toFixed(1)}% (Declining)</span>;
-    };
+    }
+
 
     return (
         <div className="bg-gray-950 p-6 rounded-lg shadow-lg border border-gray-800">
-            <button
+            <button 
                 className="w-full text-left"
                 onClick={() => setIsExpanded(!isExpanded)}
                 aria-expanded={isExpanded}
@@ -64,7 +66,7 @@ export const DeploymentHistory: React.FC<{ history: DeploymentRun[] }> = ({ hist
                     <h2 className="text-xl font-bold text-[#39FF14]">Deployment History & Analytics</h2>
                     <span className={`transform transition-transform duration-200 ${isExpanded ? 'rotate-180' : 'rotate-0'}`}>
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
                         </svg>
                     </span>
                 </div>
@@ -86,7 +88,7 @@ export const DeploymentHistory: React.FC<{ history: DeploymentRun[] }> = ({ hist
                                         <h4 className="text-gray-400 text-sm font-bold uppercase tracking-wider">Avg Success</h4>
                                         <p className="text-2xl font-bold text-[#39FF14] mt-1">{analytics?.averageSuccessRate.toFixed(1)}%</p>
                                     </div>
-                                    <div>
+                                     <div>
                                         <h4 className="text-gray-400 text-sm font-bold uppercase tracking-wider">Top Update</h4>
                                         <p className="text-xl font-bold text-yellow-400 mt-1 capitalize">{analytics?.mostFrequentUpdate.key ?? 'N/A'}</p>
                                         {analytics?.mostFrequentUpdate && analytics.mostFrequentUpdate.value > 0 && (
@@ -102,9 +104,9 @@ export const DeploymentHistory: React.FC<{ history: DeploymentRun[] }> = ({ hist
                                     </div>
                                 </div>
                             </div>
-
+                            
                             <HistoryChart history={history} />
-
+                            
                             <AnalyticsChart
                                 title="Required Updates Trend"
                                 data={history}
@@ -141,4 +143,4 @@ export const DeploymentHistory: React.FC<{ history: DeploymentRun[] }> = ({ hist
             )}
         </div>
     );
-};
+});

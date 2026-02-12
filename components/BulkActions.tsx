@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 interface BulkActionsProps {
@@ -30,7 +31,7 @@ export const BulkActions: React.FC<BulkActionsProps> = ({ selectedCount, onUpdat
                     onClick={onExecute}
                     className="px-4 py-2 bg-yellow-500 text-black text-sm font-semibold rounded-lg hover:bg-yellow-400 transition duration-200 shadow-md"
                 >
-                    Execute Selected
+                    Execute Selected Scripts
                 </button>
                 <button
                     onClick={onValidate}

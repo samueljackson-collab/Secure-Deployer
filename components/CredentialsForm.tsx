@@ -14,7 +14,7 @@ export const CredentialsForm: React.FC<CredentialsFormProps> = ({ credentials, s
     };
 
     return (
-        <form className="space-y-3" onSubmit={(e) => e.preventDefault()} autoComplete="off">
+        <form className="space-y-3">
             <div>
                 <label htmlFor="username" className="sr-only">Username</label>
                 <input
@@ -24,8 +24,7 @@ export const CredentialsForm: React.FC<CredentialsFormProps> = ({ credentials, s
                     value={credentials.username}
                     onChange={handleChange}
                     placeholder="Username"
-                    autoComplete="off"
-                    className="w-full bg-slate-700 border border-slate-600 rounded-md px-3 py-2 text-sm text-slate-200 placeholder-slate-400 focus:ring-cyan-500 focus:border-cyan-500"
+                    className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:ring-[#39FF14] focus:border-[#39FF14]"
                 />
             </div>
             <div>
@@ -37,8 +36,7 @@ export const CredentialsForm: React.FC<CredentialsFormProps> = ({ credentials, s
                     value={credentials.password}
                     onChange={handleChange}
                     placeholder="Password"
-                    autoComplete="new-password"
-                    className="w-full bg-slate-700 border border-slate-600 rounded-md px-3 py-2 text-sm text-slate-200 placeholder-slate-400 focus:ring-cyan-500 focus:border-cyan-500"
+                    className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:ring-[#39FF14] focus:border-[#39FF14]"
                 />
             </div>
         </form>

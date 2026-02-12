@@ -1,3 +1,4 @@
+
 import React from 'react';
 import type { DeploymentRun } from '../types';
 
@@ -125,7 +126,7 @@ export const calculateAnalytics = (history: DeploymentRun[]) => {
 
     const updateTotals = { bios: 0, dcu: 0, windows: 0 };
     const failureTotals = { offline: 0, cancelled: 0, failed: 0 };
-
+    
     for (const run of history) {
         if (run.updatesNeededCounts) {
             updateTotals.bios += run.updatesNeededCounts.bios;
@@ -146,7 +147,7 @@ export const calculateAnalytics = (history: DeploymentRun[]) => {
 
     const mostFrequentUpdate = findMaxKey(updateTotals);
     const mostFrequentFailure = findMaxKey(failureTotals);
-
+    
     return {
         averageSuccessRate,
         trend,
