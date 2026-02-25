@@ -1,9 +1,28 @@
 
 
 import React, { createContext, useReducer, useContext, useEffect, useCallback } from 'react';
-import type { AppState, AppAction, AppDispatch, Device, LogEntry, ImagingDevice } from '../types';
+import type { AppState, AppAction, AppDispatch, Device, LogEntry, ImagingDevice, DeploymentTemplate } from '../types';
 import * as api from '../services/deploymentService';
 import Papa from 'papaparse';
+
+const TEMPLATES_STORAGE_KEY = 'secure_deployer_templates';
+
+const loadTemplatesFromStorage = (): DeploymentTemplate[] => {
+    try {
+        const stored = localStorage.getItem(TEMPLATES_STORAGE_KEY);
+        return stored ? JSON.parse(stored) : [];
+    } catch {
+        return [];
+    }
+};
+
+const saveTemplatesToStorage = (templates: DeploymentTemplate[]): void => {
+    try {
+        localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(templates));
+    } catch {
+        // Storage quota exceeded or unavailable — fail silently
+    }
+};
 
 const initialState: AppState = {
     runner: {
@@ -12,6 +31,7 @@ const initialState: AppState = {
         deploymentState: 'idle',
         selectedDeviceIds: new Set(),
         history: [],
+        templates: loadTemplatesFromStorage(),
         settings: {
             maxRetries: 3,
             retryDelay: 2,
@@ -92,11 +112,32 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
                     devices: state.runner.devices.map(d => cancellableStatuses.includes(d.status) ? { ...d, status: 'Cancelled' } : d)
                 }
             };
-        case 'ARCHIVE_RUN':
+        case 'ARCHIVE_RUN': {
             const currentDevices = state.runner.devices;
             if (currentDevices.length === 0) return state;
-            const newRun = api.generateRunArchive(currentDevices);
+            const newRun = api.generateRunArchive(currentDevices, state.credentials?.username);
             return { ...state, runner: { ...state.runner, history: [newRun, ...state.runner.history].slice(0, 10) } };
+        }
+        case 'SAVE_TEMPLATE': {
+            const newTemplate: DeploymentTemplate = {
+                id: `tpl_${Date.now()}`,
+                createdAt: new Date().toISOString(),
+                ...action.payload,
+            };
+            const updatedTemplates = [...state.runner.templates, newTemplate];
+            saveTemplatesToStorage(updatedTemplates);
+            return { ...state, runner: { ...state.runner, templates: updatedTemplates } };
+        }
+        case 'DELETE_TEMPLATE': {
+            const updatedTemplates = state.runner.templates.filter(t => t.id !== action.payload);
+            saveTemplatesToStorage(updatedTemplates);
+            return { ...state, runner: { ...state.runner, templates: updatedTemplates } };
+        }
+        case 'LOAD_TEMPLATE': {
+            const template = state.runner.templates.find(t => t.id === action.payload);
+            if (!template) return state;
+            return { ...state, runner: { ...state.runner, settings: { ...template.settings } } };
+        }
         
         case 'TOGGLE_DEVICE_SELECTION': {
             const newSet = new Set(state.runner.selectedDeviceIds);
@@ -304,8 +345,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, status: 'Executing Script' } });
                     const success = await api.executeScript(device);
                     if (!state.runner.isCancelled) {
-                         dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, status: success ? 'Execution Complete' : 'Execution Failed' } });
-                         addLog(`Script execution ${success ? 'succeeded' : 'failed'} on ${device.hostname}.`, success ? 'SUCCESS' : 'ERROR');
+                        const updatePayload: Partial<Device> & { id: number } = {
+                            id: device.id,
+                            status: success ? 'Execution Complete' : 'Execution Failed',
+                            ...(success ? {} : { failureDetail: api.FAILURE_CATALOG['Execution Failed'] }),
+                        };
+                        dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: updatePayload });
+                        addLog(`Script execution ${success ? 'succeeded' : 'failed'} on ${device.hostname}.`, success ? 'SUCCESS' : 'ERROR');
                     }
                 }));
                  if (action.type === 'BULK_EXECUTE') dispatch({ type: 'CLEAR_SELECTIONS' });

@@ -5,12 +5,17 @@ import { HistoryChart, AnalyticsChart, calculateAnalytics } from './DeploymentAn
 
 const HistoryItem: React.FC<{ run: DeploymentRun }> = ({ run }) => {
     const barColor = run.successRate >= 90 ? 'bg-[#39FF14]' : run.successRate >= 60 ? 'bg-yellow-500' : 'bg-red-500';
-    
+
     return (
         <div className="bg-black/50 p-3 rounded-md border border-gray-800">
             <div className="flex justify-between items-center text-xs text-gray-400 mb-2 font-bold">
                 <span>{run.endTime.toLocaleString()}</span>
-                <span className="font-semibold">{run.totalDevices} Devices</span>
+                <div className="flex items-center gap-2">
+                    {run.operatorName && (
+                        <span className="text-gray-600 font-mono">by {run.operatorName}</span>
+                    )}
+                    <span className="font-semibold">{run.totalDevices} Devices</span>
+                </div>
             </div>
             <div>
                 <div className="flex justify-between mb-1">
@@ -39,9 +44,52 @@ const HistoryItem: React.FC<{ run: DeploymentRun }> = ({ run }) => {
     )
 }
 
+const BreakdownChart: React.FC<{ title: string; items: { label: string; value: number; color: string }[] }> = ({ title, items }) => {
+    const max = Math.max(...items.map(i => i.value), 1);
+    return (
+        <div className="bg-black/50 p-4 rounded-lg border border-gray-700">
+            <h4 className="text-sm font-bold text-gray-300 mb-3 text-center">{title}</h4>
+            <div className="space-y-3">
+                {items.map(item => (
+                    <div key={item.label}>
+                        <div className="flex justify-between text-xs text-gray-400 font-bold mb-1">
+                            <span className="capitalize">{item.label}</span>
+                            <span>{item.value}</span>
+                        </div>
+                        <div className="w-full bg-gray-700 rounded-full h-2">
+                            <div
+                                className={`${item.color} h-2 rounded-full transition-all duration-300`}
+                                style={{ width: `${(item.value / max) * 100}%` }}
+                            ></div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
 export const DeploymentHistory: React.FC<{ history: DeploymentRun[] }> = React.memo(({ history }) => {
     const [isExpanded, setIsExpanded] = useState(true);
     const analytics = calculateAnalytics(history);
+
+    const updateTotals = history.reduce((acc, run) => {
+        if (run.updatesNeededCounts) {
+            acc.bios += run.updatesNeededCounts.bios;
+            acc.dcu += run.updatesNeededCounts.dcu;
+            acc.windows += run.updatesNeededCounts.windows;
+        }
+        return acc;
+    }, { bios: 0, dcu: 0, windows: 0 });
+
+    const failureTotals = history.reduce((acc, run) => {
+        if (run.failureCounts) {
+            acc.offline += run.failureCounts.offline;
+            acc.cancelled += run.failureCounts.cancelled;
+            acc.failed += run.failureCounts.failed;
+        }
+        return acc;
+    }, { offline: 0, cancelled: 0, failed: 0 });
 
     const TrendIndicator = () => {
          if (!analytics || history.length < 2) return <span className="text-gray-400 font-bold">-</span>;
@@ -54,10 +102,9 @@ export const DeploymentHistory: React.FC<{ history: DeploymentRun[] }> = React.m
         return <span className="text-red-400 font-bold">↓{analytics.trend.toFixed(1)}% (Declining)</span>;
     }
 
-
     return (
         <div className="bg-gray-950 p-6 rounded-lg shadow-lg border border-gray-800">
-            <button 
+            <button
                 className="w-full text-left"
                 onClick={() => setIsExpanded(!isExpanded)}
                 aria-expanded={isExpanded}
@@ -72,7 +119,37 @@ export const DeploymentHistory: React.FC<{ history: DeploymentRun[] }> = React.m
                 </div>
             </button>
             {isExpanded && (
-                <div className="mt-4 pt-4 border-t border-gray-700">
+                <>
+                    <div className="flex justify-end mt-4">
+                        <button
+                            onClick={() => {
+                                if (history.length === 0) return;
+                                const csv = history.map(run => ({
+                                    endTime: run.endTime.toLocaleString(),
+                                    totalDevices: run.totalDevices,
+                                    compliant: run.compliant,
+                                    needsAction: run.needsAction,
+                                    failed: run.failed,
+                                    successRate: run.successRate.toFixed(2),
+                                }));
+                                const csvContent = "data:text/csv;charset=utf-8,"
+                                    + Object.keys(csv[0]).join(",") + "\n"
+                                    + csv.map(e => Object.values(e).join(",")).join("\n");
+                                const encodedUri = encodeURI(csvContent);
+                                const link = document.createElement("a");
+                                link.setAttribute("href", encodedUri);
+                                link.setAttribute("download", "deployment_history.csv");
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                            }}
+                            disabled={history.length === 0}
+                            className="px-4 py-2 bg-gray-600 text-white text-sm font-semibold rounded-lg hover:bg-gray-500 transition duration-200 shadow-md focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50 disabled:bg-gray-800 disabled:cursor-not-allowed"
+                        >
+                            Export History
+                        </button>
+                    </div>
+                    <div className="mt-4 pt-4 border-t border-gray-700">
                     {history.length === 0 ? (
                         <p className="text-gray-400 text-sm text-center py-4 font-bold">No completed runs yet.</p>
                     ) : (
@@ -104,9 +181,9 @@ export const DeploymentHistory: React.FC<{ history: DeploymentRun[] }> = React.m
                                     </div>
                                 </div>
                             </div>
-                            
+
                             <HistoryChart history={history} />
-                            
+
                             <AnalyticsChart
                                 title="Required Updates Trend"
                                 data={history}
@@ -129,6 +206,25 @@ export const DeploymentHistory: React.FC<{ history: DeploymentRun[] }> = React.m
                                 ]}
                             />
 
+                            <div className="grid md:grid-cols-2 gap-8 mt-4">
+                                <BreakdownChart
+                                    title="Updates Needed Breakdown"
+                                    items={[
+                                        { label: 'bios', value: updateTotals.bios, color: 'bg-[#39FF14]' },
+                                        { label: 'dcu', value: updateTotals.dcu, color: 'bg-[#2ECC10]' },
+                                        { label: 'windows', value: updateTotals.windows, color: 'bg-[#20880B]' },
+                                    ]}
+                                />
+                                <BreakdownChart
+                                    title="Common Errors"
+                                    items={[
+                                        { label: 'offline', value: failureTotals.offline, color: 'bg-orange-500' },
+                                        { label: 'cancelled', value: failureTotals.cancelled, color: 'bg-gray-500' },
+                                        { label: 'failed', value: failureTotals.failed, color: 'bg-red-500' },
+                                    ]}
+                                />
+                            </div>
+
                             <div>
                                 <h4 className="text-sm font-bold text-gray-300 mb-2 text-center">Individual Run Details</h4>
                                 <div className="space-y-3 max-h-80 overflow-y-auto pr-2">
@@ -140,6 +236,7 @@ export const DeploymentHistory: React.FC<{ history: DeploymentRun[] }> = React.m
                         </div>
                     )}
                 </div>
+                </>
             )}
         </div>
     );
