@@ -10,7 +10,12 @@ const HistoryItem: React.FC<{ run: DeploymentRun }> = ({ run }) => {
         <div className="bg-black/50 p-3 rounded-md border border-gray-800">
             <div className="flex justify-between items-center text-xs text-gray-400 mb-2 font-bold">
                 <span>{run.endTime.toLocaleString()}</span>
-                <span className="font-semibold">{run.totalDevices} Devices</span>
+                <div className="flex items-center gap-2">
+                    {run.operatorName && (
+                        <span className="text-gray-600 font-mono">by {run.operatorName}</span>
+                    )}
+                    <span className="font-semibold">{run.totalDevices} Devices</span>
+                </div>
             </div>
             <div>
                 <div className="flex justify-between mb-1">

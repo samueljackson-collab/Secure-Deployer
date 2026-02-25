@@ -8,6 +8,8 @@ import { DeviceStatusTable } from './components/DeviceStatusTable';
 import { LogViewer } from './components/LogViewer';
 import { BulkActions } from './components/BulkActions';
 import { DeploymentHistory } from './components/DeploymentHistory';
+import { FailedDeviceReport } from './components/FailedDeviceReport';
+import { DeploymentTemplates } from './components/DeploymentTemplates';
 import { SecureCredentialModal } from './components/SecureCredentialModal';
 import { ImageMonitor } from './components/ImageMonitor';
 import { BuildOutput } from './components/BuildOutput';
@@ -135,6 +137,13 @@ const AppContent: React.FC = () => {
                                             </div>
                                         </div>
                                     </StepCard>
+                                    <DeploymentTemplates
+                                        templates={runner.templates}
+                                        currentSettings={runner.settings}
+                                        onSave={(tpl) => dispatch({ type: 'SAVE_TEMPLATE', payload: tpl })}
+                                        onLoad={(id) => dispatch({ type: 'LOAD_TEMPLATE', payload: id })}
+                                        onDelete={(id) => dispatch({ type: 'DELETE_TEMPLATE', payload: id })}
+                                    />
                                 </div>
                             </div>
                              <DeploymentHistory history={runner.history} />
@@ -156,6 +165,7 @@ const AppContent: React.FC = () => {
                                 </div>
                                 <DeploymentProgress devices={runner.devices} />
                             </div>
+                            <FailedDeviceReport devices={runner.devices} />
                             <BulkActions selectedCount={runner.selectedDeviceIds.size} onUpdate={() => dispatch({ type: 'BULK_UPDATE' })} onCancel={() => dispatch({ type: 'BULK_CANCEL' })} onValidate={() => dispatch({ type: 'BULK_VALIDATE' })} onExecute={() => dispatch({ type: 'BULK_EXECUTE' })} onRemove={() => dispatch({ type: 'BULK_REMOVE' })} />
                             <div className="bg-gray-950 p-6 rounded-lg shadow-lg border border-gray-800 flex-grow min-h-[400px] flex flex-col">
                                 <h2 className="text-xl font-bold text-[#39FF14] mb-4 border-b border-gray-700 pb-2">Live Logs & Device Status</h2>

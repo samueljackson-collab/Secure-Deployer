@@ -13,6 +13,25 @@ export type DeviceFormFactor =
   | 'wyse' // Wyse Thin Client
   | 'vdi'; // VDI Client
 
+export interface FailureDetail {
+  errorCode: string;
+  reason: string;
+  troubleshootingSteps: string[];
+}
+
+export interface DeploymentTemplate {
+  id: string;
+  name: string;
+  description: string;
+  createdAt: string; // ISO string for easy localStorage serialization
+  settings: {
+    maxRetries: number;
+    retryDelay: number;
+    autoRebootEnabled: boolean;
+  };
+  notes?: string;
+}
+
 export interface Device {
   id: number;
   hostname: string;
@@ -39,6 +58,7 @@ export interface Device {
     succeeded: string[];
     failed: string[];
   };
+  failureDetail?: FailureDetail;
   // New metadata fields
   ipAddress?: string;
   serialNumber?: string;
@@ -83,6 +103,7 @@ export interface DeploymentRun {
   needsAction: number;
   failed: number;
   successRate: number;
+  operatorName?: string;
   updatesNeededCounts?: {
     bios: number;
     dcu: number;
@@ -137,6 +158,7 @@ export interface AppState {
         deploymentState: DeploymentState;
         selectedDeviceIds: Set<number>;
         history: DeploymentRun[];
+        templates: DeploymentTemplate[];
         settings: {
             maxRetries: number;
             retryDelay: number;
@@ -200,7 +222,10 @@ export type AppAction =
   | { type: 'BULK_REMOVE' }
   | { type: 'RESCAN_ALL_DEVICES_PROMPT' }
   | { type: 'RESCAN_ALL_DEVICES_CONFIRMED' }
-  
+  | { type: 'SAVE_TEMPLATE'; payload: Omit<DeploymentTemplate, 'id' | 'createdAt'> }
+  | { type: 'DELETE_TEMPLATE'; payload: string }
+  | { type: 'LOAD_TEMPLATE'; payload: string }
+
   // Monitor Actions
   | { type: 'SET_IMAGING_DEVICES'; payload: ImagingDevice[] }
   | { type: 'RENAME_IMAGING_DEVICE'; payload: { deviceId: string; newHostname: string } }

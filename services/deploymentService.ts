@@ -2,9 +2,52 @@
 
 import { sleep, normalizeMacAddress } from '../utils/helpers';
 // FIX: Import DeploymentStatus to correctly type the device state.
-import type { Device, DeploymentStatus, ImagingDevice, DeploymentRun, ChecklistItem, ComplianceResult } from '../types';
+import type { Device, DeploymentStatus, ImagingDevice, DeploymentRun, ChecklistItem, ComplianceResult, FailureDetail } from '../types';
 import { TARGET_BIOS_VERSION, TARGET_DCU_VERSION, TARGET_WIN_VERSION } from '../App';
 import { ParseResult } from 'papaparse';
+
+// --- FAILURE DETAIL CATALOG ---
+// Inspired by AUTOTAG batch script error handling: each failure state maps to a
+// specific error code, human-readable reason, and ordered troubleshooting steps.
+
+export const FAILURE_CATALOG: Record<string, FailureDetail> = {
+    Offline: {
+        errorCode: 'ERR_DEVICE_UNREACHABLE',
+        reason: 'Device did not respond after all connection attempts.',
+        troubleshootingSteps: [
+            'Verify the device is powered on and connected to the network.',
+            'Confirm the MAC address in the CSV matches the physical device.',
+            'Ensure Wake-on-LAN is enabled in BIOS and the network switch supports WoL magic packets.',
+            'Ping the device IP manually to confirm network-layer connectivity.',
+            'Check firewall or VLAN rules that may block WMI or WoL traffic.',
+            'Increase Max Retries in Advanced Settings and re-run.',
+        ],
+    },
+    Failed: {
+        errorCode: 'ERR_UPDATE_FAILED',
+        reason: 'One or more component updates failed during execution.',
+        troubleshootingSteps: [
+            'Review the update result section to identify which component failed.',
+            'Ensure the device has at least 10 GB of free disk space.',
+            'Verify the device has a stable network connection to the update source.',
+            'Reboot the device manually to clear any partial update state, then re-scan.',
+            'Check the Live Log for the specific error returned by the update tool.',
+            'Run the update manually on the device and verify it completes without errors.',
+        ],
+    },
+    'Execution Failed': {
+        errorCode: 'ERR_SCRIPT_EXEC_FAILED',
+        reason: 'The post-imaging deployment script failed to execute successfully.',
+        troubleshootingSteps: [
+            'Verify the selected script file is not corrupted or zero-length.',
+            'Confirm the script requires no interactive prompts (must be fully silent).',
+            'Check if the script requires elevated (admin) privileges on the target device.',
+            'Review script syntax — PowerShell scripts must use valid PS5.1-compatible syntax.',
+            'Ensure all dependencies or packages referenced by the script are present on the device.',
+            'Run the script manually on the device and capture the output for diagnosis.',
+        ],
+    },
+};
 
 // --- HELPERS ---
 
@@ -123,7 +166,7 @@ const validateDevice = async (
     }
 
     if (!isConnected) {
-        onProgress({ ...currentDeviceState, status: 'Offline' });
+        onProgress({ ...currentDeviceState, status: 'Offline', failureDetail: FAILURE_CATALOG['Offline'] });
         return;
     }
 
@@ -220,6 +263,10 @@ export const updateDevice = async (
 
     if (failed.length > 0) {
         currentDeviceState.status = 'Failed';
+        currentDeviceState.failureDetail = {
+            ...FAILURE_CATALOG['Failed'],
+            reason: `Update failed for: ${failed.join(', ')}.`,
+        };
     } else if (succeeded.length > 0) {
         currentDeviceState.status = needsReboot ? 'Update Complete (Reboot Pending)' : 'Success';
     } else {
@@ -243,7 +290,7 @@ export const executeScript = async (device: Device): Promise<boolean> => {
     return Math.random() > 0.2;
 };
 
-export const generateRunArchive = (devices: Device[]): DeploymentRun => {
+export const generateRunArchive = (devices: Device[], operatorName?: string): DeploymentRun => {
     const total = devices.length;
     const compliant = devices.filter(d => ['Success', 'Execution Complete'].includes(d.status)).length;
     const needsAction = devices.filter(d => ['Scan Complete', 'Update Complete (Reboot Pending)', 'Ready for Execution', 'Pending File'].includes(d.status)).length;
@@ -268,6 +315,7 @@ export const generateRunArchive = (devices: Device[]): DeploymentRun => {
         totalDevices: total,
         compliant, needsAction, failed: failedTotal,
         successRate: total > 0 ? (compliant / total) * 100 : 0,
+        operatorName,
         updatesNeededCounts, failureCounts,
     };
 };
