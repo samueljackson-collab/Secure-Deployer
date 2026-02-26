@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { useAppContext } from '../contexts/AppContext';
 
 interface HeaderProps {
     selectedDeviceIds: Set<number>;
@@ -7,6 +8,7 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = React.memo(({ selectedDeviceIds, onWakeOnLan }) => {
+    const { dispatch } = useAppContext();
     const hasSelection = selectedDeviceIds.size > 0;
 
     return (
@@ -23,6 +25,12 @@ export const Header: React.FC<HeaderProps> = React.memo(({ selectedDeviceIds, on
                     title={hasSelection ? `Send Wake-on-LAN signal to ${selectedDeviceIds.size} selected device(s)` : 'Select devices to send Wake-on-LAN signal'}
                 >
                     Wake-on-LAN ({selectedDeviceIds.size})
+                </button>
+                <button
+                    onClick={() => dispatch({ type: 'SET_SYSTEM_INFO_MODAL_OPEN', payload: true })}
+                    className="px-4 py-2 bg-gray-700 text-white text-sm font-semibold rounded-lg hover:bg-gray-600 transition duration-200 shadow-md focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50"
+                >
+                    System Info
                 </button>
                 <div className="flex items-center space-x-2" title="The deployment system is online and ready.">
                      <div className="w-3 h-3 bg-[#39FF14] rounded-full animate-pulse"></div>

@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import type { ImagingDevice, ImagingStatus, ComplianceResult } from '../types';
 import { DeviceIcon } from './DeviceIcon';
-// FIX: Import detectDeviceType from App.tsx where it is now defined and exported.
-import { detectDeviceType } from '../App';
+// FIX: Import detectDeviceType from its new centralized location in utils/helpers.
+import { detectDeviceType } from '../utils/helpers';
 
 const statusColors: Record<ImagingStatus, { text: string; bg: string; }> = {
     Imaging: { text: 'text-[#39FF14]', bg: 'bg-[#39FF14]' },

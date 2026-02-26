@@ -8,8 +8,6 @@ import { DeviceStatusTable } from './components/DeviceStatusTable';
 import { LogViewer } from './components/LogViewer';
 import { BulkActions } from './components/BulkActions';
 import { DeploymentHistory } from './components/DeploymentHistory';
-import { FailedDeviceReport } from './components/FailedDeviceReport';
-import { DeploymentTemplates } from './components/DeploymentTemplates';
 import { SecureCredentialModal } from './components/SecureCredentialModal';
 import { ImageMonitor } from './components/ImageMonitor';
 import { BuildOutput } from './components/BuildOutput';
@@ -26,21 +24,6 @@ import { AppProvider, useAppContext } from './contexts/AppContext';
 export const TARGET_BIOS_VERSION = 'A24';
 export const TARGET_DCU_VERSION = '5.1.0';
 export const TARGET_WIN_VERSION = '23H2';
-
-// FIX: Exported function to determine device type from hostname.
-export const detectDeviceType = (hostname: string): DeviceFormFactor => {
-    const lowerHostname = hostname.toLowerCase();
-    if (lowerHostname.includes('l14') || lowerHostname.includes('lap14')) return 'laptop-14';
-    if (lowerHostname.includes('l16') || lowerHostname.includes('lap16')) return 'laptop-16';
-    if (lowerHostname.includes('lap') || lowerHostname.includes('lt')) return 'laptop';
-    if (lowerHostname.includes('sff')) return 'sff';
-    if (lowerHostname.includes('micro')) return 'micro';
-    if (lowerHostname.includes('twr') || lowerHostname.includes('tower')) return 'tower';
-    if (lowerHostname.includes('wyse')) return 'wyse';
-    if (lowerHostname.includes('vdi')) return 'vdi';
-    if (lowerHostname.includes('detach')) return 'detachable';
-    return 'desktop';
-};
 
 const AppContent: React.FC = () => {
     const { state, dispatch } = useAppContext();
@@ -137,13 +120,6 @@ const AppContent: React.FC = () => {
                                             </div>
                                         </div>
                                     </StepCard>
-                                    <DeploymentTemplates
-                                        templates={runner.templates}
-                                        currentSettings={runner.settings}
-                                        onSave={(tpl) => dispatch({ type: 'SAVE_TEMPLATE', payload: tpl })}
-                                        onLoad={(id) => dispatch({ type: 'LOAD_TEMPLATE', payload: id })}
-                                        onDelete={(id) => dispatch({ type: 'DELETE_TEMPLATE', payload: id })}
-                                    />
                                 </div>
                             </div>
                              <DeploymentHistory history={runner.history} />
@@ -165,8 +141,15 @@ const AppContent: React.FC = () => {
                                 </div>
                                 <DeploymentProgress devices={runner.devices} />
                             </div>
-                            <FailedDeviceReport devices={runner.devices} />
-                            <BulkActions selectedCount={runner.selectedDeviceIds.size} onUpdate={() => dispatch({ type: 'BULK_UPDATE' })} onCancel={() => dispatch({ type: 'BULK_CANCEL' })} onValidate={() => dispatch({ type: 'BULK_VALIDATE' })} onExecute={() => dispatch({ type: 'BULK_EXECUTE' })} onRemove={() => dispatch({ type: 'BULK_REMOVE' })} onDeployOperation={(payload) => dispatch({ type: 'BULK_DEPLOY_OPERATION', payload })} />
+                            <BulkActions 
+                                selectedCount={runner.selectedDeviceIds.size} 
+                                onUpdate={() => dispatch({ type: 'BULK_UPDATE' })} 
+                                onCancel={() => dispatch({ type: 'BULK_CANCEL' })} 
+                                onValidate={() => dispatch({ type: 'BULK_VALIDATE' })} 
+                                onExecute={() => dispatch({ type: 'BULK_EXECUTE' })} 
+                                onRemove={() => dispatch({ type: 'BULK_REMOVE' })} 
+                                onDeployOperation={(payload) => dispatch({ type: 'BULK_DEPLOY_OPERATION', payload })}
+                            />
                             <div className="bg-gray-950 p-6 rounded-lg shadow-lg border border-gray-800 flex-grow min-h-[400px] flex flex-col">
                                 <h2 className="text-xl font-bold text-[#39FF14] mb-4 border-b border-gray-700 pb-2">Live Logs & Device Status</h2>
                                 <div className="grid xl:grid-cols-2 gap-6 flex-grow min-h-0">
@@ -181,6 +164,7 @@ const AppContent: React.FC = () => {
                                         selectedDeviceIds={runner.selectedDeviceIds} 
                                         onDeviceSelect={(id) => dispatch({ type: 'TOGGLE_DEVICE_SELECTION', payload: id })} 
                                         onSelectAll={(select) => dispatch({ type: 'SELECT_ALL_DEVICES', payload: select })} 
+                                        deploymentState={runner.deploymentState}
                                      />
                                      <LogViewer logs={runner.logs} />
                                 </div>

@@ -8,19 +8,20 @@ import { TARGET_BIOS_VERSION, TARGET_DCU_VERSION, TARGET_WIN_VERSION } from '../
 
 const statusColors: Record<DeploymentStatus, string> = {
     Pending: 'text-gray-400',
+    'Pending Validation': 'text-purple-400',
     'Waking Up': 'text-yellow-400 animate-pulse',
-    Connecting: 'text-[#39FF14] animate-pulse',
-    'Retrying...': 'text-[#39FF14] animate-pulse',
+    Connecting: 'text-cyan-400 animate-pulse',
+    'Retrying...': 'text-yellow-500 animate-pulse',
     Validating: 'text-cyan-400 animate-pulse',
-    'Checking Info': 'text-[#39FF14] animate-pulse',
-    'Checking BIOS': 'text-[#39FF14] animate-pulse',
-    'Checking DCU': 'text-[#39FF14] animate-pulse',
-    'Checking Windows': 'text-[#39FF14] animate-pulse',
+    'Checking Info': 'text-cyan-400 animate-pulse',
+    'Checking BIOS': 'text-cyan-400 animate-pulse',
+    'Checking DCU': 'text-cyan-400 animate-pulse',
+    'Checking Windows': 'text-cyan-400 animate-pulse',
     'Scan Complete': 'text-yellow-400',
-    Updating: 'text-[#39FF14] animate-pulse',
-    'Updating BIOS': 'text-[#39FF14] animate-pulse',
-    'Updating DCU': 'text-[#39FF14] animate-pulse',
-    'Updating Windows': 'text-[#39FF14] animate-pulse',
+    Updating: 'text-blue-400 animate-pulse',
+    'Updating BIOS': 'text-blue-400 animate-pulse',
+    'Updating DCU': 'text-blue-400 animate-pulse',
+    'Updating Windows': 'text-blue-400 animate-pulse',
     'Update Complete (Reboot Pending)': 'text-purple-400',
     'Rebooting...': 'text-teal-400 animate-pulse',
     Success: 'text-[#39FF14]',
@@ -29,7 +30,7 @@ const statusColors: Record<DeploymentStatus, string> = {
     Cancelled: 'text-gray-500',
     'Pending File': 'text-blue-400',
     'Ready for Execution': 'text-yellow-400',
-    'Executing Script': 'text-[#39FF14] animate-pulse',
+    'Executing Script': 'text-blue-400 animate-pulse',
     'Execution Complete': 'text-[#39FF14]',
     'Execution Failed': 'text-red-400',
     'Deploying Action': 'text-cyan-400 animate-pulse',
@@ -76,10 +77,20 @@ const ComplianceChecklistItem: React.FC<{
     );
 };
 
-const MetadataItem: React.FC<{ label: string; value: string | undefined }> = ({ label, value }) => (
-    <li className="flex justify-between items-center py-1 border-b border-gray-800/50">
+const MetadataItem: React.FC<{ label: string; value: string | undefined; onCopy: (value: string | undefined, label: string) => void }> = ({ label, value, onCopy }) => (
+    <li 
+        className="flex justify-between items-center py-1 border-b border-gray-800/50 cursor-pointer group hover:bg-gray-800/50 px-2 -mx-2 rounded-md transition-colors"
+        onClick={() => onCopy(value, label)}
+        title={`Click to copy: ${value}`}
+    >
         <span className="text-sm text-gray-400 font-bold">{label}</span>
-        <span className="font-mono text-sm text-gray-200">{value || '-'}</span>
+        <div className="flex items-center gap-2">
+            <span className="font-mono text-sm text-gray-200">{value || '-'}</span>
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-600 group-hover:text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M7 9a2 2 0 012-2h6a2 2 0 012 2v6a2 2 0 01-2 2H9a2 2 0 01-2-2V9z" />
+                <path d="M5 3a2 2 0 00-2 2v6a2 2 0 002 2V5h6a2 2 0 00-2-2H5z" />
+            </svg>
+        </div>
     </li>
 );
 
@@ -111,11 +122,25 @@ interface DeviceStatusTableProps {
     onRemoteIn: (deviceId: number) => void;
     onDeviceSelect: (deviceId: number) => void;
     onSelectAll: (select: boolean) => void;
+    deploymentState: 'idle' | 'running' | 'complete';
 }
 
-export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, selectedDeviceIds, onUpdateDevice, onRebootDevice, onValidateDevice, onSetScriptFile, onExecuteScript, onRemoteIn, onDeviceSelect, onSelectAll }) => {
+export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, selectedDeviceIds, onUpdateDevice, onRebootDevice, onValidateDevice, onSetScriptFile, onExecuteScript, onRemoteIn, onDeviceSelect, onSelectAll, deploymentState }) => {
     const [showLegend, setShowLegend] = useState(false);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; deviceId: number } | null>(null);
+    const [copyNotification, setCopyNotification] = useState<string | null>(null);
+
+    const copyToClipboard = (text: string | undefined, fieldName: string) => {
+        if (!text) return;
+        navigator.clipboard.writeText(text).then(() => {
+            setCopyNotification(`${fieldName} copied!`);
+            setTimeout(() => setCopyNotification(null), 2000);
+        }).catch(err => {
+            console.error('Failed to copy: ', err);
+            setCopyNotification(`Failed to copy ${fieldName}.`);
+            setTimeout(() => setCopyNotification(null), 2000);
+        });
+    };
     const allSelected = devices.length > 0 && selectedDeviceIds.size === devices.length;
     const isScanActionable = (status: DeploymentStatus) => ['Success', 'Failed', 'Offline', 'Cancelled', 'Scan Complete'].includes(status);
     const isRunningAction = (status: DeploymentStatus) => !isScanActionable(status) && !['Pending', 'Update Complete (Reboot Pending)', 'Pending File', 'Ready for Execution', 'Execution Complete', 'Execution Failed'].includes(status);
@@ -127,7 +152,12 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
     };
 
     return (
-        <div className="bg-black/50 rounded-lg overflow-hidden border border-gray-800 h-full flex flex-col relative" onClick={() => setContextMenu(null)}>
+                <div className="bg-black/50 rounded-lg overflow-hidden border border-gray-800 h-full flex flex-col relative" onClick={() => setContextMenu(null)}>
+            {copyNotification && (
+                <div className="absolute top-4 right-4 bg-green-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg z-20 animate-fade-out-fast">
+                    {copyNotification}
+                </div>
+            )}
             <div className="p-3 bg-black/25 border-b border-gray-800 flex justify-between items-center">
                 <h3 className="font-semibold text-gray-200">Device Status</h3>
                 <div className="flex items-center" title="Select or deselect all devices in the list">
@@ -145,7 +175,7 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
             <div className="overflow-y-auto flex-grow p-3 space-y-3">
                 {devices.map(device => {
                     const needsUpdate = Object.values(device.updatesNeeded || {}).some(needed => needed);
-                    const showScanDetails = !['Pending', 'Waking Up'].includes(device.status);
+                    const showScanDetails = !['Pending', 'Waking Up', 'Pending Validation'].includes(device.status);
                     const showDeploymentDetails = ['Pending File', 'Ready for Execution', 'Executing Script', 'Execution Complete', 'Execution Failed'].includes(device.status);
                     const isSelected = selectedDeviceIds.has(device.id);
 
@@ -179,9 +209,9 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
                                         <div>
                                             <h5 className="text-xs font-bold uppercase text-gray-500 mb-1">System Details</h5>
                                             <ul className="space-y-1">
-                                                <MetadataItem label="Model" value={device.model} />
-                                                <MetadataItem label="Serial #" value={device.serialNumber} />
-                                                <MetadataItem label="Asset Tag" value={device.assetTag} />
+                                                <MetadataItem label="Model" value={device.model} onCopy={copyToClipboard} />
+                                                <MetadataItem label="Serial #" value={device.serialNumber} onCopy={copyToClipboard} />
+                                                <MetadataItem label="Asset Tag" value={device.assetTag} onCopy={copyToClipboard} />
                                             </ul>
                                         </div>
                                         <div>
@@ -221,7 +251,7 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
                                         {isScanActionable(device.status) && (
                                             <button
                                                 onClick={() => onValidateDevice(device.id)}
-                                                disabled={isRunningAction(device.status)}
+                                                disabled={deploymentState === 'running'}
                                                 className="w-full px-4 py-2 bg-gray-600 text-white text-sm font-semibold rounded-lg hover:bg-gray-500 transition duration-200 shadow-md focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50 disabled:bg-gray-800 disabled:cursor-not-allowed"
                                                 title="Re-run the compliance scan on this device."
                                             >

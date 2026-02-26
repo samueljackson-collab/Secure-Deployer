@@ -22,6 +22,11 @@ export const SecureCredentialModal: React.FC<SecureCredentialModalProps> = ({ is
         setCredentials({ username: '', password: '' });
     };
 
+    const handleClose = () => {
+        setCredentials({ username: '', password: '' });
+        onClose();
+    };
+
     const isFormValid = credentials.username.trim() !== '' && credentials.password.trim() !== '';
 
     return (
@@ -41,7 +46,7 @@ export const SecureCredentialModal: React.FC<SecureCredentialModalProps> = ({ is
                 </div>
                 <div className="p-4 bg-black/50 rounded-b-lg flex justify-end space-x-4">
                     <button
-                        onClick={onClose}
+                        onClick={handleClose}
                         className="px-4 py-2 bg-gray-700 text-white text-sm font-semibold rounded-lg hover:bg-gray-600 transition duration-200"
                     >
                         Cancel

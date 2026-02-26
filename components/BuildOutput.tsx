@@ -103,14 +103,14 @@ export const BuildOutput: React.FC = () => {
                     <p className="mt-1 text-sm mb-4">Follow these steps in your local development environment to produce the final executable.</p>
                     <ol className="list-decimal list-inside mt-2 space-y-4 text-sm">
                         <li>
-                            <strong className="text-gray-200">Install Prerequisites:</strong> You'll need Node.js for the frontend and Rust for the backend. Follow the official <a href="https://tauri.app/v1/guides/getting-started/prerequisites" target="_blank" rel="noopener noreferrer" className="text-[#39FF14] hover:underline">Tauri prerequisites guide</a> for your operating system.
+                            <strong className="text-gray-200">Install Prerequisites:</strong> You&apos;ll need Node.js for the frontend and Rust for the backend. Follow the official <a href="https://tauri.app/v1/guides/getting-started/prerequisites" target="_blank" rel="noopener noreferrer" className="text-[#39FF14] hover:underline">Tauri prerequisites guide</a> for your operating system.
                         </li>
                         <li>
                             <strong className="text-gray-200">Install Project Dependencies:</strong> Open a terminal in the project root and run the command:
                             <pre className="bg-black/50 p-2 mt-1 rounded-md text-xs font-mono">npm install</pre>
                         </li>
                          <li>
-                            <strong className="text-gray-200">Initialize Tauri (One-Time Setup):</strong> If Tauri isn't already set up for this project, run:
+                            <strong className="text-gray-200">Initialize Tauri (One-Time Setup):</strong> If Tauri isn&apos;t already set up for this project, run:
                             <pre className="bg-black/50 p-2 mt-1 rounded-md text-xs font-mono">npm run tauri init</pre>
                         </li>
                         <li>

@@ -1,21 +1,16 @@
-
 import React, { useState } from 'react';
 import type { DeploymentRun } from '../types';
 import { HistoryChart, AnalyticsChart, calculateAnalytics } from './DeploymentAnalytics';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 const HistoryItem: React.FC<{ run: DeploymentRun }> = ({ run }) => {
     const barColor = run.successRate >= 90 ? 'bg-[#39FF14]' : run.successRate >= 60 ? 'bg-yellow-500' : 'bg-red-500';
-
+    
     return (
         <div className="bg-black/50 p-3 rounded-md border border-gray-800">
             <div className="flex justify-between items-center text-xs text-gray-400 mb-2 font-bold">
                 <span>{run.endTime.toLocaleString()}</span>
-                <div className="flex items-center gap-2">
-                    {run.operatorName && (
-                        <span className="text-gray-600 font-mono">by {run.operatorName}</span>
-                    )}
-                    <span className="font-semibold">{run.totalDevices} Devices</span>
-                </div>
+                <span className="font-semibold">{run.totalDevices} Devices</span>
             </div>
             <div>
                 <div className="flex justify-between mb-1">
@@ -44,67 +39,32 @@ const HistoryItem: React.FC<{ run: DeploymentRun }> = ({ run }) => {
     )
 }
 
-const BreakdownChart: React.FC<{ title: string; items: { label: string; value: number; color: string }[] }> = ({ title, items }) => {
-    const max = Math.max(...items.map(i => i.value), 1);
-    return (
-        <div className="bg-black/50 p-4 rounded-lg border border-gray-700">
-            <h4 className="text-sm font-bold text-gray-300 mb-3 text-center">{title}</h4>
-            <div className="space-y-3">
-                {items.map(item => (
-                    <div key={item.label}>
-                        <div className="flex justify-between text-xs text-gray-400 font-bold mb-1">
-                            <span className="capitalize">{item.label}</span>
-                            <span>{item.value}</span>
-                        </div>
-                        <div className="w-full bg-gray-700 rounded-full h-2">
-                            <div
-                                className={`${item.color} h-2 rounded-full transition-all duration-300`}
-                                style={{ width: `${(item.value / max) * 100}%` }}
-                            ></div>
-                        </div>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-};
-
 export const DeploymentHistory: React.FC<{ history: DeploymentRun[] }> = React.memo(({ history }) => {
     const [isExpanded, setIsExpanded] = useState(true);
-    const analytics = calculateAnalytics(history);
-
-    const updateTotals = history.reduce((acc, run) => {
-        if (run.updatesNeededCounts) {
-            acc.bios += run.updatesNeededCounts.bios;
-            acc.dcu += run.updatesNeededCounts.dcu;
-            acc.windows += run.updatesNeededCounts.windows;
-        }
-        return acc;
-    }, { bios: 0, dcu: 0, windows: 0 });
-
-    const failureTotals = history.reduce((acc, run) => {
-        if (run.failureCounts) {
-            acc.offline += run.failureCounts.offline;
-            acc.cancelled += run.failureCounts.cancelled;
-            acc.failed += run.failureCounts.failed;
-        }
-        return acc;
-    }, { offline: 0, cancelled: 0, failed: 0 });
+    const analytics = calculateAnalytics(history) || {
+        averageSuccessRate: 0,
+        trend: 0,
+        mostFrequentUpdate: { key: 'N/A', value: 0 },
+        mostFrequentFailure: { key: 'N/A', value: 0 },
+    };
 
     const TrendIndicator = () => {
-         if (!analytics || history.length < 2) return <span className="text-gray-400 font-bold">-</span>;
-         if (Math.abs(analytics.trend) < 1) {
-            return <span className="text-gray-400 font-bold">~{analytics.trend.toFixed(1)}% (Stable)</span>;
+        if (!analytics || history.length < 2) return <span className="text-gray-400 font-bold">-</span>;
+
+        const trendValue = analytics.trend;
+        if (Math.abs(trendValue) < 1) {
+            return <span className="text-gray-400 font-bold">~{trendValue.toFixed(1)}% (Stable)</span>;
         }
-        if (analytics.trend > 0) {
-            return <span className="text-[#39FF14] font-bold">↑{analytics.trend.toFixed(1)}% (Improving)</span>;
+        if (trendValue > 0) {
+            return <span className="text-[#39FF14] font-bold">↑{trendValue.toFixed(1)}% (Improving)</span>;
         }
-        return <span className="text-red-400 font-bold">↓{analytics.trend.toFixed(1)}% (Declining)</span>;
+        return <span className="text-red-400 font-bold">↓{trendValue.toFixed(1)}% (Declining)</span>;
     }
+
 
     return (
         <div className="bg-gray-950 p-6 rounded-lg shadow-lg border border-gray-800">
-            <button
+            <button 
                 className="w-full text-left"
                 onClick={() => setIsExpanded(!isExpanded)}
                 aria-expanded={isExpanded}
@@ -121,7 +81,7 @@ export const DeploymentHistory: React.FC<{ history: DeploymentRun[] }> = React.m
             {isExpanded && (
                 <>
                     <div className="flex justify-end mt-4">
-                        <button
+                        <button 
                             onClick={() => {
                                 if (history.length === 0) return;
                                 const csv = history.map(run => ({
@@ -154,36 +114,38 @@ export const DeploymentHistory: React.FC<{ history: DeploymentRun[] }> = React.m
                         <p className="text-gray-400 text-sm text-center py-4 font-bold">No completed runs yet.</p>
                     ) : (
                         <div className="space-y-8">
-                            <div className="bg-black/50 p-4 rounded-lg border border-gray-700">
-                                <h3 className="text-base font-bold text-center text-gray-300 mb-3">Analytics Dashboard</h3>
-                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-center">
-                                    <div>
-                                        <h4 className="text-gray-400 text-sm font-bold uppercase tracking-wider">Success Trend</h4>
-                                        <p className="text-2xl font-bold mt-1"><TrendIndicator /></p>
-                                    </div>
-                                    <div>
-                                        <h4 className="text-gray-400 text-sm font-bold uppercase tracking-wider">Avg Success</h4>
-                                        <p className="text-2xl font-bold text-[#39FF14] mt-1">{analytics?.averageSuccessRate.toFixed(1)}%</p>
-                                    </div>
-                                     <div>
-                                        <h4 className="text-gray-400 text-sm font-bold uppercase tracking-wider">Top Update</h4>
-                                        <p className="text-xl font-bold text-yellow-400 mt-1 capitalize">{analytics?.mostFrequentUpdate.key ?? 'N/A'}</p>
-                                        {analytics?.mostFrequentUpdate && analytics.mostFrequentUpdate.value > 0 && (
-                                            <p className="text-xs text-gray-500 font-bold">{analytics.mostFrequentUpdate.value} occurrences</p>
-                                        )}
-                                    </div>
-                                    <div>
-                                        <h4 className="text-gray-400 text-sm font-bold uppercase tracking-wider">Top Failure</h4>
-                                        <p className="text-xl font-bold text-red-400 mt-1 capitalize">{analytics?.mostFrequentFailure.key ?? 'N/A'}</p>
-                                        {analytics?.mostFrequentFailure && analytics.mostFrequentFailure.value > 0 && (
-                                            <p className="text-xs text-gray-500 font-bold">{analytics.mostFrequentFailure.value} occurrences</p>
-                                        )}
+                            {analytics && (
+                                <div className="bg-black/50 p-4 rounded-lg border border-gray-700">
+                                    <h3 className="text-base font-bold text-center text-gray-300 mb-3">Analytics Dashboard</h3>
+                                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-center">
+                                        <div>
+                                            <h4 className="text-gray-400 text-sm font-bold uppercase tracking-wider">Success Trend</h4>
+                                            <p className="text-2xl font-bold mt-1"><TrendIndicator /></p>
+                                        </div>
+                                        <div>
+                                            <h4 className="text-gray-400 text-sm font-bold uppercase tracking-wider">Avg Success</h4>
+                                            <p className="text-2xl font-bold text-[#39FF14] mt-1">{analytics?.averageSuccessRate?.toFixed(1)}%</p>
+                                        </div>
+                                        <div>
+                                            <h4 className="text-gray-400 text-sm font-bold uppercase tracking-wider">Top Update</h4>
+                                            <p className="text-xl font-bold text-yellow-400 mt-1 capitalize">{analytics?.mostFrequentUpdate?.key ?? 'N/A'}</p>
+                                            {analytics?.mostFrequentUpdate?.value > 0 && (
+                                                <p className="text-xs text-gray-500 font-bold">{analytics?.mostFrequentUpdate?.value} occurrences</p>
+                                            )}
+                                        </div>
+                                        <div>
+                                            <h4 className="text-gray-400 text-sm font-bold uppercase tracking-wider">Top Failure</h4>
+                                            <p className="text-xl font-bold text-red-400 mt-1 capitalize">{analytics?.mostFrequentFailure?.key ?? 'N/A'}</p>
+                                            {analytics?.mostFrequentFailure?.value > 0 && (
+                                                <p className="text-xs text-gray-500 font-bold">{analytics?.mostFrequentFailure?.value} occurrences</p>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-
+                            )}
+                            
                             <HistoryChart history={history} />
-
+                            
                             <AnalyticsChart
                                 title="Required Updates Trend"
                                 data={history}
@@ -206,24 +168,32 @@ export const DeploymentHistory: React.FC<{ history: DeploymentRun[] }> = React.m
                                 ]}
                             />
 
-                            <div className="grid md:grid-cols-2 gap-8 mt-4">
-                                <BreakdownChart
-                                    title="Updates Needed Breakdown"
-                                    items={[
-                                        { label: 'bios', value: updateTotals.bios, color: 'bg-[#39FF14]' },
-                                        { label: 'dcu', value: updateTotals.dcu, color: 'bg-[#2ECC10]' },
-                                        { label: 'windows', value: updateTotals.windows, color: 'bg-[#20880B]' },
-                                    ]}
-                                />
-                                <BreakdownChart
-                                    title="Common Errors"
-                                    items={[
-                                        { label: 'offline', value: failureTotals.offline, color: 'bg-orange-500' },
-                                        { label: 'cancelled', value: failureTotals.cancelled, color: 'bg-gray-500' },
-                                        { label: 'failed', value: failureTotals.failed, color: 'bg-red-500' },
-                                    ]}
-                                />
-                            </div>
+                            {analytics && (
+                                <div className="grid md:grid-cols-2 gap-8 mt-4">
+                                    <div className="bg-black/50 p-4 rounded-lg border border-gray-700">
+                                        <h4 className="text-sm font-bold text-gray-300 mb-2 text-center">Updates Needed Breakdown</h4>
+                                        <ResponsiveContainer width="100%" height={200}>
+                                            <BarChart data={[analytics.mostFrequentUpdate]} layout="vertical">
+                                                <XAxis type="number" hide />
+                                                <YAxis type="category" dataKey="key" hide />
+                                                <Tooltip />
+                                                <Bar dataKey="value" fill="#39FF14" />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                    <div className="bg-black/50 p-4 rounded-lg border border-gray-700">
+                                        <h4 className="text-sm font-bold text-gray-300 mb-2 text-center">Common Errors</h4>
+                                        <ResponsiveContainer width="100%" height={200}>
+                                            <BarChart data={[analytics.mostFrequentFailure]} layout="vertical">
+                                                <XAxis type="number" hide />
+                                                <YAxis type="category" dataKey="key" hide />
+                                                <Tooltip />
+                                                <Bar dataKey="value" fill="#ef4444" />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </div>
+                            )}
 
                             <div>
                                 <h4 className="text-sm font-bold text-gray-300 mb-2 text-center">Individual Run Details</h4>

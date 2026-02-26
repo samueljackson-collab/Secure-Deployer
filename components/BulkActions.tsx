@@ -2,6 +2,8 @@
 import React from 'react';
 import type { DeploymentOperationType } from '../types';
 
+import type { DeploymentOperationType } from '../types';
+
 interface BulkActionsProps {
     selectedCount: number;
     onUpdate: () => void;
@@ -44,7 +46,8 @@ export const BulkActions: React.FC<BulkActionsProps> = ({ selectedCount, onUpdat
                 </button>
                 <button
                     onClick={onValidate}
-                    className="px-4 py-2 bg-gray-600 text-white text-sm font-semibold rounded-lg hover:bg-gray-500 transition duration-200 shadow-md"
+                    className="px-4 py-2 bg-gray-600 text-white text-sm font-semibold rounded-lg hover:bg-gray-500 transition duration-200 shadow-md disabled:bg-gray-800 disabled:cursor-not-allowed"
+                    disabled={selectedCount === 0}
                 >
                     Validate Selected
                 </button>

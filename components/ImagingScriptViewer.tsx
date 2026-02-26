@@ -184,10 +184,41 @@ export const ImagingScriptViewer: React.FC = () => {
                         <li>
                             Modify the <code className="bg-gray-800 px-1 rounded font-mono">$NetworkSharePath</code> variable in the script to point to a network share accessible by both WinPE and the machine running this web app.
                         </li>
-                        <li>Integrate the script as a step in your imaging Task Sequence before the 'Apply Operating System' step.</li>
+                        <li>Integrate the script as a step in your imaging Task Sequence before the &apos;Apply Operating System&apos; step.</li>
                         <li>When the script runs, it will prompt the technician for the necessary information.</li>
-                        <li>Once submitted, the device will appear in the "Image Monitor" tab.</li>
+                        <li>Once submitted, the device will appear in the &quot;Image Monitor&quot; tab.</li>
                     </ol>
+                </div>
+
+                <div>
+                    <h3 className="text-lg font-semibold text-gray-100">Automating with Task Sequence Variables</h3>
+                    <p className="text-sm text-gray-300 mt-2">
+                        To run this script in a fully automated SCCM/MDT Task Sequence without manual prompts, you can replace the <code className="bg-gray-800 px-1 rounded font-mono">Read-Host</code> commands with lines that read from Task Sequence variables.
+                    </p>
+                    <ol className="list-decimal list-inside mt-2 space-y-2 text-sm text-gray-300">
+                        <li>Create Task Sequence variables (e.g., <code className="bg-gray-800 px-1 rounded font-mono">TS_RACK_SLOT</code>, <code className="bg-gray-800 px-1 rounded font-mono">TS_TECH_NAME</code>).</li>
+                        <li>In your Task Sequence, create a step to set these variables before this script runs. This can be done dynamically or from a prompt at the start of the TS.</li>
+                        <li>Modify the script to read these variables instead of prompting the user.</li>
+                        <li className="text-yellow-400 font-bold">This application does not set these variables for you. You must configure them in your Task Sequence environment (e.g., SCCM/MDT).</li>
+                    </ol>
+                    <p className="text-sm text-gray-300 mt-2">
+                        Example modification:
+                    </p>
+                    <pre className="bg-black/50 p-3 mt-2 rounded-lg border border-gray-800 text-xs text-gray-300 overflow-x-auto">
+                        <code className="language-powershell whitespace-pre-wrap font-mono">
+{`# 1. Initialize the COM object for the Task Sequence environment
+$tsenv = New-Object -COMObject Microsoft.SMS.TSEnvironment
+
+# 2. Gather Manual Input from TS Variables
+$RackSlot = $tsenv.Value('TS_RACK_SLOT')
+$Hostname = $tsenv.Value('OSDComputerName') # Standard TS variable
+$TechName = $tsenv.Value('TS_TECH_NAME')
+
+# Remove the user confirmation prompt for full automation
+# $confirmation = Read-Host &quot;Is the information correct? (Y/N)&quot;
+# if ($confirmation -ne 'Y') { ... }`}
+                        </code>
+                    </pre>
                 </div>
 
                 <div className="relative">
