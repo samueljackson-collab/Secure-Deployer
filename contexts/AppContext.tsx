@@ -367,7 +367,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 }
 
                 const batchSummary: DeploymentBatchSummary = {
-                    id: Date.now(),
+                    id: crypto.randomUUID(),
                     operation: action.payload.operation,
                     targetName: action.payload.file.name,
                     startedAt: new Date(),
