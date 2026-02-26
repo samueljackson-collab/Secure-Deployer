@@ -1,5 +1,6 @@
 
 import React from 'react';
+import type { DeploymentOperationType } from '../types';
 
 interface BulkActionsProps {
     selectedCount: number;
@@ -8,9 +9,17 @@ interface BulkActionsProps {
     onValidate: () => void;
     onExecute: () => void;
     onRemove: () => void;
+    onDeployOperation: (payload: { operation: DeploymentOperationType; file: File }) => void;
 }
 
-export const BulkActions: React.FC<BulkActionsProps> = ({ selectedCount, onUpdate, onCancel, onValidate, onExecute, onRemove }) => {
+export const BulkActions: React.FC<BulkActionsProps> = ({ selectedCount, onUpdate, onCancel, onValidate, onExecute, onRemove, onDeployOperation }) => {
+    const [selectedFile, setSelectedFile] = React.useState<File | null>(null);
+
+    const executeOperation = (operation: DeploymentOperationType) => {
+        if (!selectedFile) return;
+        onDeployOperation({ operation, file: selectedFile });
+    };
+
     if (selectedCount === 0) {
         return null;
     }
@@ -51,7 +60,33 @@ export const BulkActions: React.FC<BulkActionsProps> = ({ selectedCount, onUpdat
                 >
                     Remove Selected
                 </button>
+                <label className="px-4 py-2 bg-blue-700 text-white text-sm font-semibold rounded-lg hover:bg-blue-600 transition duration-200 shadow-md cursor-pointer">
+                    Select Deploy File
+                    <input type="file" className="hidden" onChange={(e) => setSelectedFile(e.target.files?.[0] || null)} />
+                </label>
+                <button
+                    onClick={() => executeOperation('run')}
+                    disabled={!selectedFile}
+                    className="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-500 disabled:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed"
+                >
+                    Run File
+                </button>
+                <button
+                    onClick={() => executeOperation('install')}
+                    disabled={!selectedFile}
+                    className="px-4 py-2 bg-teal-600 text-white text-sm font-semibold rounded-lg hover:bg-teal-500 disabled:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed"
+                >
+                    Install File
+                </button>
+                <button
+                    onClick={() => executeOperation('delete')}
+                    disabled={!selectedFile}
+                    className="px-4 py-2 bg-rose-700 text-white text-sm font-semibold rounded-lg hover:bg-rose-600 disabled:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed"
+                >
+                    Delete Program/File
+                </button>
             </div>
+            {selectedFile && <p className="text-xs text-gray-400">Deploy target: {selectedFile.name}</p>}
         </div>
     );
 };

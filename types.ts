@@ -73,13 +73,27 @@ export interface Device {
   crowdstrikeStatus?: 'Running' | 'Not Found' | 'Unknown';
   sccmStatus?: 'Healthy' | 'Unhealthy' | 'Unknown';
   scriptFile?: File;
+  installedPackages?: string[];
+  runningPrograms?: string[];
+  availableFiles?: string[];
 }
 
 export type DeploymentStatus = 
   // Scanning Flow
   'Pending' | 'Waking Up' | 'Connecting' | 'Retrying...' | 'Checking Info' | 'Checking BIOS' | 'Checking DCU' | 'Checking Windows' | 'Scan Complete' | 'Updating' | 'Updating BIOS' | 'Updating DCU' | 'Updating Windows' | 'Success' | 'Failed' | 'Offline' | 'Cancelled' | 'Update Complete (Reboot Pending)' | 'Rebooting...' | 'Validating' |
   // Deployment Flow
-  'Pending File' | 'Ready for Execution' | 'Executing Script' | 'Execution Complete' | 'Execution Failed';
+  'Pending File' | 'Ready for Execution' | 'Executing Script' | 'Execution Complete' | 'Execution Failed' |
+  'Deploying Action' | 'Action Complete' | 'Action Failed';
+
+export type DeploymentOperationType = 'run' | 'install' | 'delete';
+
+export interface DeploymentBatchSummary {
+  id: number;
+  operation: DeploymentOperationType;
+  targetName: string;
+  startedAt: Date;
+  failuresByReason: Record<string, string[]>;
+}
 
 export interface LogEntry {
   timestamp: Date;
@@ -165,6 +179,7 @@ export interface AppState {
             autoRebootEnabled: boolean;
         };
         isCancelled: boolean;
+        batchHistory: DeploymentBatchSummary[];
     };
     monitor: {
         devices: ImagingDevice[];
@@ -209,6 +224,7 @@ export type AppAction =
   | { type: 'CLEAR_SELECTIONS' }
   | { type: 'SET_DEVICES'; payload: Device[] }
   | { type: 'UPDATE_SINGLE_DEVICE'; payload: Partial<Device> & { id: number } }
+  | { type: 'SET_BATCH_HISTORY'; payload: DeploymentBatchSummary[] }
   | { type: 'WAKE_ON_LAN'; payload: Set<number> }
   | { type: 'UPDATE_DEVICE'; payload: number }
   | { type: 'REBOOT_DEVICE'; payload: number }
@@ -220,6 +236,8 @@ export type AppAction =
   | { type: 'BULK_VALIDATE' }
   | { type: 'BULK_EXECUTE' }
   | { type: 'BULK_REMOVE' }
+  | { type: 'BULK_DEPLOY_OPERATION'; payload: { operation: DeploymentOperationType; file: File } }
+  | { type: 'REMOTE_IN_DEVICE'; payload: number }
   | { type: 'RESCAN_ALL_DEVICES_PROMPT' }
   | { type: 'RESCAN_ALL_DEVICES_CONFIRMED' }
   | { type: 'SAVE_TEMPLATE'; payload: Omit<DeploymentTemplate, 'id' | 'createdAt'> }

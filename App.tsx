@@ -166,7 +166,7 @@ const AppContent: React.FC = () => {
                                 <DeploymentProgress devices={runner.devices} />
                             </div>
                             <FailedDeviceReport devices={runner.devices} />
-                            <BulkActions selectedCount={runner.selectedDeviceIds.size} onUpdate={() => dispatch({ type: 'BULK_UPDATE' })} onCancel={() => dispatch({ type: 'BULK_CANCEL' })} onValidate={() => dispatch({ type: 'BULK_VALIDATE' })} onExecute={() => dispatch({ type: 'BULK_EXECUTE' })} onRemove={() => dispatch({ type: 'BULK_REMOVE' })} />
+                            <BulkActions selectedCount={runner.selectedDeviceIds.size} onUpdate={() => dispatch({ type: 'BULK_UPDATE' })} onCancel={() => dispatch({ type: 'BULK_CANCEL' })} onValidate={() => dispatch({ type: 'BULK_VALIDATE' })} onExecute={() => dispatch({ type: 'BULK_EXECUTE' })} onRemove={() => dispatch({ type: 'BULK_REMOVE' })} onDeployOperation={(payload) => dispatch({ type: 'BULK_DEPLOY_OPERATION', payload })} />
                             <div className="bg-gray-950 p-6 rounded-lg shadow-lg border border-gray-800 flex-grow min-h-[400px] flex flex-col">
                                 <h2 className="text-xl font-bold text-[#39FF14] mb-4 border-b border-gray-700 pb-2">Live Logs & Device Status</h2>
                                 <div className="grid xl:grid-cols-2 gap-6 flex-grow min-h-0">
@@ -177,6 +177,7 @@ const AppContent: React.FC = () => {
                                         onValidateDevice={(id) => dispatch({ type: 'VALIDATE_DEVICES', payload: new Set([id])})} 
                                         onSetScriptFile={(deviceId, file) => dispatch({ type: 'SET_SCRIPT_FILE', payload: { deviceId, file }})} 
                                         onExecuteScript={(id) => dispatch({ type: 'EXECUTE_SCRIPT', payload: id })} 
+                                        onRemoteIn={(id) => dispatch({ type: 'REMOTE_IN_DEVICE', payload: id })}
                                         selectedDeviceIds={runner.selectedDeviceIds} 
                                         onDeviceSelect={(id) => dispatch({ type: 'TOGGLE_DEVICE_SELECTION', payload: id })} 
                                         onSelectAll={(select) => dispatch({ type: 'SELECT_ALL_DEVICES', payload: select })} 

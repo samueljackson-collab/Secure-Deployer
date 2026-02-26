@@ -32,6 +32,9 @@ const statusColors: Record<DeploymentStatus, string> = {
     'Executing Script': 'text-[#39FF14] animate-pulse',
     'Execution Complete': 'text-[#39FF14]',
     'Execution Failed': 'text-red-400',
+    'Deploying Action': 'text-cyan-400 animate-pulse',
+    'Action Complete': 'text-[#39FF14]',
+    'Action Failed': 'text-red-400',
 };
 
 const StatusBadge: React.FC<{ status: DeploymentStatus; retryAttempt?: number }> = ({ status, retryAttempt }) => {
@@ -105,12 +108,14 @@ interface DeviceStatusTableProps {
     onValidateDevice: (deviceId: number) => void;
     onSetScriptFile: (deviceId: number, file: File) => void;
     onExecuteScript: (deviceId: number) => void;
+    onRemoteIn: (deviceId: number) => void;
     onDeviceSelect: (deviceId: number) => void;
     onSelectAll: (select: boolean) => void;
 }
 
-export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, selectedDeviceIds, onUpdateDevice, onRebootDevice, onValidateDevice, onSetScriptFile, onExecuteScript, onDeviceSelect, onSelectAll }) => {
+export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, selectedDeviceIds, onUpdateDevice, onRebootDevice, onValidateDevice, onSetScriptFile, onExecuteScript, onRemoteIn, onDeviceSelect, onSelectAll }) => {
     const [showLegend, setShowLegend] = useState(false);
+    const [contextMenu, setContextMenu] = useState<{ x: number; y: number; deviceId: number } | null>(null);
     const allSelected = devices.length > 0 && selectedDeviceIds.size === devices.length;
     const isScanActionable = (status: DeploymentStatus) => ['Success', 'Failed', 'Offline', 'Cancelled', 'Scan Complete'].includes(status);
     const isRunningAction = (status: DeploymentStatus) => !isScanActionable(status) && !['Pending', 'Update Complete (Reboot Pending)', 'Pending File', 'Ready for Execution', 'Execution Complete', 'Execution Failed'].includes(status);
@@ -122,7 +127,7 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
     };
 
     return (
-        <div className="bg-black/50 rounded-lg overflow-hidden border border-gray-800 h-full flex flex-col">
+        <div className="bg-black/50 rounded-lg overflow-hidden border border-gray-800 h-full flex flex-col relative" onClick={() => setContextMenu(null)}>
             <div className="p-3 bg-black/25 border-b border-gray-800 flex justify-between items-center">
                 <h3 className="font-semibold text-gray-200">Device Status</h3>
                 <div className="flex items-center" title="Select or deselect all devices in the list">
@@ -145,7 +150,14 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
                     const isSelected = selectedDeviceIds.has(device.id);
 
                     return (
-                        <div key={device.id} className={`bg-black/50 border rounded-lg p-3 transition-all duration-200 ${isSelected ? 'border-[#39FF14] shadow-lg' : 'border-gray-800'}`}>
+                        <div
+                            key={device.id}
+                            className={`bg-black/50 border rounded-lg p-3 transition-all duration-200 ${isSelected ? 'border-[#39FF14] shadow-lg' : 'border-gray-800'}`}
+                            onContextMenu={(e) => {
+                                e.preventDefault();
+                                setContextMenu({ x: e.clientX, y: e.clientY, deviceId: device.id });
+                            }}
+                        >
                             <div className="flex justify-between items-start mb-2">
                                 <div className="flex items-center gap-3">
                                     <input 
@@ -282,6 +294,22 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
                     </div>
                 )}
             </div>
+            {contextMenu && (
+                <div
+                    className="fixed z-50 bg-gray-900 border border-gray-700 rounded-md shadow-lg min-w-[150px]"
+                    style={{ left: contextMenu.x, top: contextMenu.y }}
+                >
+                    <button
+                        className="w-full text-left px-3 py-2 text-sm text-gray-100 hover:bg-gray-800"
+                        onClick={() => {
+                            onRemoteIn(contextMenu.deviceId);
+                            setContextMenu(null);
+                        }}
+                    >
+                        Remote-In
+                    </button>
+                </div>
+            )}
         </div>
     );
 };

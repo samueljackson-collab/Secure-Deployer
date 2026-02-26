@@ -2,7 +2,7 @@
 
 import { sleep, normalizeMacAddress } from '../utils/helpers';
 // FIX: Import DeploymentStatus to correctly type the device state.
-import type { Device, DeploymentStatus, ImagingDevice, DeploymentRun, ChecklistItem, ComplianceResult, FailureDetail } from '../types';
+import type { Device, ImagingDevice, DeploymentRun, ChecklistItem, ComplianceResult, FailureDetail, DeploymentOperationType } from '../types';
 import { TARGET_BIOS_VERSION, TARGET_DCU_VERSION, TARGET_WIN_VERSION } from '../App';
 import { ParseResult } from 'papaparse';
 
@@ -107,7 +107,10 @@ export const parseDevicesFromCsv = (results: ParseResult<Record<string, string>>
 
         devices.push({
             id: index, hostname, mac: normalizedMac, status: 'Pending',
-            deviceType: 'desktop' // Simplified for mock
+            deviceType: 'desktop', // Simplified for mock
+            availableFiles: ['CorpInstaller.msi', 'Onboarding.ps1', 'LegacyAgent.exe'],
+            installedPackages: ['VPNClient.msi'],
+            runningPrograms: [],
         });
     });
 
@@ -290,6 +293,75 @@ export const executeScript = async (device: Device): Promise<boolean> => {
     return Math.random() > 0.2;
 };
 
+export const buildRemoteDesktopFile = (device: Device): string => {
+    const address = device.ipAddress || device.hostname;
+    return [
+        'screen mode id:i:2',
+        'use multimon:i:0',
+        'session bpp:i:32',
+        'desktopwidth:i:1600',
+        'desktopheight:i:900',
+        'full address:s:' + address,
+        'prompt for credentials:i:1',
+        'authentication level:i:2',
+        'redirectclipboard:i:1',
+    ].join('\n');
+};
+
+export const performDeploymentOperation = async (
+    device: Device,
+    operation: DeploymentOperationType,
+    targetFile: File,
+): Promise<{ ok: boolean; reason?: string; message: string; patch: Partial<Device> }> => {
+    await sleep(1200 + Math.random() * 1000);
+    const targetName = targetFile.name;
+    const files = new Set(device.availableFiles || []);
+    const installed = new Set(device.installedPackages || []);
+    const running = new Set(device.runningPrograms || []);
+
+    if (operation === 'run') {
+        if (!files.has(targetName)) {
+            return { ok: false, reason: 'File Not Found', message: `[${device.hostname}] Run failed for "${targetName}" (file not found on target).`, patch: { status: 'Action Failed' } };
+        }
+        if (running.has(targetName)) {
+            return { ok: false, reason: 'Already Running', message: `[${device.hostname}] Run skipped for "${targetName}" (already running).`, patch: { status: 'Action Failed' } };
+        }
+        if (Math.random() < 0.15) {
+            return { ok: false, reason: 'Insufficient Permission', message: `[${device.hostname}] Run failed for "${targetName}" (insufficient permission).`, patch: { status: 'Action Failed' } };
+        }
+        running.add(targetName);
+        return { ok: true, message: `[${device.hostname}] Run operation succeeded for "${targetName}".`, patch: { status: 'Action Complete', runningPrograms: [...running] } };
+    }
+
+    if (operation === 'install') {
+        if (!files.has(targetName)) {
+            return { ok: false, reason: 'File Not Found', message: `[${device.hostname}] Install failed for "${targetName}" (file not found on target).`, patch: { status: 'Action Failed' } };
+        }
+        if (installed.has(targetName)) {
+            return { ok: false, reason: 'Already Installed', message: `[${device.hostname}] Install skipped for "${targetName}" (already installed).`, patch: { status: 'Action Failed' } };
+        }
+        if (Math.random() < 0.12) {
+            return { ok: false, reason: 'Cannot Access File', message: `[${device.hostname}] Install failed for "${targetName}" (file cannot be accessed).`, patch: { status: 'Action Failed' } };
+        }
+        installed.add(targetName);
+        return { ok: true, message: `[${device.hostname}] Install operation succeeded for "${targetName}".`, patch: { status: 'Action Complete', installedPackages: [...installed] } };
+    }
+
+    if (!files.has(targetName) && !installed.has(targetName) && !running.has(targetName)) {
+        return { ok: false, reason: 'Already Deleted', message: `[${device.hostname}] Delete skipped for "${targetName}" (already removed).`, patch: { status: 'Action Failed' } };
+    }
+    if (running.has(targetName)) {
+        return { ok: false, reason: 'File In Use', message: `[${device.hostname}] Delete failed for "${targetName}" (program currently running).`, patch: { status: 'Action Failed' } };
+    }
+    files.delete(targetName);
+    installed.delete(targetName);
+    return {
+        ok: true,
+        message: `[${device.hostname}] Delete operation succeeded for "${targetName}".`,
+        patch: { status: 'Action Complete', availableFiles: [...files], installedPackages: [...installed] },
+    };
+};
+
 export const generateRunArchive = (devices: Device[], operatorName?: string): DeploymentRun => {
     const total = devices.length;
     const compliant = devices.filter(d => ['Success', 'Execution Complete'].includes(d.status)).length;
@@ -326,6 +398,9 @@ export const transformImagingToRunnerDevices = (imagingDevices: ImagingDevice[])
         hostname: d.hostname, mac: d.macAddress, status: 'Pending File', isSelected: false,
         deviceType: 'desktop', // Simplified for mock
         ipAddress: d.ipAddress, serialNumber: d.serialNumber, model: d.model,
+        availableFiles: ['CorpInstaller.msi', 'Onboarding.ps1', 'LegacyAgent.exe'],
+        installedPackages: ['VPNClient.msi'],
+        runningPrograms: [],
     }));
 };
 
