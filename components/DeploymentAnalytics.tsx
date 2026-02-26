@@ -27,7 +27,7 @@ export const AnalyticsChart: React.FC<AnalyticsChartProps> = ({ title, data, key
                     return (
                         <div key={run.id} className="group relative flex-1 h-full flex flex-col-reverse items-center" title={run.endTime.toLocaleDateString()}>
                             {keys.map(key => {
-                                const value = (countsForRun as any)?.[key.name] ?? 0;
+                                const value = (countsForRun as Record<string, number>)?.[key.name] ?? 0;
                                 const height = (value / maxValue) * 100;
                                 return (
                                     <div
@@ -40,7 +40,7 @@ export const AnalyticsChart: React.FC<AnalyticsChartProps> = ({ title, data, key
                             <div className="absolute bottom-full mb-2 w-max bg-black border border-gray-700 text-white text-xs rounded py-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg z-10">
                                 <p className="font-semibold">{run.endTime.toLocaleDateString()}</p>
                                 {keys.map(key => {
-                                     const value = (countsForRun as any)?.[key.name] ?? 0;
+                                     const value = (countsForRun as Record<string, number>)?.[key.name] ?? 0;
                                      const percentage = totalForRun > 0 ? `(${(value / totalForRun * 100).toFixed(0)}%)` : '';
                                      return <p key={key.name}>{`${key.name.charAt(0).toUpperCase() + key.name.slice(1)}: ${value} ${percentage}`.trim()}</p>;
                                 })}

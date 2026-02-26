@@ -14,6 +14,8 @@ const LegendItem: React.FC<{ color: string; label: string }> = ({ color, label }
 );
 
 export const DeploymentProgress: React.FC<DeploymentProgressProps> = ({ devices }) => {
+    const inProgressDevices = devices.filter(d => d.status === 'Updating' || d.status.startsWith('Checking') || d.status.startsWith('Updating') || d.status === 'Executing Script');
+
     if (devices.length === 0) {
         return <div className="text-center text-gray-400 font-bold py-4">Waiting for system scan to start...</div>;
     }
@@ -68,6 +70,25 @@ export const DeploymentProgress: React.FC<DeploymentProgressProps> = ({ devices 
                 <LegendItem color="bg-cyan-400" label="In Progress" />
                 <LegendItem color="bg-gray-600" label="Pending" />
             </div>
+
+            {inProgressDevices.length > 0 && (
+                <div className="border-t border-gray-800 pt-4">
+                    <h3 className="text-sm font-bold text-gray-400 mb-2">Active Tasks</h3>
+                    <div className="space-y-2">
+                        {inProgressDevices.map(device => (
+                            <div key={device.id} className="bg-gray-800/50 p-2 rounded-lg">
+                                <div className="flex justify-between items-center text-xs mb-1">
+                                    <span className="font-bold text-gray-300">{device.hostname}</span>
+                                    <span className="text-cyan-400 font-mono">{device.status}...</span>
+                                </div>
+                                <div className="w-full bg-gray-700 rounded-full h-1.5">
+                                    <div className="bg-cyan-400 h-1.5 rounded-full" style={{ width: `${device.progress || 0}%` }}></div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
                 <div className="bg-gray-800/50 p-3 rounded-lg">

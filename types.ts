@@ -13,25 +13,6 @@ export type DeviceFormFactor =
   | 'wyse' // Wyse Thin Client
   | 'vdi'; // VDI Client
 
-export interface FailureDetail {
-  errorCode: string;
-  reason: string;
-  troubleshootingSteps: string[];
-}
-
-export interface DeploymentTemplate {
-  id: string;
-  name: string;
-  description: string;
-  createdAt: string; // ISO string for easy localStorage serialization
-  settings: {
-    maxRetries: number;
-    retryDelay: number;
-    autoRebootEnabled: boolean;
-  };
-  notes?: string;
-}
-
 export interface Device {
   id: number;
   hostname: string;
@@ -58,7 +39,6 @@ export interface Device {
     succeeded: string[];
     failed: string[];
   };
-  failureDetail?: FailureDetail;
   // New metadata fields
   ipAddress?: string;
   serialNumber?: string;
@@ -73,13 +53,28 @@ export interface Device {
   crowdstrikeStatus?: 'Running' | 'Not Found' | 'Unknown';
   sccmStatus?: 'Healthy' | 'Unhealthy' | 'Unknown';
   scriptFile?: File;
+  installedPackages?: string[];
+  runningPrograms?: string[];
+  availableFiles?: string[];
+  progress?: number;
 }
 
 export type DeploymentStatus = 
   // Scanning Flow
-  'Pending' | 'Waking Up' | 'Connecting' | 'Retrying...' | 'Checking Info' | 'Checking BIOS' | 'Checking DCU' | 'Checking Windows' | 'Scan Complete' | 'Updating' | 'Updating BIOS' | 'Updating DCU' | 'Updating Windows' | 'Success' | 'Failed' | 'Offline' | 'Cancelled' | 'Update Complete (Reboot Pending)' | 'Rebooting...' | 'Validating' |
+  'Pending' | 'Pending Validation' | 'Waking Up' | 'Connecting' | 'Retrying...' | 'Checking Info' | 'Checking BIOS' | 'Checking DCU' | 'Checking Windows' | 'Scan Complete' | 'Updating' | 'Updating BIOS' | 'Updating DCU' | 'Updating Windows' | 'Success' | 'Failed' | 'Offline' | 'Cancelled' | 'Update Complete (Reboot Pending)' | 'Rebooting...' | 'Validating' |
   // Deployment Flow
-  'Pending File' | 'Ready for Execution' | 'Executing Script' | 'Execution Complete' | 'Execution Failed';
+  'Pending File' | 'Ready for Execution' | 'Executing Script' | 'Execution Complete' | 'Execution Failed' |
+  'Deploying Action' | 'Action Complete' | 'Action Failed';
+
+export type DeploymentOperationType = 'run' | 'install' | 'delete';
+
+export interface DeploymentBatchSummary {
+  id: number;
+  operation: DeploymentOperationType;
+  targetName: string;
+  startedAt: Date;
+  failuresByReason: Record<string, string[]>;
+}
 
 export interface LogEntry {
   timestamp: Date;
@@ -103,7 +98,6 @@ export interface DeploymentRun {
   needsAction: number;
   failed: number;
   successRate: number;
-  operatorName?: string;
   updatesNeededCounts?: {
     bios: number;
     dcu: number;
@@ -158,13 +152,13 @@ export interface AppState {
         deploymentState: DeploymentState;
         selectedDeviceIds: Set<number>;
         history: DeploymentRun[];
-        templates: DeploymentTemplate[];
         settings: {
             maxRetries: number;
             retryDelay: number;
             autoRebootEnabled: boolean;
         };
         isCancelled: boolean;
+        batchHistory: DeploymentBatchSummary[];
     };
     monitor: {
         devices: ImagingDevice[];
@@ -209,6 +203,7 @@ export type AppAction =
   | { type: 'CLEAR_SELECTIONS' }
   | { type: 'SET_DEVICES'; payload: Device[] }
   | { type: 'UPDATE_SINGLE_DEVICE'; payload: Partial<Device> & { id: number } }
+  | { type: 'SET_BATCH_HISTORY'; payload: DeploymentBatchSummary[] }
   | { type: 'WAKE_ON_LAN'; payload: Set<number> }
   | { type: 'UPDATE_DEVICE'; payload: number }
   | { type: 'REBOOT_DEVICE'; payload: number }
@@ -220,12 +215,11 @@ export type AppAction =
   | { type: 'BULK_VALIDATE' }
   | { type: 'BULK_EXECUTE' }
   | { type: 'BULK_REMOVE' }
+  | { type: 'BULK_DEPLOY_OPERATION'; payload: { operation: DeploymentOperationType; file: File } }
+  | { type: 'REMOTE_IN_DEVICE'; payload: number }
   | { type: 'RESCAN_ALL_DEVICES_PROMPT' }
   | { type: 'RESCAN_ALL_DEVICES_CONFIRMED' }
-  | { type: 'SAVE_TEMPLATE'; payload: Omit<DeploymentTemplate, 'id' | 'createdAt'> }
-  | { type: 'DELETE_TEMPLATE'; payload: string }
-  | { type: 'LOAD_TEMPLATE'; payload: string }
-
+  
   // Monitor Actions
   | { type: 'SET_IMAGING_DEVICES'; payload: ImagingDevice[] }
   | { type: 'RENAME_IMAGING_DEVICE'; payload: { deviceId: string; newHostname: string } }

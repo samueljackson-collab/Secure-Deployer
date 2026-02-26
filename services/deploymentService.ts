@@ -1,53 +1,10 @@
 
 
-import { sleep, normalizeMacAddress } from '../utils/helpers';
+import { sleep, normalizeMacAddress, detectDeviceType } from '../utils/helpers';
 // FIX: Import DeploymentStatus to correctly type the device state.
-import type { Device, DeploymentStatus, ImagingDevice, DeploymentRun, ChecklistItem, ComplianceResult, FailureDetail } from '../types';
+import type { Device, DeploymentStatus, ImagingDevice, DeploymentRun, ChecklistItem, ComplianceResult } from '../types';
 import { TARGET_BIOS_VERSION, TARGET_DCU_VERSION, TARGET_WIN_VERSION } from '../App';
 import { ParseResult } from 'papaparse';
-
-// --- FAILURE DETAIL CATALOG ---
-// Inspired by AUTOTAG batch script error handling: each failure state maps to a
-// specific error code, human-readable reason, and ordered troubleshooting steps.
-
-export const FAILURE_CATALOG: Record<string, FailureDetail> = {
-    Offline: {
-        errorCode: 'ERR_DEVICE_UNREACHABLE',
-        reason: 'Device did not respond after all connection attempts.',
-        troubleshootingSteps: [
-            'Verify the device is powered on and connected to the network.',
-            'Confirm the MAC address in the CSV matches the physical device.',
-            'Ensure Wake-on-LAN is enabled in BIOS and the network switch supports WoL magic packets.',
-            'Ping the device IP manually to confirm network-layer connectivity.',
-            'Check firewall or VLAN rules that may block WMI or WoL traffic.',
-            'Increase Max Retries in Advanced Settings and re-run.',
-        ],
-    },
-    Failed: {
-        errorCode: 'ERR_UPDATE_FAILED',
-        reason: 'One or more component updates failed during execution.',
-        troubleshootingSteps: [
-            'Review the update result section to identify which component failed.',
-            'Ensure the device has at least 10 GB of free disk space.',
-            'Verify the device has a stable network connection to the update source.',
-            'Reboot the device manually to clear any partial update state, then re-scan.',
-            'Check the Live Log for the specific error returned by the update tool.',
-            'Run the update manually on the device and verify it completes without errors.',
-        ],
-    },
-    'Execution Failed': {
-        errorCode: 'ERR_SCRIPT_EXEC_FAILED',
-        reason: 'The post-imaging deployment script failed to execute successfully.',
-        troubleshootingSteps: [
-            'Verify the selected script file is not corrupted or zero-length.',
-            'Confirm the script requires no interactive prompts (must be fully silent).',
-            'Check if the script requires elevated (admin) privileges on the target device.',
-            'Review script syntax — PowerShell scripts must use valid PS5.1-compatible syntax.',
-            'Ensure all dependencies or packages referenced by the script are present on the device.',
-            'Run the script manually on the device and capture the output for diagnosis.',
-        ],
-    },
-};
 
 // --- HELPERS ---
 
@@ -107,7 +64,10 @@ export const parseDevicesFromCsv = (results: ParseResult<Record<string, string>>
 
         devices.push({
             id: index, hostname, mac: normalizedMac, status: 'Pending',
-            deviceType: 'desktop' // Simplified for mock
+            deviceType: detectDeviceType(hostname),
+            availableFiles: ['install_printer.exe', 'map_network_drive.bat', 'troubleshoot.ps1'],
+            installedPackages: ['Microsoft Office', 'Google Chrome', 'Adobe Reader'],
+            runningPrograms: ['Google Chrome'],
         });
     });
 
@@ -166,7 +126,7 @@ const validateDevice = async (
     }
 
     if (!isConnected) {
-        onProgress({ ...currentDeviceState, status: 'Offline', failureDetail: FAILURE_CATALOG['Offline'] });
+        onProgress({ ...currentDeviceState, status: 'Offline' });
         return;
     }
 
@@ -263,10 +223,6 @@ export const updateDevice = async (
 
     if (failed.length > 0) {
         currentDeviceState.status = 'Failed';
-        currentDeviceState.failureDetail = {
-            ...FAILURE_CATALOG['Failed'],
-            reason: `Update failed for: ${failed.join(', ')}.`,
-        };
     } else if (succeeded.length > 0) {
         currentDeviceState.status = needsReboot ? 'Update Complete (Reboot Pending)' : 'Success';
     } else {
@@ -290,7 +246,76 @@ export const executeScript = async (device: Device): Promise<boolean> => {
     return Math.random() > 0.2;
 };
 
-export const generateRunArchive = (devices: Device[], operatorName?: string): DeploymentRun => {
+export const buildRemoteDesktopFile = (device: Device): string => {
+    const address = device.ipAddress || device.hostname;
+    return [
+        'screen mode id:i:2',
+        'use multimon:i:0',
+        'session bpp:i:32',
+        'desktopwidth:i:1600',
+        'desktopheight:i:900',
+        'full address:s:' + address,
+        'prompt for credentials:i:1',
+        'authentication level:i:2',
+        'redirectclipboard:i:1',
+    ].join('\n');
+};
+
+export const performDeploymentOperation = async (
+    device: Device,
+    operation: DeploymentOperationType,
+    targetFile: File,
+): Promise<{ ok: boolean; reason?: string; message: string; patch: Partial<Device> }> => {
+    await sleep(1200 + Math.random() * 1000);
+    const targetName = targetFile.name;
+    const files = new Set(device.availableFiles || []);
+    const installed = new Set(device.installedPackages || []);
+    const running = new Set(device.runningPrograms || []);
+
+    if (operation === 'run') {
+        if (!files.has(targetName)) {
+            return { ok: false, reason: 'File Not Found', message: `[${device.hostname}] Run failed for "${targetName}" (file not found on target).`, patch: { status: 'Action Failed' } };
+        }
+        if (running.has(targetName)) {
+            return { ok: false, reason: 'Already Running', message: `[${device.hostname}] Run skipped for "${targetName}" (already running).`, patch: { status: 'Action Failed' } };
+        }
+        if (Math.random() < 0.15) {
+            return { ok: false, reason: 'Insufficient Permission', message: `[${device.hostname}] Run failed for "${targetName}" (insufficient permission).`, patch: { status: 'Action Failed' } };
+        }
+        running.add(targetName);
+        return { ok: true, message: `[${device.hostname}] Run operation succeeded for "${targetName}".`, patch: { status: 'Action Complete', runningPrograms: [...running] } };
+    }
+
+    if (operation === 'install') {
+        if (!files.has(targetName)) {
+            return { ok: false, reason: 'File Not Found', message: `[${device.hostname}] Install failed for "${targetName}" (file not found on target).`, patch: { status: 'Action Failed' } };
+        }
+        if (installed.has(targetName)) {
+            return { ok: false, reason: 'Already Installed', message: `[${device.hostname}] Install skipped for "${targetName}" (already installed).`, patch: { status: 'Action Failed' } };
+        }
+        if (Math.random() < 0.12) {
+            return { ok: false, reason: 'Cannot Access File', message: `[${device.hostname}] Install failed for "${targetName}" (file cannot be accessed).`, patch: { status: 'Action Failed' } };
+        }
+        installed.add(targetName);
+        return { ok: true, message: `[${device.hostname}] Install operation succeeded for "${targetName}".`, patch: { status: 'Action Complete', installedPackages: [...installed] } };
+    }
+
+    if (!files.has(targetName) && !installed.has(targetName) && !running.has(targetName)) {
+        return { ok: false, reason: 'Already Deleted', message: `[${device.hostname}] Delete skipped for "${targetName}" (already removed).`, patch: { status: 'Action Failed' } };
+    }
+    if (running.has(targetName)) {
+        return { ok: false, reason: 'File In Use', message: `[${device.hostname}] Delete failed for "${targetName}" (program currently running).`, patch: { status: 'Action Failed' } };
+    }
+    files.delete(targetName);
+    installed.delete(targetName);
+    return {
+        ok: true,
+        message: `[${device.hostname}] Delete operation succeeded for "${targetName}".`,
+        patch: { status: 'Action Complete', availableFiles: [...files], installedPackages: [...installed] },
+    };
+};
+
+export const generateRunArchive = (devices: Device[]): DeploymentRun => {
     const total = devices.length;
     const compliant = devices.filter(d => ['Success', 'Execution Complete'].includes(d.status)).length;
     const needsAction = devices.filter(d => ['Scan Complete', 'Update Complete (Reboot Pending)', 'Ready for Execution', 'Pending File'].includes(d.status)).length;
@@ -315,7 +340,6 @@ export const generateRunArchive = (devices: Device[], operatorName?: string): De
         totalDevices: total,
         compliant, needsAction, failed: failedTotal,
         successRate: total > 0 ? (compliant / total) * 100 : 0,
-        operatorName,
         updatesNeededCounts, failureCounts,
     };
 };
@@ -324,8 +348,11 @@ export const transformImagingToRunnerDevices = (imagingDevices: ImagingDevice[])
     return imagingDevices.map((d, index) => ({
         id: Date.now() + index,
         hostname: d.hostname, mac: d.macAddress, status: 'Pending File', isSelected: false,
-        deviceType: 'desktop', // Simplified for mock
+        deviceType: detectDeviceType(d.hostname),
         ipAddress: d.ipAddress, serialNumber: d.serialNumber, model: d.model,
+        availableFiles: ['CorpInstaller.msi', 'Onboarding.ps1', 'LegacyAgent.exe'],
+        installedPackages: ['VPNClient.msi'],
+        runningPrograms: [],
     }));
 };
 

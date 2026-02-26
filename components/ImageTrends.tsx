@@ -13,7 +13,7 @@ export const ImageTrends: React.FC<ImageTrendsProps> = ({ history }) => {
             <div className="bg-gray-950 p-6 rounded-lg shadow-lg border border-gray-800 text-center">
                 <h3 className="text-lg font-bold text-gray-400">No Deployment History</h3>
                 <p className="text-sm text-gray-500">
-                    Complete at least one deployment run from the "Deployment Runner" tab to see historical trends and analytics.
+                    Complete at least one deployment run from the &quot;Deployment Runner&quot; tab to see historical trends and analytics.
                 </p>
             </div>
         );
