@@ -2,8 +2,6 @@
 import React from 'react';
 import type { DeploymentOperationType } from '../types';
 
-import type { DeploymentOperationType } from '../types';
-
 interface BulkActionsProps {
     selectedCount: number;
     onUpdate: () => void;
