@@ -6,6 +6,10 @@ import { Tooltip, InfoIcon } from './Tooltip';
 import { buildRemoteDesktopFile, RdpOptions } from '../services/deploymentService';
 import { useAppContext } from '../contexts/AppContext';
 
+// --- Constants ---
+
+const MAX_SESSION_LOG = 10;
+
 // --- Types ---
 
 type ConnectionFilter = 'all' | 'online' | 'offline' | 'unknown';
@@ -133,8 +137,8 @@ export const RemoteConnect: React.FC<RemoteConnectProps> = ({ devices }) => {
     // Notes state (per device)
     const [notesMap, setNotesMap] = useState<Record<number, string>>({});
 
-    // WoL feedback
-    const [wolStatus, setWolStatus] = useState<Record<number, 'sent' | null>>({});
+    // WoL feedback — tracks which device IDs have had a WoL packet sent this session
+    const [wolSent, setWolSent] = useState<Set<number>>(new Set());
 
     // Session log
     const [sessionLog, setSessionLog] = useState<SessionLogEntry[]>([]);
@@ -143,7 +147,7 @@ export const RemoteConnect: React.FC<RemoteConnectProps> = ({ devices }) => {
         setSessionLog(prev => [
             { id: crypto.randomUUID(), message, time: new Date() },
             ...prev,
-        ].slice(0, 10));
+        ].slice(0, MAX_SESSION_LOG));
     }, []);
 
     // Filtered + searched devices
@@ -181,9 +185,15 @@ export const RemoteConnect: React.FC<RemoteConnectProps> = ({ devices }) => {
     const handleWol = () => {
         if (!selectedDevice) return;
         dispatch({ type: 'WAKE_ON_LAN', payload: new Set([selectedDevice.id]) });
-        setWolStatus(prev => ({ ...prev, [selectedDevice.id]: 'sent' }));
+        setWolSent(prev => new Set(prev).add(selectedDevice.id));
         addSessionLog(`Wake-on-LAN sent to ${selectedDevice.hostname} (MAC: ${selectedDevice.mac})`);
-        setTimeout(() => setWolStatus(prev => ({ ...prev, [selectedDevice.id]: null })), 3000);
+        setTimeout(() => {
+            setWolSent(prev => {
+                const next = new Set(prev);
+                next.delete(selectedDevice.id);
+                return next;
+            });
+        }, 3000);
     };
 
     const formatMac = (mac: string) =>
@@ -414,7 +424,7 @@ export const RemoteConnect: React.FC<RemoteConnectProps> = ({ devices }) => {
                                             <input
                                                 type="number"
                                                 value={sshPort}
-                                                onChange={e => setSshPort(Math.max(1, parseInt(e.target.value, 10) || 22))}
+                                                onChange={e => setSshPort(Math.min(65535, Math.max(1, parseInt(e.target.value, 10) || 22)))}
                                                 className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-200 w-20 text-center focus:outline-none focus:border-[#39FF14] font-mono"
                                             />
                                         </div>
@@ -463,18 +473,18 @@ export const RemoteConnect: React.FC<RemoteConnectProps> = ({ devices }) => {
                                             A magic packet (UDP broadcast) will be sent to the MAC address above on the configured WoL broadcast address and port.
                                         </p>
                                         <Tooltip
-                                            content={wolStatus[selectedDevice.id] === 'sent' ? 'Magic packet sent!' : 'Send WoL magic packet to this device.'}
+                                            content={wolSent.has(selectedDevice.id) ? 'Magic packet sent!' : 'Send WoL magic packet to this device.'}
                                             position="top"
                                         >
                                             <button
                                                 onClick={handleWol}
                                                 className={`w-full px-4 py-2 text-sm font-bold rounded-lg transition-colors ${
-                                                    wolStatus[selectedDevice.id] === 'sent'
+                                                    wolSent.has(selectedDevice.id)
                                                         ? 'bg-green-700 text-white cursor-default'
                                                         : 'bg-gray-700 text-white hover:bg-gray-600'
                                                 }`}
                                             >
-                                                {wolStatus[selectedDevice.id] === 'sent' ? 'Packet Sent!' : 'Send WoL Packet'}
+                                                {wolSent.has(selectedDevice.id) ? 'Packet Sent!' : 'Send WoL Packet'}
                                             </button>
                                         </Tooltip>
                                     </div>

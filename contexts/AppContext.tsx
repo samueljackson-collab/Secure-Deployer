@@ -309,13 +309,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                         addLog("Deployment scan complete.", 'INFO');
                         sendNotification('Deployment Complete', `Scan finished.`);
                         dispatch({ type: 'DEPLOYMENT_FINISHED' });
-                        // Security: clear credentials from state after deployment finishes
-                        dispatch({ type: 'CLEAR_CREDENTIALS' });
                     }
                 } catch (error) {
                     addLog(error instanceof Error ? error.message : String(error), 'ERROR');
                     dispatch({ type: 'DEPLOYMENT_FINISHED' });
                 } finally {
+                    // Security: always clear credentials from memory when deployment ends,
+                    // regardless of success, failure, or cancellation
+                    dispatch({ type: 'CLEAR_CREDENTIALS' });
                     if (!state.runner.isCancelled) {
                         dispatch({ type: 'ARCHIVE_RUN' });
                     }
@@ -326,6 +327,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             case 'CANCEL_DEPLOYMENT': {
                 addLog('Deployment cancelled by user.', 'WARNING');
                 sendNotification('Deployment Cancelled', 'The process was stopped.');
+                // Security: clear credentials immediately on cancel
+                dispatch({ type: 'CLEAR_CREDENTIALS' });
                 dispatch({ type: 'ARCHIVE_RUN' });
                 break;
             }
