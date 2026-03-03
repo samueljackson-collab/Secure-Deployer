@@ -45,6 +45,10 @@ export const parseDevicesFromCsv = (results: ParseResult<Record<string, string>>
             errors.push(`[Validation Skip] Skipping row ${index + 2}. Reason: Missing hostname.`);
             return;
         }
+        if (hostname.length > 253 || /[\r\n\t]/.test(hostname)) {
+            errors.push(`[Validation Skip] Device at row ${index + 2} has an invalid hostname. Reason: Contains control characters or exceeds maximum length.`);
+            return;
+        }
 
         const rawMac = (row[macCol] || '').trim();
         let macValidationError = '';
@@ -247,7 +251,8 @@ export const executeScript = async (device: Device): Promise<boolean> => {
 };
 
 export const buildRemoteDesktopFile = (device: Device): string => {
-    const address = device.ipAddress || device.hostname;
+    // Strip newlines to prevent RDP file directive injection via crafted hostnames/IPs
+    const address = (device.ipAddress || device.hostname).replace(/[\r\n]/g, '');
     return [
         'screen mode id:i:2',
         'use multimon:i:0',
