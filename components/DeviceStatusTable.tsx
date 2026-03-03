@@ -143,7 +143,6 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
     };
     const allSelected = devices.length > 0 && selectedDeviceIds.size === devices.length;
     const isScanActionable = (status: DeploymentStatus) => ['Success', 'Failed', 'Offline', 'Cancelled', 'Scan Complete'].includes(status);
-    const isRunningAction = (status: DeploymentStatus) => !isScanActionable(status) && !['Pending', 'Update Complete (Reboot Pending)', 'Pending File', 'Ready for Execution', 'Execution Complete', 'Execution Failed'].includes(status);
 
     const handleFileChange = (deviceId: number) => (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {

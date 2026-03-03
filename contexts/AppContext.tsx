@@ -1,7 +1,6 @@
 
-
 import React, { createContext, useReducer, useContext, useEffect, useCallback } from 'react';
-import type { AppState, AppAction, AppDispatch, Device, LogEntry, ImagingDevice, DeploymentOperationType, DeploymentBatchSummary } from '../types';
+import type { AppState, AppAction, AppDispatch, Device, LogEntry, ImagingDevice, DeploymentOperationType, DeploymentBatchSummary } from '../src/types';
 import * as api from '../services/deploymentService';
 import Papa from 'papaparse';
 
@@ -32,6 +31,8 @@ const initialState: AppState = {
         isAllComplianceModalOpen: false,
         isPassedComplianceModalOpen: false,
         isRescanModalOpen: false,
+        isRemoteCredentialModalOpen: false,
+        remoteTargetDeviceId: null,
     },
 };
 
@@ -99,7 +100,7 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
             if (currentDevices.length === 0) return state;
             const newRun = api.generateRunArchive(currentDevices);
             return { ...state, runner: { ...state.runner, history: [newRun, ...state.runner.history].slice(0, 10) } };
-
+        
         case 'TOGGLE_DEVICE_SELECTION': {
             const newSet = new Set(state.runner.selectedDeviceIds);
             if (newSet.has(action.payload)) newSet.delete(action.payload);
@@ -116,7 +117,7 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
             return { ...state, runner: { ...state.runner, devices: state.runner.devices.map(d => d.id === action.payload.id ? { ...d, ...action.payload } : d) } };
         case 'SET_BATCH_HISTORY':
             return { ...state, runner: { ...state.runner, batchHistory: action.payload } };
-
+        
         case 'SET_IMAGING_DEVICES':
             return { ...state, monitor: { ...state.monitor, devices: action.payload } };
         case 'UPDATE_IMAGING_DEVICE_STATE':
@@ -125,7 +126,7 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
             return { ...state, monitor: { ...state.monitor, devices: state.monitor.devices.map(d => d.id === action.payload.deviceId ? { ...d, hostname: action.payload.newHostname } : d) } };
         case 'REMOVE_IMAGING_DEVICE':
             return { ...state, monitor: { ...state.monitor, devices: state.monitor.devices.filter(d => d.id !== action.payload) } };
-
+        
         case 'TRANSFER_ALL_COMPLETED_DEVICES': {
             const completed = state.monitor.devices.filter(d => d.status === 'Completed');
             if (completed.length === 0) return state;
@@ -193,17 +194,37 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
                     }))
                 }
             };
+        case 'PROMPT_REMOTE_CREDENTIALS':
+            return {
+                ...state,
+                ui: {
+                    ...state.ui,
+                    isRemoteCredentialModalOpen: true,
+                    remoteTargetDeviceId: action.payload
+                }
+            };
+        case 'CLOSE_REMOTE_CREDENTIAL_MODAL':
+            return {
+                ...state,
+                ui: {
+                    ...state.ui,
+                    isRemoteCredentialModalOpen: false,
+                    remoteTargetDeviceId: null
+                }
+            };
+        case 'REMOTE_IN_WITH_CREDENTIALS':
+            // This is handled in effectRunner, but we can close the modal here if we want.
+            // Actually, it's better to close it in effectRunner after success.
+            return state;
 
         default:
             return state;
     }
 };
 
-// FIX: Export AppProvider so it can be used in other files.
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [state, dispatch] = useReducer(appReducer, initialState);
 
-    // Effect for handling async operations triggered by actions
     const effectRunner = useCallback(async (state: AppState, action: AppAction) => {
         const { runner, ui } = state;
 
@@ -237,7 +258,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 }
                 break;
             }
-
+            
             case 'INITIALIZE_DEPLOYMENT': {
                 const onProgress = (device: Device) => dispatch({ type: 'UPDATE_DEVICE_STATE', payload: device });
                 try {
@@ -257,7 +278,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 }
                 break;
             }
-
+            
             case 'CANCEL_DEPLOYMENT': {
                 addLog('Deployment cancelled by user.', 'WARNING');
                 sendNotification('Deployment Cancelled', 'The process was stopped.');
@@ -269,7 +290,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             case 'BULK_UPDATE': {
                 const deviceIds = action.type === 'UPDATE_DEVICE' ? [action.payload] : [...runner.selectedDeviceIds];
                 if (action.type === 'BULK_UPDATE') addLog(`Initiating bulk update for ${deviceIds.length} devices...`, 'INFO');
-
+                
                 const onProgress = (device: Device) => dispatch({ type: 'UPDATE_DEVICE_STATE', payload: device });
 
                 await Promise.all(deviceIds.map(id => {
@@ -314,7 +335,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 const devicesToExecute = action.type === 'EXECUTE_SCRIPT'
                     ? [runner.devices.find(d => d.id === action.payload)].filter(Boolean) as Device[]
                     : runner.devices.filter(d => runner.selectedDeviceIds.has(d.id) && d.status === 'Ready for Execution');
-
+                
                 if (devicesToExecute.length === 0) {
                     addLog('No selected devices are ready for execution.', 'WARNING');
                     break;
@@ -373,15 +394,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     startedAt: new Date(),
                     failuresByReason,
                 };
-                const previous = runner.batchHistory[0];
-                Object.entries(failuresByReason).forEach(([reason, devices]) => {
-                    const previousDevices = previous?.failuresByReason[reason] || [];
-                    const previousText = previousDevices.length > 0
-                        ? ` Recent previous batch also hit this on: ${previousDevices.join(', ')}.`
-                        : '';
-                    addLog(`[Batch Summary] ${reason}: ${devices.join(', ')}.${previousText}`, 'WARNING');
-                });
-
                 dispatch({ type: 'SET_BATCH_HISTORY', payload: [batchSummary, ...runner.batchHistory].slice(0, 5) });
                 addLog('Bulk deployment operation completed.', 'SUCCESS');
                 dispatch({ type: 'CLEAR_SELECTIONS' });
@@ -458,16 +470,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 }
                 break;
             }
+
+            case 'REMOTE_IN_WITH_CREDENTIALS': {
+                const device = runner.devices.find(d => d.id === state.ui.remoteTargetDeviceId);
+                if (!device) break;
+                const content = api.buildRemoteDesktopFile(device, action.payload);
+                const blob = new Blob([content], { type: 'application/rdp' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `${device.hostname}.rdp`;
+                link.click();
+                URL.revokeObjectURL(url);
+                addLog(`[${device.hostname}] Remote-In prepared with credentials. Downloaded RDP config.`, 'INFO');
+                dispatch({ type: 'CLOSE_REMOTE_CREDENTIAL_MODAL' });
+                break;
+            }
+
+            case 'PROMPT_REMOTE_CREDENTIALS': {
+                const device = runner.devices.find(d => d.id === action.payload);
+                if (device) {
+                    addLog(`[${device.hostname}] Prompting for remote credentials.`, 'INFO');
+                }
+                break;
+            }
+            default:
+                break;
         }
-    }, [state]);
+    }, [dispatch]);
 
     const wrappedDispatch = useCallback((action: AppAction) => {
+        const newState = appReducer(state, action);
         dispatch(action);
-        effectRunner(state, action);
+        effectRunner(newState, action);
     }, [state, effectRunner]);
 
-
-    // Effect to check for new compliance results
     useEffect(() => {
         const checkCompliance = async () => {
             const devicesToCheck = state.monitor.devices.filter(d => d.status === 'Completed' && !d.complianceCheck);
@@ -479,7 +516,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         checkCompliance();
     }, [state.monitor.devices]);
 
-     // Request notification permission on mount
     useEffect(() => {
       if ('Notification' in window && Notification.permission !== 'denied') {
         Notification.requestPermission();

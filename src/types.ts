@@ -164,7 +164,7 @@ export interface AppState {
         devices: ImagingDevice[];
     };
     ui: {
-        activeTab: 'monitor' | 'runner' | 'build' | 'script';
+        activeTab: 'monitor' | 'runner' | 'build' | 'script' | 'remote';
         csvFile: File | null;
         isCredentialModalOpen: boolean;
         isComplianceModalOpen: boolean;
@@ -172,13 +172,15 @@ export interface AppState {
         isAllComplianceModalOpen: boolean;
         isPassedComplianceModalOpen: boolean;
         isRescanModalOpen: boolean;
+        isRemoteCredentialModalOpen: boolean;
+        remoteTargetDeviceId: number | null;
     };
     credentials?: Credentials;
 }
 
 export type AppAction =
   // UI Actions
-  | { type: 'SET_ACTIVE_TAB'; payload: 'monitor' | 'runner' | 'build' | 'script' }
+  | { type: 'SET_ACTIVE_TAB'; payload: 'monitor' | 'runner' | 'build' | 'script' | 'remote' }
   | { type: 'SET_CSV_FILE'; payload: File | null }
   | { type: 'SET_CREDENTIAL_MODAL_OPEN'; payload: boolean }
   | { type: 'SET_COMPLIANCE_MODAL_OPEN'; payload: boolean }
@@ -216,7 +218,9 @@ export type AppAction =
   | { type: 'BULK_EXECUTE' }
   | { type: 'BULK_REMOVE' }
   | { type: 'BULK_DEPLOY_OPERATION'; payload: { operation: DeploymentOperationType; file: File } }
-  | { type: 'REMOTE_IN_DEVICE'; payload: number }
+  | { type: 'PROMPT_REMOTE_CREDENTIALS'; payload: number }
+  | { type: 'REMOTE_IN_WITH_CREDENTIALS'; payload: Credentials }
+  | { type: 'CLOSE_REMOTE_CREDENTIAL_MODAL' }
   | { type: 'RESCAN_ALL_DEVICES_PROMPT' }
   | { type: 'RESCAN_ALL_DEVICES_CONFIRMED' }
   

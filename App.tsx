@@ -12,12 +12,14 @@ import { SecureCredentialModal } from './components/SecureCredentialModal';
 import { ImageMonitor } from './components/ImageMonitor';
 import { BuildOutput } from './components/BuildOutput';
 import { ImagingScriptViewer } from './components/ImagingScriptViewer';
+import { RemoteDesktop } from './components/RemoteDesktop';
 import { ComplianceDetailsModal } from './components/ComplianceDetailsModal';
 import { AllComplianceDetailsModal } from './components/AllComplianceDetailsModal';
 import { PassedComplianceDetailsModal } from './components/PassedComplianceDetailsModal';
 import { RescanConfirmationModal } from './components/RescanConfirmationModal';
+import { RemoteCredentialModal } from './components/RemoteCredentialModal';
 // FIX: Import DeviceFormFactor type
-import type { Credentials, Device, ImagingDevice, DeviceFormFactor } from './types';
+import type { Credentials } from './types';
 import { AppProvider, useAppContext } from './contexts/AppContext';
 
 // FIX: Exported constants to be used across the application for compliance checks.
@@ -31,7 +33,7 @@ const AppContent: React.FC = () => {
 
     const isReadyToDeploy = ui.csvFile || runner.devices.length > 0;
 
-    const TabButton: React.FC<{tabName: 'monitor' | 'runner' | 'build' | 'script', label: string, icon: React.ReactNode}> = ({ tabName, label, icon }) => (
+    const TabButton: React.FC<{tabName: 'monitor' | 'runner' | 'build' | 'script' | 'remote', label: string, icon: React.ReactNode}> = ({ tabName, label, icon }) => (
       <button
         onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: tabName })}
         className={`flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-t-lg border-b-2 transition-colors duration-200 ${
@@ -54,6 +56,7 @@ const AppContent: React.FC = () => {
                     <TabButton tabName="runner" label="Deployment Runner" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 001.414-1.414z" clipRule="evenodd" /></svg>} />
                     <TabButton tabName="script" label="Imaging Script" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M2 5a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V5zm3.293 1.293a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 01-1.414-1.414L7.586 10 5.293 7.707a1 1 0 010-1.414zM11 12a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd" /></svg>} />
                     <TabButton tabName="build" label="Build Output" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M5 4a2 2 0 012-2h6a2 2 0 012 2v1H5V4zM5 7h10v9a2 2 0 01-2 2H7a2 2 0 01-2-2V7z" /><path d="M10 11a1 1 0 011 1v2a1 1 0 11-2 0v-2a1 1 0 011-1z" /></svg>} />
+                    <TabButton tabName="remote" label="Remote Desktop" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z" /><path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.022 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" /></svg>} />
                 </div>
             </div>
 
@@ -173,7 +176,8 @@ const AppContent: React.FC = () => {
                     </div>
                 )}
                 {ui.activeTab === 'build' && <BuildOutput />}
-                {ui.activeTab === 'script' && <ImagingScriptViewer />}
+                                {ui.activeTab === 'script' && <ImagingScriptViewer devices={state.monitor.devices} />}
+                {ui.activeTab === 'remote' && <RemoteDesktop devices={state.runner.devices} onRemoteIn={(deviceId) => dispatch({ type: 'PROMPT_REMOTE_CREDENTIALS', payload: deviceId })} />}
             </main>
             <SecureCredentialModal 
                 isOpen={ui.isCredentialModalOpen} 
@@ -200,6 +204,12 @@ const AppContent: React.FC = () => {
                 onClose={() => dispatch({ type: 'SET_RESCAN_MODAL_OPEN', payload: false })}
                 onConfirm={() => dispatch({ type: 'RESCAN_ALL_DEVICES_CONFIRMED' })}
                 deviceCount={runner.devices.length}
+            />
+            <RemoteCredentialModal
+                isOpen={ui.isRemoteCredentialModalOpen}
+                onClose={() => dispatch({ type: 'CLOSE_REMOTE_CREDENTIAL_MODAL' })}
+                onConfirm={(credentials: Credentials) => dispatch({ type: 'REMOTE_IN_WITH_CREDENTIALS', payload: credentials })}
+                deviceHostname={runner.devices.find(d => d.id === ui.remoteTargetDeviceId)?.hostname || ''}
             />
         </div>
     );

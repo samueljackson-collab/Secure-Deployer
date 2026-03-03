@@ -2,7 +2,7 @@
 
 import { sleep, normalizeMacAddress, detectDeviceType } from '../utils/helpers';
 // FIX: Import DeploymentStatus to correctly type the device state.
-import type { Device, DeploymentStatus, ImagingDevice, DeploymentRun, ChecklistItem, ComplianceResult } from '../types';
+import type { Device, ImagingDevice, DeploymentRun, ChecklistItem, ComplianceResult } from '../types';
 import { TARGET_BIOS_VERSION, TARGET_DCU_VERSION, TARGET_WIN_VERSION } from '../App';
 import { ParseResult } from 'papaparse';
 
@@ -43,10 +43,6 @@ export const parseDevicesFromCsv = (results: ParseResult<Record<string, string>>
         const hostname = (row[hostnameCol] || '').trim();
         if (!hostname) {
             errors.push(`[Validation Skip] Skipping row ${index + 2}. Reason: Missing hostname.`);
-            return;
-        }
-        if (hostname.length > 253 || /[\r\n\t]/.test(hostname)) {
-            errors.push(`[Validation Skip] Device at row ${index + 2} has an invalid hostname. Reason: Contains control characters or exceeds maximum length.`);
             return;
         }
 
@@ -245,15 +241,14 @@ export const rebootDevice = async (): Promise<void> => {
     await sleep(8000 + Math.random() * 4000);
 };
 
-export const executeScript = async (device: Device): Promise<boolean> => {
+export const executeScript = async (): Promise<boolean> => {
     await sleep(5000 + Math.random() * 5000);
     return Math.random() > 0.2;
 };
 
-export const buildRemoteDesktopFile = (device: Device): string => {
-    // Strip newlines to prevent RDP file directive injection via crafted hostnames/IPs
-    const address = (device.ipAddress || device.hostname).replace(/[\r\n]/g, '');
-    return [
+export const buildRemoteDesktopFile = (device: Device, credentials?: Credentials): string => {
+    const address = device.ipAddress || device.hostname;
+    const lines = [
         'screen mode id:i:2',
         'use multimon:i:0',
         'session bpp:i:32',
@@ -263,7 +258,13 @@ export const buildRemoteDesktopFile = (device: Device): string => {
         'prompt for credentials:i:1',
         'authentication level:i:2',
         'redirectclipboard:i:1',
-    ].join('\n');
+    ];
+
+    if (credentials && credentials.username) {
+        lines.push(`username:s:${credentials.username}`);
+    }
+
+    return lines.join('\n');
 };
 
 export const performDeploymentOperation = async (
