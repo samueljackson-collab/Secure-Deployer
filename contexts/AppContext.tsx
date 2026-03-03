@@ -1,9 +1,28 @@
 
 
 import React, { createContext, useReducer, useContext, useEffect, useCallback } from 'react';
-import type { AppState, AppAction, AppDispatch, Device, LogEntry, ImagingDevice } from '../types';
+import type { AppState, AppAction, AppDispatch, Device, LogEntry, ImagingDevice, RunnerSettings, DeploymentBatchSummary, DeploymentOperationType } from '../types';
 import * as api from '../services/deploymentService';
 import Papa from 'papaparse';
+
+const defaultSettings: RunnerSettings = {
+    // Scan
+    maxRetries: 3,
+    retryDelay: 2,
+    connectionTimeout: 30,
+    parallelScanCount: 1,
+    // Reboot
+    autoRebootEnabled: false,
+    rebootDelay: 60,
+    maxRebootWait: 300,
+    // Wake-on-LAN
+    wolBroadcastAddress: '255.255.255.255',
+    wolPort: 9,
+    // Display
+    compactView: false,
+    showOfflineDevices: true,
+    logLevelFilter: 'ALL',
+};
 
 const initialState: AppState = {
     runner: {
@@ -12,11 +31,7 @@ const initialState: AppState = {
         deploymentState: 'idle',
         selectedDeviceIds: new Set(),
         history: [],
-        settings: {
-            maxRetries: 3,
-            retryDelay: 2,
-            autoRebootEnabled: false,
-        },
+        settings: defaultSettings,
         isCancelled: false,
         batchHistory: [],
     },
@@ -32,6 +47,7 @@ const initialState: AppState = {
         isAllComplianceModalOpen: false,
         isPassedComplianceModalOpen: false,
         isRescanModalOpen: false,
+        isSystemInfoModalOpen: false,
     },
 };
 
@@ -54,6 +70,10 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
             return { ...state, ui: { ...state.ui, isCredentialModalOpen: true } };
         case 'SET_CREDENTIAL_MODAL_OPEN':
             return { ...state, ui: { ...state.ui, isCredentialModalOpen: action.payload } };
+        case 'SET_SYSTEM_INFO_MODAL_OPEN':
+            return { ...state, ui: { ...state.ui, isSystemInfoModalOpen: action.payload } };
+        case 'CLEAR_CREDENTIALS':
+            return { ...state, credentials: undefined };
         case 'INITIALIZE_DEPLOYMENT':
             return {
                 ...state,
@@ -63,11 +83,12 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
                     devices: action.payload.devices,
                     logs: [
                         { timestamp: new Date(), message: "Deployment process initiated.", level: 'INFO' },
-                        { timestamp: new Date(), message: `User: ${action.payload.credentials.username}`, level: 'INFO' }
+                        // Security: do not log username or any credential details
+                        { timestamp: new Date(), message: "Authenticated session started.", level: 'INFO' },
                     ],
                     deploymentState: 'running',
                     isCancelled: false,
-        batchHistory: [],
+                    batchHistory: [],
                     selectedDeviceIds: new Set(),
                 }
             };
@@ -83,8 +104,8 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
             };
         case 'DEPLOYMENT_FINISHED':
             return { ...state, runner: { ...state.runner, deploymentState: 'complete' } };
-        case 'CANCEL_DEPLOYMENT':
-             const cancellableStatuses: (Device['status'])[] = ['Connecting', 'Retrying...', 'Updating', 'Waking Up', 'Checking Info', 'Checking BIOS', 'Checking DCU', 'Checking Windows', 'Updating BIOS', 'Updating DCU', 'Updating Windows', 'Rebooting...', 'Executing Script'];
+        case 'CANCEL_DEPLOYMENT': {
+            const cancellableStatuses: (Device['status'])[] = ['Connecting', 'Retrying...', 'Updating', 'Waking Up', 'Checking Info', 'Checking BIOS', 'Checking DCU', 'Checking Windows', 'Updating BIOS', 'Updating DCU', 'Updating Windows', 'Rebooting...', 'Executing Script'];
             return {
                 ...state,
                 runner: {
@@ -94,12 +115,13 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
                     devices: state.runner.devices.map(d => cancellableStatuses.includes(d.status) ? { ...d, status: 'Cancelled' } : d)
                 }
             };
-        case 'ARCHIVE_RUN':
+        }
+        case 'ARCHIVE_RUN': {
             const currentDevices = state.runner.devices;
             if (currentDevices.length === 0) return state;
             const newRun = api.generateRunArchive(currentDevices);
             return { ...state, runner: { ...state.runner, history: [newRun, ...state.runner.history].slice(0, 10) } };
-        
+        }
         case 'TOGGLE_DEVICE_SELECTION': {
             const newSet = new Set(state.runner.selectedDeviceIds);
             if (newSet.has(action.payload)) newSet.delete(action.payload);
@@ -116,7 +138,7 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
             return { ...state, runner: { ...state.runner, devices: state.runner.devices.map(d => d.id === action.payload.id ? { ...d, ...action.payload } : d) } };
         case 'SET_BATCH_HISTORY':
             return { ...state, runner: { ...state.runner, batchHistory: action.payload } };
-        
+
         case 'SET_IMAGING_DEVICES':
             return { ...state, monitor: { ...state.monitor, devices: action.payload } };
         case 'UPDATE_IMAGING_DEVICE_STATE':
@@ -125,7 +147,7 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
             return { ...state, monitor: { ...state.monitor, devices: state.monitor.devices.map(d => d.id === action.payload.deviceId ? { ...d, hostname: action.payload.newHostname } : d) } };
         case 'REMOVE_IMAGING_DEVICE':
             return { ...state, monitor: { ...state.monitor, devices: state.monitor.devices.filter(d => d.id !== action.payload) } };
-        
+
         case 'TRANSFER_ALL_COMPLETED_DEVICES': {
             const completed = state.monitor.devices.filter(d => d.status === 'Completed');
             if (completed.length === 0) return state;
@@ -148,13 +170,12 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
                 ui: { ...state.ui, activeTab: 'runner' }
             };
         }
-        case 'CLEAR_SELECTED_IMAGING_DEVICES': {
-             return { ...state, monitor: { ...state.monitor, devices: state.monitor.devices.filter(d => !action.payload.has(d.id)) } };
-        }
+        case 'CLEAR_SELECTED_IMAGING_DEVICES':
+            return { ...state, monitor: { ...state.monitor, devices: state.monitor.devices.filter(d => !action.payload.has(d.id)) } };
         case 'SHOW_COMPLIANCE_DETAILS':
             return { ...state, ui: { ...state.ui, selectedComplianceResult: action.payload, isComplianceModalOpen: true } };
         case 'SET_COMPLIANCE_MODAL_OPEN':
-             return { ...state, ui: { ...state.ui, isComplianceModalOpen: action.payload } };
+            return { ...state, ui: { ...state.ui, isComplianceModalOpen: action.payload } };
         case 'SET_ALL_COMPLIANCE_MODAL_OPEN':
             return { ...state, ui: { ...state.ui, isAllComplianceModalOpen: action.payload } };
         case 'SET_PASSED_COMPLIANCE_MODAL_OPEN':
@@ -163,7 +184,7 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
             return { ...state, ui: { ...state.ui, isRescanModalOpen: action.payload } };
         case 'RESCAN_ALL_DEVICES_PROMPT':
             if (state.runner.devices.length === 0) {
-                 return { ...state, runner: { ...state.runner, logs: [...state.runner.logs, { timestamp: new Date(), message: "No devices to re-scan.", level: 'WARNING' }] } };
+                return { ...state, runner: { ...state.runner, logs: [...state.runner.logs, { timestamp: new Date(), message: "No devices to re-scan.", level: 'WARNING' }] } };
             }
             return { ...state, ui: { ...state.ui, isRescanModalOpen: true } };
         case 'RESCAN_ALL_DEVICES_CONFIRMED':
@@ -174,7 +195,7 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
                     ...state.runner,
                     deploymentState: 'running',
                     isCancelled: false,
-        batchHistory: [],
+                    batchHistory: [],
                     logs: [...state.runner.logs, { timestamp: new Date(), message: "Initiating re-scan for all devices...", level: 'INFO' }],
                     devices: state.runner.devices.map(d => ({
                         ...d,
@@ -203,31 +224,73 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [state, dispatch] = useReducer(appReducer, initialState);
 
-    // Effect for handling async operations triggered by actions
     const effectRunner = useCallback(async (state: AppState, action: AppAction) => {
-        const { runner, ui, credentials } = state;
+        const { runner } = state;
 
         const addLog = (message: string, level: LogEntry['level'] = 'INFO') => {
             dispatch({ type: 'ADD_LOG', payload: { timestamp: new Date(), message, level } });
         };
         const sendNotification = (title: string, body: string) => {
-             if ('Notification' in window && Notification.permission === 'granted') {
+            if ('Notification' in window && Notification.permission === 'granted') {
                 new Notification(title, { body, icon: '/favicon.svg' });
             }
-        }
+        };
+
+        // Helper for the shared bulk deploy operation logic
+        const runBulkDeployOperation = async (payload: { operation: DeploymentOperationType; file: File }) => {
+            const devicesToProcess = runner.devices.filter(d => runner.selectedDeviceIds.has(d.id));
+            if (devicesToProcess.length === 0) {
+                addLog('No selected devices for bulk deployment operation.', 'WARNING');
+                return;
+            }
+            const operationLabel: Record<DeploymentOperationType, string> = { run: 'Run', install: 'Install', delete: 'Delete' };
+            addLog(`Starting bulk ${operationLabel[payload.operation]} for ${devicesToProcess.length} devices using "${payload.file.name}".`, 'INFO');
+
+            const failuresByReason: Record<string, string[]> = {};
+            for (const device of devicesToProcess) {
+                dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, status: 'Deploying Action' } });
+                const result = await api.performDeploymentOperation(device, payload.operation, payload.file);
+                dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, ...result.patch } });
+                addLog(result.message, result.ok ? 'SUCCESS' : 'ERROR');
+                if (!result.ok && result.reason) {
+                    failuresByReason[result.reason] = failuresByReason[result.reason] || [];
+                    failuresByReason[result.reason].push(device.hostname);
+                }
+            }
+
+            const batchSummary: DeploymentBatchSummary = {
+                id: crypto.randomUUID(),
+                operation: payload.operation,
+                targetName: payload.file.name,
+                startedAt: new Date(),
+                failuresByReason,
+            };
+            const previous = runner.batchHistory[0];
+            Object.entries(failuresByReason).forEach(([reason, devices]) => {
+                const previousDevices = previous?.failuresByReason[reason] || [];
+                const previousText = previousDevices.length > 0
+                    ? ` Recent previous batch also hit this on: ${previousDevices.join(', ')}.`
+                    : '';
+                addLog(`[Batch Summary] ${reason}: ${devices.join(', ')}.${previousText}`, 'WARNING');
+            });
+
+            dispatch({ type: 'SET_BATCH_HISTORY', payload: [batchSummary, ...runner.batchHistory].slice(0, 5) });
+            addLog('Bulk deployment operation completed.', 'SUCCESS');
+            dispatch({ type: 'CLEAR_SELECTIONS' });
+        };
 
         switch (action.type) {
-             case 'START_DEPLOYMENT_CONFIRMED': {
+            case 'START_DEPLOYMENT_CONFIRMED': {
                 dispatch({ type: 'SET_CREDENTIAL_MODAL_OPEN', payload: false });
-                if (ui.csvFile) {
-                    Papa.parse<Record<string, string>>(ui.csvFile, {
+                if (state.ui.csvFile) {
+                    Papa.parse<Record<string, string>>(state.ui.csvFile, {
                         header: true,
                         skipEmptyLines: true,
                         complete: (results) => {
                             const { devices, errors } = api.parseDevicesFromCsv(results);
                             errors.forEach(e => addLog(e, 'ERROR'));
                             if (devices.length > 0) {
-                                addLog(`Validated and loaded ${devices.length} devices from ${ui.csvFile?.name}.`, 'INFO');
+                                addLog(`Validated and loaded ${devices.length} devices from ${state.ui.csvFile?.name}.`, 'INFO');
                                 dispatch({ type: 'INITIALIZE_DEPLOYMENT', payload: { devices, credentials: action.payload } });
                             }
                         }
@@ -237,16 +300,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 }
                 break;
             }
-            
+
             case 'INITIALIZE_DEPLOYMENT': {
                 const onProgress = (device: Device) => dispatch({ type: 'UPDATE_DEVICE_STATE', payload: device });
                 try {
-                     await api.runDeploymentFlow(action.payload.devices, runner.settings, onProgress, () => state.runner.isCancelled);
-                     if (!state.runner.isCancelled) {
+                    await api.runDeploymentFlow(action.payload.devices, runner.settings, onProgress, () => state.runner.isCancelled);
+                    if (!state.runner.isCancelled) {
                         addLog("Deployment scan complete.", 'INFO');
                         sendNotification('Deployment Complete', `Scan finished.`);
                         dispatch({ type: 'DEPLOYMENT_FINISHED' });
-                     }
+                        // Security: clear credentials from state after deployment finishes
+                        dispatch({ type: 'CLEAR_CREDENTIALS' });
+                    }
                 } catch (error) {
                     addLog(error instanceof Error ? error.message : String(error), 'ERROR');
                     dispatch({ type: 'DEPLOYMENT_FINISHED' });
@@ -257,7 +322,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 }
                 break;
             }
-            
+
             case 'CANCEL_DEPLOYMENT': {
                 addLog('Deployment cancelled by user.', 'WARNING');
                 sendNotification('Deployment Cancelled', 'The process was stopped.');
@@ -269,14 +334,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             case 'BULK_UPDATE': {
                 const deviceIds = action.type === 'UPDATE_DEVICE' ? [action.payload] : [...runner.selectedDeviceIds];
                 if (action.type === 'BULK_UPDATE') addLog(`Initiating bulk update for ${deviceIds.length} devices...`, 'INFO');
-                
                 const onProgress = (device: Device) => dispatch({ type: 'UPDATE_DEVICE_STATE', payload: device });
-
                 await Promise.all(deviceIds.map(id => {
                     const device = runner.devices.find(d => d.id === id);
-                    if(device) return api.updateDevice(device, runner.settings, onProgress, () => state.runner.isCancelled);
+                    if (device) return api.updateDevice(device, runner.settings, onProgress, () => state.runner.isCancelled);
                 }));
-
                 if (action.type === 'BULK_UPDATE') {
                     addLog('Bulk update complete.', 'SUCCESS');
                     dispatch({ type: 'CLEAR_SELECTIONS' });
@@ -314,7 +376,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 const devicesToExecute = action.type === 'EXECUTE_SCRIPT'
                     ? [runner.devices.find(d => d.id === action.payload)].filter(Boolean) as Device[]
                     : runner.devices.filter(d => runner.selectedDeviceIds.has(d.id) && d.status === 'Ready for Execution');
-                
                 if (devicesToExecute.length === 0) {
                     addLog('No selected devices are ready for execution.', 'WARNING');
                     break;
@@ -324,12 +385,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, status: 'Executing Script' } });
                     const success = await api.executeScript(device);
                     if (!state.runner.isCancelled) {
-                         dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, status: success ? 'Execution Complete' : 'Execution Failed' } });
-                         addLog(`Script execution ${success ? 'succeeded' : 'failed'} on ${device.hostname}.`, success ? 'SUCCESS' : 'ERROR');
+                        dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, status: success ? 'Execution Complete' : 'Execution Failed' } });
+                        addLog(`Script execution ${success ? 'succeeded' : 'failed'} on ${device.hostname}.`, success ? 'SUCCESS' : 'ERROR');
                     }
                 }));
-                 if (action.type === 'BULK_EXECUTE') dispatch({ type: 'CLEAR_SELECTIONS' });
-                 break;
+                if (action.type === 'BULK_EXECUTE') dispatch({ type: 'CLEAR_SELECTIONS' });
+                break;
             }
 
             case 'BULK_REMOVE': {
@@ -341,50 +402,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
 
             case 'BULK_DEPLOY_OPERATION': {
-                const devicesToProcess = runner.devices.filter(d => runner.selectedDeviceIds.has(d.id));
-                if (devicesToProcess.length === 0) {
-                    addLog('No selected devices for bulk deployment operation.', 'WARNING');
-                    break;
-                }
-
-                const operationLabel: Record<DeploymentOperationType, string> = {
-                    run: 'Run',
-                    install: 'Install',
-                    delete: 'Delete',
-                };
-                addLog(`Starting bulk ${operationLabel[action.payload.operation]} for ${devicesToProcess.length} devices using "${action.payload.file.name}".`, 'INFO');
-
-                const failuresByReason: Record<string, string[]> = {};
-                for (const device of devicesToProcess) {
-                    dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, status: 'Deploying Action' } });
-                    const result = await api.performDeploymentOperation(device, action.payload.operation, action.payload.file);
-                    dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, ...result.patch } });
-                    addLog(result.message, result.ok ? 'SUCCESS' : 'ERROR');
-                    if (!result.ok && result.reason) {
-                        failuresByReason[result.reason] = failuresByReason[result.reason] || [];
-                        failuresByReason[result.reason].push(device.hostname);
-                    }
-                }
-
-                const batchSummary: DeploymentBatchSummary = {
-                    id: crypto.randomUUID(),
-                    operation: action.payload.operation,
-                    targetName: action.payload.file.name,
-                    startedAt: new Date(),
-                    failuresByReason,
-                };
-                const previous = runner.batchHistory[0];
-                Object.entries(failuresByReason).forEach(([reason, devices]) => {
-                    const previousDevices = previous?.failuresByReason[reason] || [];
-                    const previousText = previousDevices.length > 0
-                        ? ` Recent previous batch also hit this on: ${previousDevices.join(', ')}.`
-                        : '';
-                    addLog(`[Batch Summary] ${reason}: ${devices.join(', ')}.${previousText}`, 'WARNING');
-                });
-
-                dispatch({ type: 'SET_BATCH_HISTORY', payload: [batchSummary, ...runner.batchHistory].slice(0, 5) });
-                addLog('Bulk deployment operation completed.', 'SUCCESS');
-                dispatch({ type: 'CLEAR_SELECTIONS' });
+                await runBulkDeployOperation(action.payload);
                 break;
             }
 
@@ -403,138 +421,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 break;
             }
 
-             case 'BULK_CANCEL': {
+            case 'BULK_CANCEL': {
                 addLog(`Cancelling tasks for ${runner.selectedDeviceIds.size} devices...`, 'WARNING');
                 const cancellable: (Device['status'])[] = ['Connecting', 'Retrying...', 'Updating', 'Waking Up', 'Checking Info', 'Checking BIOS', 'Checking DCU', 'Checking Windows', 'Updating BIOS', 'Updating DCU', 'Updating Windows', 'Executing Script'];
                 const newDevices = runner.devices.map(d => runner.selectedDeviceIds.has(d.id) && cancellable.includes(d.status) ? { ...d, status: 'Cancelled' } : d);
                 dispatch({ type: 'SET_DEVICES', payload: newDevices });
                 dispatch({ type: 'CLEAR_SELECTIONS' });
-                break;
-            }
-
-            case 'BULK_DEPLOY_OPERATION': {
-                const devicesToProcess = runner.devices.filter(d => runner.selectedDeviceIds.has(d.id));
-                if (devicesToProcess.length === 0) {
-                    addLog('No selected devices for bulk deployment operation.', 'WARNING');
-                    break;
-                }
-
-                const operationLabel: Record<DeploymentOperationType, string> = {
-                    run: 'Run',
-                    install: 'Install',
-                    delete: 'Delete',
-                };
-                addLog(`Starting bulk ${operationLabel[action.payload.operation]} for ${devicesToProcess.length} devices using "${action.payload.file.name}".`, 'INFO');
-
-                const failuresByReason: Record<string, string[]> = {};
-                for (const device of devicesToProcess) {
-                    dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, status: 'Deploying Action' } });
-                    const result = await api.performDeploymentOperation(device, action.payload.operation, action.payload.file);
-                    dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, ...result.patch } });
-                    addLog(result.message, result.ok ? 'SUCCESS' : 'ERROR');
-                    if (!result.ok && result.reason) {
-                        failuresByReason[result.reason] = failuresByReason[result.reason] || [];
-                        failuresByReason[result.reason].push(device.hostname);
-                    }
-                }
-
-                const batchSummary: DeploymentBatchSummary = {
-                    id: Date.now(),
-                    operation: action.payload.operation,
-                    targetName: action.payload.file.name,
-                    startedAt: new Date(),
-                    failuresByReason,
-                };
-                const previous = runner.batchHistory[0];
-                Object.entries(failuresByReason).forEach(([reason, devices]) => {
-                    const previousDevices = previous?.failuresByReason[reason] || [];
-                    const previousText = previousDevices.length > 0
-                        ? ` Recent previous batch also hit this on: ${previousDevices.join(', ')}.`
-                        : '';
-                    addLog(`[Batch Summary] ${reason}: ${devices.join(', ')}.${previousText}`, 'WARNING');
-                });
-
-                dispatch({ type: 'SET_BATCH_HISTORY', payload: [batchSummary, ...runner.batchHistory].slice(0, 5) });
-                addLog('Bulk deployment operation completed.', 'SUCCESS');
-                dispatch({ type: 'CLEAR_SELECTIONS' });
-                break;
-            }
-
-            case 'REMOTE_IN_DEVICE': {
-                const device = runner.devices.find(d => d.id === action.payload);
-                if (!device) break;
-                const content = api.buildRemoteDesktopFile(device);
-                const blob = new Blob([content], { type: 'application/rdp' });
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = `${device.hostname}.rdp`;
-                link.click();
-                URL.revokeObjectURL(url);
-                addLog(`[${device.hostname}] Remote-In prepared. Downloaded RDP config for ${device.ipAddress || device.hostname}.`, 'INFO');
-                break;
-            }
-
-            case 'BULK_DEPLOY_OPERATION': {
-                const devicesToProcess = runner.devices.filter(d => runner.selectedDeviceIds.has(d.id));
-                if (devicesToProcess.length === 0) {
-                    addLog('No selected devices for bulk deployment operation.', 'WARNING');
-                    break;
-                }
-
-                const operationLabel: Record<DeploymentOperationType, string> = {
-                    run: 'Run',
-                    install: 'Install',
-                    delete: 'Delete',
-                };
-                addLog(`Starting bulk ${operationLabel[action.payload.operation]} for ${devicesToProcess.length} devices using "${action.payload.file.name}".`, 'INFO');
-
-                const failuresByReason: Record<string, string[]> = {};
-                for (const device of devicesToProcess) {
-                    dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, status: 'Deploying Action' } });
-                    const result = await api.performDeploymentOperation(device, action.payload.operation, action.payload.file);
-                    dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, ...result.patch } });
-                    addLog(result.message, result.ok ? 'SUCCESS' : 'ERROR');
-                    if (!result.ok && result.reason) {
-                        failuresByReason[result.reason] = failuresByReason[result.reason] || [];
-                        failuresByReason[result.reason].push(device.hostname);
-                    }
-                }
-
-                const batchSummary: DeploymentBatchSummary = {
-                    id: Date.now(),
-                    operation: action.payload.operation,
-                    targetName: action.payload.file.name,
-                    startedAt: new Date(),
-                    failuresByReason,
-                };
-                const previous = runner.batchHistory[0];
-                Object.entries(failuresByReason).forEach(([reason, devices]) => {
-                    const previousDevices = previous?.failuresByReason[reason] || [];
-                    const previousText = previousDevices.length > 0
-                        ? ` Recent previous batch also hit this on: ${previousDevices.join(', ')}.`
-                        : '';
-                    addLog(`[Batch Summary] ${reason}: ${devices.join(', ')}.${previousText}`, 'WARNING');
-                });
-
-                dispatch({ type: 'SET_BATCH_HISTORY', payload: [batchSummary, ...runner.batchHistory].slice(0, 5) });
-                addLog('Bulk deployment operation completed.', 'SUCCESS');
-                dispatch({ type: 'CLEAR_SELECTIONS' });
-                break;
-            }
-
-            case 'REMOTE_IN_DEVICE': {
-                const device = runner.devices.find(d => d.id === action.payload);
-                if (!device) break;
-                const content = api.buildRemoteDesktopFile(device);
-                const blob = new Blob([content], { type: 'application/rdp' });
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = `${device.hostname}.rdp`;
-                link.click();
-                URL.revokeObjectURL(url);
-                addLog(`[${device.hostname}] Remote-In prepared. Downloaded RDP config for ${device.ipAddress || device.hostname}.`, 'INFO');
                 break;
             }
 
@@ -547,69 +439,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 break;
             }
 
-            case 'BULK_DEPLOY_OPERATION': {
-                const devicesToProcess = runner.devices.filter(d => runner.selectedDeviceIds.has(d.id));
-                if (devicesToProcess.length === 0) {
-                    addLog('No selected devices for bulk deployment operation.', 'WARNING');
-                    break;
-                }
-
-                const operationLabel: Record<DeploymentOperationType, string> = {
-                    run: 'Run',
-                    install: 'Install',
-                    delete: 'Delete',
-                };
-                addLog(`Starting bulk ${operationLabel[action.payload.operation]} for ${devicesToProcess.length} devices using "${action.payload.file.name}".`, 'INFO');
-
-                const failuresByReason: Record<string, string[]> = {};
-                for (const device of devicesToProcess) {
-                    dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, status: 'Deploying Action' } });
-                    const result = await api.performDeploymentOperation(device, action.payload.operation, action.payload.file);
-                    dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, ...result.patch } });
-                    addLog(result.message, result.ok ? 'SUCCESS' : 'ERROR');
-                    if (!result.ok && result.reason) {
-                        failuresByReason[result.reason] = failuresByReason[result.reason] || [];
-                        failuresByReason[result.reason].push(device.hostname);
-                    }
-                }
-
-                const batchSummary: DeploymentBatchSummary = {
-                    id: Date.now(),
-                    operation: action.payload.operation,
-                    targetName: action.payload.file.name,
-                    startedAt: new Date(),
-                    failuresByReason,
-                };
-                const previous = runner.batchHistory[0];
-                Object.entries(failuresByReason).forEach(([reason, devices]) => {
-                    const previousDevices = previous?.failuresByReason[reason] || [];
-                    const previousText = previousDevices.length > 0
-                        ? ` Recent previous batch also hit this on: ${previousDevices.join(', ')}.`
-                        : '';
-                    addLog(`[Batch Summary] ${reason}: ${devices.join(', ')}.${previousText}`, 'WARNING');
-                });
-
-                dispatch({ type: 'SET_BATCH_HISTORY', payload: [batchSummary, ...runner.batchHistory].slice(0, 5) });
-                addLog('Bulk deployment operation completed.', 'SUCCESS');
-                dispatch({ type: 'CLEAR_SELECTIONS' });
-                break;
-            }
-
-            case 'REMOTE_IN_DEVICE': {
-                const device = runner.devices.find(d => d.id === action.payload);
-                if (!device) break;
-                const content = api.buildRemoteDesktopFile(device);
-                const blob = new Blob([content], { type: 'application/rdp' });
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = `${device.hostname}.rdp`;
-                link.click();
-                URL.revokeObjectURL(url);
-                addLog(`[${device.hostname}] Remote-In prepared. Downloaded RDP config for ${device.ipAddress || device.hostname}.`, 'INFO');
-                break;
-            }
-
             case 'SET_SCRIPT_FILE': {
                 const device = runner.devices.find(d => d.id === action.payload.deviceId);
                 if (device) {
@@ -619,11 +448,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 break;
             }
 
-             case 'REVALIDATE_IMAGING_DEVICES': {
+            case 'REVALIDATE_IMAGING_DEVICES': {
                 addLog(`Starting re-validation for ${action.payload.size} device(s).`, 'INFO');
-                 const onProgress = (device: ImagingDevice) => dispatch({ type: 'UPDATE_IMAGING_DEVICE_STATE', payload: device });
-                 const devicesToRevalidate = state.monitor.devices.filter(d => action.payload.has(d.id));
-                 await api.revalidateImagingDevices(devicesToRevalidate, onProgress);
+                const onProgress = (device: ImagingDevice) => dispatch({ type: 'UPDATE_IMAGING_DEVICE_STATE', payload: device });
+                const devicesToRevalidate = state.monitor.devices.filter(d => action.payload.has(d.id));
+                await api.revalidateImagingDevices(devicesToRevalidate, onProgress);
                 break;
             }
 
@@ -647,95 +476,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 }
                 break;
             }
-
-            case 'BULK_DEPLOY_OPERATION': {
-                const devicesToProcess = runner.devices.filter(d => runner.selectedDeviceIds.has(d.id));
-                if (devicesToProcess.length === 0) {
-                    addLog('No selected devices for bulk deployment operation.', 'WARNING');
-                    break;
-                }
-
-                const operationLabel: Record<DeploymentOperationType, string> = {
-                    run: 'Run',
-                    install: 'Install',
-                    delete: 'Delete',
-                };
-                addLog(`Starting bulk ${operationLabel[action.payload.operation]} for ${devicesToProcess.length} devices using "${action.payload.file.name}".`, 'INFO');
-
-                const failuresByReason: Record<string, string[]> = {};
-                for (const device of devicesToProcess) {
-                    dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, status: 'Deploying Action' } });
-                    const result = await api.performDeploymentOperation(device, action.payload.operation, action.payload.file);
-                    dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, ...result.patch } });
-                    addLog(result.message, result.ok ? 'SUCCESS' : 'ERROR');
-                    if (!result.ok && result.reason) {
-                        failuresByReason[result.reason] = failuresByReason[result.reason] || [];
-                        failuresByReason[result.reason].push(device.hostname);
-                    }
-                }
-
-                const batchSummary: DeploymentBatchSummary = {
-                    id: Date.now(),
-                    operation: action.payload.operation,
-                    targetName: action.payload.file.name,
-                    startedAt: new Date(),
-                    failuresByReason,
-                };
-                const previous = runner.batchHistory[0];
-                Object.entries(failuresByReason).forEach(([reason, devices]) => {
-                    const previousDevices = previous?.failuresByReason[reason] || [];
-                    const previousText = previousDevices.length > 0
-                        ? ` Recent previous batch also hit this on: ${previousDevices.join(', ')}.`
-                        : '';
-                    addLog(`[Batch Summary] ${reason}: ${devices.join(', ')}.${previousText}`, 'WARNING');
-                });
-
-                dispatch({ type: 'SET_BATCH_HISTORY', payload: [batchSummary, ...runner.batchHistory].slice(0, 5) });
-                addLog('Bulk deployment operation completed.', 'SUCCESS');
-                dispatch({ type: 'CLEAR_SELECTIONS' });
-                break;
-            }
-
-            case 'REMOTE_IN_DEVICE': {
-                const device = runner.devices.find(d => d.id === action.payload);
-                if (!device) break;
-                const content = api.buildRemoteDesktopFile(device);
-                const blob = new Blob([content], { type: 'application/rdp' });
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = `${device.hostname}.rdp`;
-                link.click();
-                URL.revokeObjectURL(url);
-                addLog(`[${device.hostname}] Remote-In prepared. Downloaded RDP config for ${device.ipAddress || device.hostname}.`, 'INFO');
-                break;
-            }
         }
-    }, [state]); // Rerun effect when state changes if you need to react to state updates for new async calls
+    }, [state]);
 
     const wrappedDispatch = useCallback((action: AppAction) => {
         dispatch(action);
         effectRunner(state, action);
     }, [state, effectRunner]);
 
-
-    // Effect to check for new compliance results
+    // Effect to check for new compliance results on imaging devices
     useEffect(() => {
         const checkCompliance = async () => {
             const devicesToCheck = state.monitor.devices.filter(d => d.status === 'Completed' && !d.complianceCheck);
             if (devicesToCheck.length === 0) return;
-
             const onProgress = (device: ImagingDevice) => dispatch({ type: 'UPDATE_IMAGING_DEVICE_STATE', payload: device });
             await api.runComplianceChecks(devicesToCheck, onProgress);
         };
         checkCompliance();
     }, [state.monitor.devices]);
 
-     // Request notification permission on mount
+    // Request notification permission on mount
     useEffect(() => {
-      if ('Notification' in window && Notification.permission !== 'denied') {
-        Notification.requestPermission();
-      }
+        if ('Notification' in window && Notification.permission !== 'denied') {
+            Notification.requestPermission();
+        }
     }, []);
 
     return (

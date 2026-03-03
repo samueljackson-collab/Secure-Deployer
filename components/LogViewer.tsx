@@ -25,7 +25,16 @@ const levelButtonClasses: Record<LogEntry['level'], string> = {
 
 const LOG_LEVELS: LogEntry['level'][] = ['INFO', 'SUCCESS', 'WARNING', 'ERROR'];
 
-export const LogViewer: React.FC<{ logs: LogEntry[] }> = React.memo(({ logs }) => {
+// Maps each level to a numeric priority for global-level filtering
+const levelPriority: Record<LogEntry['level'], number> = { INFO: 0, SUCCESS: 0, WARNING: 1, ERROR: 2 };
+const globalFilterMinPriority: Record<string, number> = { ALL: -1, INFO: 0, WARNING: 1, ERROR: 2 };
+
+interface LogViewerProps {
+    logs: LogEntry[];
+    globalLevelFilter?: 'ALL' | 'INFO' | 'WARNING' | 'ERROR';
+}
+
+export const LogViewer: React.FC<LogViewerProps> = React.memo(({ logs, globalLevelFilter = 'ALL' }) => {
     const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
     const [filters, setFilters] = useState<Set<LogEntry['level']>>(new Set(LOG_LEVELS));
@@ -42,7 +51,10 @@ export const LogViewer: React.FC<{ logs: LogEntry[] }> = React.memo(({ logs }) =
         });
     };
 
-    const filteredLogs = logs.filter(log => filters.has(log.level));
+    const minPriority = globalFilterMinPriority[globalLevelFilter] ?? -1;
+    const filteredLogs = logs.filter(log =>
+        filters.has(log.level) && levelPriority[log.level] >= minPriority
+    );
 
     useEffect(() => {
         if (scrollRef.current) {

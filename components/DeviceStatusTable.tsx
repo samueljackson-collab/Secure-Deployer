@@ -123,9 +123,11 @@ interface DeviceStatusTableProps {
     onDeviceSelect: (deviceId: number) => void;
     onSelectAll: (select: boolean) => void;
     deploymentState: 'idle' | 'running' | 'complete';
+    compactView?: boolean;
+    showOfflineDevices?: boolean;
 }
 
-export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, selectedDeviceIds, onUpdateDevice, onRebootDevice, onValidateDevice, onSetScriptFile, onExecuteScript, onRemoteIn, onDeviceSelect, onSelectAll, deploymentState }) => {
+export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, selectedDeviceIds, onUpdateDevice, onRebootDevice, onValidateDevice, onSetScriptFile, onExecuteScript, onRemoteIn, onDeviceSelect, onSelectAll, deploymentState, compactView = false, showOfflineDevices = true }) => {
     const [showLegend, setShowLegend] = useState(false);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; deviceId: number } | null>(null);
     const [copyNotification, setCopyNotification] = useState<string | null>(null);
@@ -172,8 +174,8 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
                     />
                 </div>
             </div>
-            <div className="overflow-y-auto flex-grow p-3 space-y-3">
-                {devices.map(device => {
+            <div className={`overflow-y-auto flex-grow p-3 ${compactView ? 'space-y-1' : 'space-y-3'}`}>
+                {devices.filter(d => showOfflineDevices || !['Offline', 'Failed', 'Cancelled'].includes(d.status)).map(device => {
                     const needsUpdate = Object.values(device.updatesNeeded || {}).some(needed => needed);
                     const showScanDetails = !['Pending', 'Waking Up', 'Pending Validation'].includes(device.status);
                     const showDeploymentDetails = ['Pending File', 'Ready for Execution', 'Executing Script', 'Execution Complete', 'Execution Failed'].includes(device.status);
@@ -182,7 +184,7 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
                     return (
                         <div
                             key={device.id}
-                            className={`bg-black/50 border rounded-lg p-3 transition-all duration-200 ${isSelected ? 'border-[#39FF14] shadow-lg' : 'border-gray-800'}`}
+                            className={`bg-black/50 border rounded-lg transition-all duration-200 ${compactView ? 'p-2' : 'p-3'} ${isSelected ? 'border-[#39FF14] shadow-lg' : 'border-gray-800'}`}
                             onContextMenu={(e) => {
                                 e.preventDefault();
                                 setContextMenu({ x: e.clientX, y: e.clientY, deviceId: device.id });

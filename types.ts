@@ -69,7 +69,7 @@ export type DeploymentStatus =
 export type DeploymentOperationType = 'run' | 'install' | 'delete';
 
 export interface DeploymentBatchSummary {
-  id: number;
+  id: string;
   operation: DeploymentOperationType;
   targetName: string;
   startedAt: Date;
@@ -145,6 +145,27 @@ export interface ImagingDevice {
 
 // --- Types for AppContext ---
 
+export type ActiveTab = 'monitor' | 'runner' | 'build' | 'script' | 'remote';
+
+export interface RunnerSettings {
+    // Scan
+    maxRetries: number;
+    retryDelay: number;         // seconds
+    connectionTimeout: number;  // seconds
+    parallelScanCount: number;  // 1-10
+    // Reboot
+    autoRebootEnabled: boolean;
+    rebootDelay: number;        // seconds
+    maxRebootWait: number;      // seconds
+    // Wake-on-LAN
+    wolBroadcastAddress: string;
+    wolPort: number;
+    // Display
+    compactView: boolean;
+    showOfflineDevices: boolean;
+    logLevelFilter: 'ALL' | 'INFO' | 'WARNING' | 'ERROR';
+}
+
 export interface AppState {
     runner: {
         devices: Device[];
@@ -152,11 +173,7 @@ export interface AppState {
         deploymentState: DeploymentState;
         selectedDeviceIds: Set<number>;
         history: DeploymentRun[];
-        settings: {
-            maxRetries: number;
-            retryDelay: number;
-            autoRebootEnabled: boolean;
-        };
+        settings: RunnerSettings;
         isCancelled: boolean;
         batchHistory: DeploymentBatchSummary[];
     };
@@ -164,7 +181,7 @@ export interface AppState {
         devices: ImagingDevice[];
     };
     ui: {
-        activeTab: 'monitor' | 'runner' | 'build' | 'script';
+        activeTab: ActiveTab;
         csvFile: File | null;
         isCredentialModalOpen: boolean;
         isComplianceModalOpen: boolean;
@@ -172,13 +189,14 @@ export interface AppState {
         isAllComplianceModalOpen: boolean;
         isPassedComplianceModalOpen: boolean;
         isRescanModalOpen: boolean;
+        isSystemInfoModalOpen: boolean;
     };
     credentials?: Credentials;
 }
 
 export type AppAction =
   // UI Actions
-  | { type: 'SET_ACTIVE_TAB'; payload: 'monitor' | 'runner' | 'build' | 'script' }
+  | { type: 'SET_ACTIVE_TAB'; payload: ActiveTab }
   | { type: 'SET_CSV_FILE'; payload: File | null }
   | { type: 'SET_CREDENTIAL_MODAL_OPEN'; payload: boolean }
   | { type: 'SET_COMPLIANCE_MODAL_OPEN'; payload: boolean }
@@ -186,7 +204,9 @@ export type AppAction =
   | { type: 'SET_PASSED_COMPLIANCE_MODAL_OPEN'; payload: boolean }
   | { type: 'SHOW_COMPLIANCE_DETAILS'; payload: ComplianceResult }
   | { type: 'ADD_LOG'; payload: LogEntry }
-  | { type: 'SET_RESCAN_MODAL_OPEN', payload: boolean }
+  | { type: 'SET_RESCAN_MODAL_OPEN'; payload: boolean }
+  | { type: 'SET_SYSTEM_INFO_MODAL_OPEN'; payload: boolean }
+  | { type: 'CLEAR_CREDENTIALS' }
 
   // Runner Actions
   | { type: 'START_DEPLOYMENT_PROMPT' }

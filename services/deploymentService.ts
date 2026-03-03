@@ -246,19 +246,42 @@ export const executeScript = async (device: Device): Promise<boolean> => {
     return Math.random() > 0.2;
 };
 
-export const buildRemoteDesktopFile = (device: Device): string => {
+export interface RdpOptions {
+    resolution?: '1280x720' | '1600x900' | '1920x1080' | 'fullscreen';
+    colorDepth?: 16 | 32;
+    redirectClipboard?: boolean;
+}
+
+const rdpResolutionMap: Record<NonNullable<RdpOptions['resolution']>, { w: number; h: number; screenMode: number }> = {
+    '1280x720':   { w: 1280, h: 720,  screenMode: 1 },
+    '1600x900':   { w: 1600, h: 900,  screenMode: 1 },
+    '1920x1080':  { w: 1920, h: 1080, screenMode: 1 },
+    'fullscreen': { w: 1920, h: 1080, screenMode: 2 },
+};
+
+export const buildRemoteDesktopFile = (device: Device, options?: RdpOptions): string => {
     const address = device.ipAddress || device.hostname;
+    const res = rdpResolutionMap[options?.resolution ?? '1600x900'];
+    const bpp = options?.colorDepth ?? 32;
+    const clipboard = options?.redirectClipboard !== false ? 1 : 0;
+
     return [
-        'screen mode id:i:2',
+        `screen mode id:i:${res.screenMode}`,
         'use multimon:i:0',
-        'session bpp:i:32',
-        'desktopwidth:i:1600',
-        'desktopheight:i:900',
-        'full address:s:' + address,
+        `session bpp:i:${bpp}`,
+        `desktopwidth:i:${res.w}`,
+        `desktopheight:i:${res.h}`,
+        `full address:s:${address}`,
         'prompt for credentials:i:1',
         'authentication level:i:2',
-        'redirectclipboard:i:1',
-    ].join('\n');
+        `redirectclipboard:i:${clipboard}`,
+        'redirectprinters:i:0',
+        'redirectsmartcards:i:0',
+        'audiomode:i:0',
+        'networkautodetect:i:1',
+        'bandwidthautodetect:i:1',
+        'connection type:i:7',
+    ].join('\r\n');
 };
 
 export const performDeploymentOperation = async (

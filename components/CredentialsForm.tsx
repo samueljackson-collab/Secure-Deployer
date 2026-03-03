@@ -17,16 +17,6 @@ export const CredentialsForm: React.FC<CredentialsFormProps> = ({ credentials, s
 
     return (
         <form className="space-y-3">
-            <div className="flex items-center">
-                <input
-                    id="rememberMe"
-                    type="checkbox"
-                    className="h-4 w-4 rounded bg-gray-700 border-gray-600 text-[#39FF14] focus:ring-2 focus:ring-[#39FF14] focus:ring-offset-2 focus:ring-offset-gray-950 cursor-pointer"
-                />
-                <label htmlFor="rememberMe" className="ml-3 text-sm text-gray-300 cursor-pointer font-bold">
-                    Remember Me
-                </label>
-            </div>
             <div>
                 <label htmlFor="username" className="sr-only">Username</label>
                 <input
