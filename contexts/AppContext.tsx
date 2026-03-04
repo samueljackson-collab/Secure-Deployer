@@ -1,7 +1,7 @@
 
 
 import React, { createContext, useReducer, useContext, useEffect, useCallback } from 'react';
-import type { AppState, AppAction, AppDispatch, Device, LogEntry, ImagingDevice, RunnerSettings, DeploymentBatchSummary, DeploymentOperationType } from '../types';
+import type { AppState, AppAction, AppDispatch, Device, LogEntry, ImagingDevice, RunnerSettings, DeploymentBatchSummary, DeploymentOperationType, RackDefinition } from '../types';
 import * as api from '../services/deploymentService';
 import Papa from 'papaparse';
 
@@ -37,6 +37,11 @@ const initialState: AppState = {
     },
     monitor: {
         devices: [],
+        // Default: two full racks of 16 slots each → "1-1" to "1-16" and "2-1" to "2-16"
+        rackConfig: [
+            { rackId: 1, slotsPerRack: 16 },
+            { rackId: 2, slotsPerRack: 16 },
+        ] as RackDefinition[],
     },
     ui: {
         activeTab: 'monitor',
@@ -214,6 +219,31 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
                     }))
                 }
             };
+
+        // --- Rack Configuration ---
+        case 'ADD_RACK': {
+            const existingIds = state.monitor.rackConfig.map(r => r.rackId);
+            const nextId = existingIds.length > 0 ? Math.max(...existingIds) + 1 : 1;
+            const newRack: RackDefinition = { rackId: nextId, slotsPerRack: 16 };
+            return { ...state, monitor: { ...state.monitor, rackConfig: [...state.monitor.rackConfig, newRack] } };
+        }
+        case 'REMOVE_RACK': {
+            // Prevent removing the last rack
+            if (state.monitor.rackConfig.length <= 1) return state;
+            return { ...state, monitor: { ...state.monitor, rackConfig: state.monitor.rackConfig.filter(r => r.rackId !== action.payload) } };
+        }
+        case 'SET_SLOTS_PER_RACK': {
+            const { rackId, slotsPerRack } = action.payload;
+            return {
+                ...state,
+                monitor: {
+                    ...state.monitor,
+                    rackConfig: state.monitor.rackConfig.map(r =>
+                        r.rackId === rackId ? { ...r, slotsPerRack } : r
+                    ),
+                },
+            };
+        }
 
         default:
             return state;

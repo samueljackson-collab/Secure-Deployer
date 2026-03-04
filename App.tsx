@@ -139,6 +139,7 @@ const AppContent: React.FC = () => {
                     <ImageMonitor
                         devices={monitor.devices}
                         history={runner.history}
+                        rackConfig={monitor.rackConfig}
                         onTransferAllCompleted={() => dispatch({ type: 'TRANSFER_ALL_COMPLETED_DEVICES' })}
                         onTransferSelected={(ids) => dispatch({ type: 'TRANSFER_SELECTED_IMAGING_DEVICES', payload: ids })}
                         onClearSelected={(ids) => dispatch({ type: 'CLEAR_SELECTED_IMAGING_DEVICES', payload: ids })}
@@ -148,6 +149,9 @@ const AppContent: React.FC = () => {
                         onShowAllComplianceDetails={() => dispatch({ type: 'SET_ALL_COMPLIANCE_MODAL_OPEN', payload: true })}
                         onShowPassedComplianceDetails={() => dispatch({ type: 'SET_PASSED_COMPLIANCE_MODAL_OPEN', payload: true })}
                         onRevalidateDevices={(deviceIds) => dispatch({ type: 'REVALIDATE_IMAGING_DEVICES', payload: deviceIds })}
+                        onAddRack={() => dispatch({ type: 'ADD_RACK' })}
+                        onRemoveRack={(rackId) => dispatch({ type: 'REMOVE_RACK', payload: rackId })}
+                        onSetSlotsPerRack={(rackId, slotsPerRack) => dispatch({ type: 'SET_SLOTS_PER_RACK', payload: { rackId, slotsPerRack } })}
                     />
                 )}
 

@@ -110,9 +110,15 @@ export interface DeploymentRun {
   };
 }
 
-// --- New Types for Image Monitor ---
+// --- Types for Image Monitor ---
 
 export type ImagingStatus = 'Imaging' | 'Completed' | 'Failed' | 'Checking Compliance';
+
+/** Defines a single physical rack and how many device slots it contains. */
+export interface RackDefinition {
+    rackId: number;       // Rack number shown in slot labels (e.g. 1 → slots "1-1" … "1-N")
+    slotsPerRack: number; // How many slot positions in this rack (default 16)
+}
 
 export interface ChecklistItem {
     description: string;
@@ -179,6 +185,7 @@ export interface AppState {
     };
     monitor: {
         devices: ImagingDevice[];
+        rackConfig: RackDefinition[];
     };
     ui: {
         activeTab: ActiveTab;
@@ -249,6 +256,10 @@ export type AppAction =
   | { type: 'CLEAR_SELECTED_IMAGING_DEVICES'; payload: Set<string> }
   | { type: 'REVALIDATE_IMAGING_DEVICES'; payload: Set<string> }
   | { type: 'UPDATE_IMAGING_DEVICE_STATE'; payload: ImagingDevice }
+  // Rack Configuration Actions
+  | { type: 'ADD_RACK' }                              // Appends the next sequential rack
+  | { type: 'REMOVE_RACK'; payload: number }          // Removes rack by rackId
+  | { type: 'SET_SLOTS_PER_RACK'; payload: { rackId: number; slotsPerRack: number } } // Edit slot count
   ;
 
 export type AppDispatch = Dispatch<AppAction>;

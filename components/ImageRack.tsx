@@ -1,7 +1,7 @@
 
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import type { ImagingDevice, ImagingStatus, ComplianceResult } from '../types';
+import type { ImagingDevice, ImagingStatus, ComplianceResult, RackDefinition } from '../types';
 import { DeviceIcon } from './DeviceIcon';
 // FIX: Import detectDeviceType from its new centralized location in utils/helpers.
 import { detectDeviceType } from '../utils/helpers';
@@ -251,6 +251,7 @@ const EmptySlotCard: React.FC<{ slotId: string }> = ({ slotId }) => (
 
 interface ImageRackProps {
     devices: ImagingDevice[];
+    rackConfig: RackDefinition[];
     selectedDeviceIds: Set<string>;
     onSelectDevice: (deviceId: string) => void;
     onSelectAll: (select: boolean) => void;
@@ -261,7 +262,7 @@ interface ImageRackProps {
     onRevalidateDevice: (deviceId: string) => void;
 }
 
-export const ImageRack: React.FC<ImageRackProps> = ({ devices, selectedDeviceIds, onSelectDevice, onSelectAll, onTransferDevice, onRenameDevice, onRemoveDevice, onShowComplianceDetails, onRevalidateDevice }) => {
+export const ImageRack: React.FC<ImageRackProps> = ({ devices, rackConfig, selectedDeviceIds, onSelectDevice, onSelectAll, onTransferDevice, onRenameDevice, onRemoveDevice, onShowComplianceDetails, onRevalidateDevice }) => {
     const [expandedSlots, setExpandedSlots] = useState<Set<string>>(new Set());
     const discoveredSlotsRef = useRef<Set<string>>(new Set());
     
@@ -273,22 +274,18 @@ export const ImageRack: React.FC<ImageRackProps> = ({ devices, selectedDeviceIds
         return map;
     }, [devices]);
 
-    const maxRack = useMemo(() => {
-        const highestRack = devices.reduce((max, device) => {
-            const rackNum = parseInt(device.slot.split('-')[0], 10);
-            return isNaN(rackNum) ? max : Math.max(max, rackNum);
-        }, 0);
-        return Math.max(2, highestRack); // Always show at least 2 racks.
-    }, [devices]);
-
     const slots = useMemo(() => {
-        const TOTAL_RACK_SLOTS = maxRack * 16;
-        return Array.from({ length: TOTAL_RACK_SLOTS }, (_, i) => {
-            const rack = Math.floor(i / 16) + 1;
-            const pos = (i % 16) + 1;
-            return `${rack}-${pos}`;
-        });
-    }, [maxRack]);
+        // Generate slots from the user-configured racks
+        const configSlots = rackConfig.flatMap(({ rackId, slotsPerRack }) =>
+            Array.from({ length: slotsPerRack }, (_, i) => `${rackId}-${i + 1}`)
+        );
+        // Also show device slots that fall outside the configured racks (overflow)
+        const configSlotSet = new Set(configSlots);
+        const overflowSlots = devices
+            .map(d => d.slot)
+            .filter(s => !configSlotSet.has(s));
+        return [...configSlots, ...overflowSlots];
+    }, [rackConfig, devices]);
 
 
     useEffect(() => {
