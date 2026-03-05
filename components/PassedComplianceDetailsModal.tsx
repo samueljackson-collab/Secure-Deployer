@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import type { ImagingDevice, ComplianceResult, ChecklistItem } from '../types';
+import type { ImagingDevice, ComplianceResult, ChecklistItem } from '../src/types';
 
 const CheckRow: React.FC<{ item: ChecklistItem }> = ({ item }) => (
     <tr className={`border-b border-gray-800 bg-gray-900/50`}>

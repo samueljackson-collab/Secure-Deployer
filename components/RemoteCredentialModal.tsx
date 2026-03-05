@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Credentials } from '../types';
+import type { Credentials } from '../src/types';
 import { CredentialsForm } from './CredentialsForm';
 import { X, Shield, Lock, Monitor, ArrowRight } from 'lucide-react';
 

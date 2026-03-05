@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { DeploymentRun } from '../types';
+import type { DeploymentRun } from '../src/types';
 import { HistoryChart, AnalyticsChart, calculateAnalytics } from './DeploymentAnalytics';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 

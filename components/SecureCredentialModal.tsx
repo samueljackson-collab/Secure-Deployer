@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import type { Credentials } from '../types';
+import type { Credentials } from '../src/types';
 import { CredentialsForm } from './CredentialsForm';
 
 interface SecureCredentialModalProps {

@@ -1,7 +1,7 @@
 
 
 import React, { useState } from 'react';
-import type { Device, DeploymentStatus, DeviceFormFactor } from '../types';
+import type { Device, DeploymentStatus, DeviceFormFactor } from '../src/types';
 import { DeviceIcon, icons } from './DeviceIcon';
 // FIX: Import target versions from App.tsx where they are now defined and exported.
 import { TARGET_BIOS_VERSION, TARGET_DCU_VERSION, TARGET_WIN_VERSION } from '../App';

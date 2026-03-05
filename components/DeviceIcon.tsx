@@ -1,6 +1,6 @@
 
 import React from 'react';
-import type { DeviceFormFactor } from '../types';
+import type { DeviceFormFactor } from '../src/types';
 
 interface DeviceIconProps {
     type: DeviceFormFactor;

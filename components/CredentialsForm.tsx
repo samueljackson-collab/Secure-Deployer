@@ -1,6 +1,6 @@
 
 import React from 'react';
-import type { Credentials } from '../types';
+import type { Credentials } from '../src/types';
 
 interface CredentialsFormProps {
     credentials: Credentials;

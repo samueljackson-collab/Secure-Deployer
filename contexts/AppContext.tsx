@@ -1,8 +1,18 @@
 
 import React, { createContext, useReducer, useContext, useEffect, useCallback } from 'react';
-import type { AppState, AppAction, AppDispatch, Device, LogEntry, ImagingDevice, DeploymentOperationType, DeploymentBatchSummary } from '../src/types';
+import type { AppState, AppAction, AppDispatch, Device, LogEntry, ImagingDevice, DeploymentOperationType, DeploymentBatchSummary, ImagingPipelineState } from '../src/types';
 import * as api from '../services/deploymentService';
 import Papa from 'papaparse';
+
+const initialPipelineState: ImagingPipelineState = {
+    devices: [],
+    activeStage: 'pxe-connect',
+    sccmWaitStartTime: null,
+    sccmWaitDurationMs: 20 * 60 * 1000, // 20 minutes
+    selectedPackageId: '',
+    isRunning: false,
+    logs: [],
+};
 
 const initialState: AppState = {
     runner: {
@@ -22,6 +32,7 @@ const initialState: AppState = {
     monitor: {
         devices: [],
     },
+    pipeline: initialPipelineState,
     ui: {
         activeTab: 'monitor',
         csvFile: null,
@@ -213,9 +224,37 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
                 }
             };
         case 'REMOTE_IN_WITH_CREDENTIALS':
-            // This is handled in effectRunner, but we can close the modal here if we want.
-            // Actually, it's better to close it in effectRunner after success.
+            // Handled in effectRunner; the modal is closed there after success.
             return state;
+
+        // Pipeline reducer cases
+        case 'PIPELINE_ADD_DEVICES':
+            return { ...state, pipeline: { ...state.pipeline, devices: [...state.pipeline.devices, ...action.payload] } };
+        case 'PIPELINE_UPDATE_DEVICE':
+            return {
+                ...state,
+                pipeline: {
+                    ...state.pipeline,
+                    devices: state.pipeline.devices.map(d => d.id === action.payload.id ? { ...d, ...action.payload } : d)
+                }
+            };
+        case 'PIPELINE_SET_STAGE':
+            return { ...state, pipeline: { ...state.pipeline, activeStage: action.payload } };
+        case 'PIPELINE_SET_RUNNING':
+            return { ...state, pipeline: { ...state.pipeline, isRunning: action.payload } };
+        case 'PIPELINE_START_SCCM_WAIT':
+            return { ...state, pipeline: { ...state.pipeline, sccmWaitStartTime: Date.now() } };
+        case 'PIPELINE_SET_PACKAGE':
+            return { ...state, pipeline: { ...state.pipeline, selectedPackageId: action.payload } };
+        case 'PIPELINE_ADD_LOG':
+            return { ...state, pipeline: { ...state.pipeline, logs: [...state.pipeline.logs, action.payload] } };
+        case 'PIPELINE_CLEAR':
+            return { ...state, pipeline: initialPipelineState };
+        case 'PIPELINE_IMPORT_FROM_MONITOR': {
+            const completed = state.monitor.devices.filter(d => d.status === 'Completed');
+            const pipelineDevices = api.transformImagingToPipelineDevices(completed);
+            return { ...state, pipeline: { ...state.pipeline, devices: pipelineDevices, activeStage: 'pxe-connect' } };
+        }
 
         default:
             return state;
@@ -494,6 +533,134 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 }
                 break;
             }
+
+            case 'RUN_PIPELINE_STAGE': {
+                const addPipelineLog = (message: string, level: 'info' | 'success' | 'error' | 'warn' = 'info') => {
+                    dispatch({ type: 'PIPELINE_ADD_LOG', payload: { time: Date.now(), message, level } });
+                };
+                const { pipeline } = state;
+                dispatch({ type: 'PIPELINE_SET_RUNNING', payload: true });
+
+                switch (action.payload) {
+                    case 'pxe-connect': {
+                        addPipelineLog('Initiating RDP connections to PXE4 devices...', 'info');
+                        for (const device of pipeline.devices) {
+                            dispatch({ type: 'PIPELINE_UPDATE_DEVICE', payload: { id: device.id, status: 'connecting' } });
+                            const rdpContent = api.buildPipelineRdpFile(device);
+                            const blob = new Blob([rdpContent], { type: 'application/rdp' });
+                            const url = URL.createObjectURL(blob);
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.download = `${device.hostname}-pxe4.rdp`;
+                            link.click();
+                            URL.revokeObjectURL(url);
+                            // Simulate connection establishment delay
+                            await api.sleep(800);
+                            dispatch({ type: 'PIPELINE_UPDATE_DEVICE', payload: { id: device.id, status: 'connected' } });
+                            addPipelineLog(`[${device.hostname}] RDP session initiated.`, 'success');
+                        }
+                        dispatch({ type: 'PIPELINE_SET_STAGE', payload: 'autotag' });
+                        addPipelineLog(`PXE4 connections complete for ${pipeline.devices.length} device(s). Proceed to AutoTag.`, 'success');
+                        break;
+                    }
+
+                    case 'autotag': {
+                        addPipelineLog('Running AutoTag on all devices...', 'info');
+                        await Promise.all(pipeline.devices.map(async (device) => {
+                            dispatch({ type: 'PIPELINE_UPDATE_DEVICE', payload: { id: device.id, status: 'running-autotag' } });
+                            const result = await api.runAutoTag(device);
+                            if (result.ok) {
+                                dispatch({ type: 'PIPELINE_UPDATE_DEVICE', payload: { id: device.id, status: 'autotag-complete', autotagOutput: result.output } });
+                                addPipelineLog(`[${device.hostname}] AutoTag complete: ${result.output}`, 'success');
+                            } else {
+                                dispatch({ type: 'PIPELINE_UPDATE_DEVICE', payload: { id: device.id, status: 'autotag-failed', autotagOutput: result.output } });
+                                addPipelineLog(`[${device.hostname}] AutoTag failed: ${result.output}`, 'error');
+                            }
+                        }));
+                        dispatch({ type: 'PIPELINE_SET_STAGE', payload: 'export-csv' });
+                        addPipelineLog('AutoTag run complete. Proceeding to CSV export.', 'success');
+                        break;
+                    }
+
+                    case 'export-csv': {
+                        const rows = ['Hostname,MAC Address', ...pipeline.devices.map(d => `${d.hostname},${d.macAddress}`)];
+                        const csv = rows.join('\n');
+                        const blob = new Blob([csv], { type: 'text/csv' });
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = `imaging-devices-${new Date().toISOString().split('T')[0]}.csv`;
+                        link.click();
+                        URL.revokeObjectURL(url);
+                        addPipelineLog(`CSV exported with ${pipeline.devices.length} device(s).`, 'success');
+                        dispatch({ type: 'PIPELINE_SET_STAGE', payload: 'sccm-import' });
+                        break;
+                    }
+
+                    case 'sccm-import': {
+                        addPipelineLog(`Importing ${pipeline.devices.length} device(s) into SCCM...`, 'info');
+                        await Promise.all(pipeline.devices.map(async (device) => {
+                            dispatch({ type: 'PIPELINE_UPDATE_DEVICE', payload: { id: device.id, status: 'sccm-importing' } });
+                            const result = await api.importDeviceToSccm(device);
+                            if (result.ok) {
+                                dispatch({ type: 'PIPELINE_UPDATE_DEVICE', payload: { id: device.id, status: 'sccm-imported', sccmResourceId: result.resourceId } });
+                                addPipelineLog(`[${device.hostname}] SCCM import OK — Resource ID: ${result.resourceId}`, 'success');
+                            } else {
+                                dispatch({ type: 'PIPELINE_UPDATE_DEVICE', payload: { id: device.id, status: 'sccm-failed' } });
+                                addPipelineLog(`[${device.hostname}] SCCM import failed: ${result.error}`, 'error');
+                            }
+                        }));
+                        dispatch({ type: 'PIPELINE_START_SCCM_WAIT' });
+                        dispatch({ type: 'PIPELINE_SET_STAGE', payload: 'sccm-wait' });
+                        addPipelineLog('SCCM import complete. Starting 20-minute recognition timer...', 'info');
+                        break;
+                    }
+
+                    case 'sccm-wait': {
+                        // The countdown is rendered in the UI; this action just advances the stage.
+                        dispatch({ type: 'PIPELINE_SET_STAGE', payload: 'task-sequence' });
+                        addPipelineLog('SCCM wait complete. Ready to start Task Sequences.', 'success');
+                        break;
+                    }
+
+                    case 'task-sequence': {
+                        const pkgId = pipeline.selectedPackageId;
+                        if (!pkgId) {
+                            addPipelineLog('No image package selected. Please pick a package first.', 'error');
+                            break;
+                        }
+                        addPipelineLog(`Starting Task Sequence "${pkgId}" on ${pipeline.devices.length} device(s)...`, 'info');
+                        await Promise.all(pipeline.devices.filter(d => d.status === 'sccm-imported').map(async (device) => {
+                            dispatch({ type: 'PIPELINE_UPDATE_DEVICE', payload: { id: device.id, status: 'ts-starting', tsPackageId: pkgId } });
+                            await api.sleep(1000 + Math.random() * 500);
+                            dispatch({ type: 'PIPELINE_UPDATE_DEVICE', payload: { id: device.id, status: 'ts-running' } });
+                            addPipelineLog(`[${device.hostname}] Task Sequence started.`, 'success');
+                            await api.sleep(2000 + Math.random() * 1000);
+                            const tsOk = Math.random() > 0.1;
+                            dispatch({ type: 'PIPELINE_UPDATE_DEVICE', payload: { id: device.id, status: tsOk ? 'ts-complete' : 'ts-failed' } });
+                            addPipelineLog(`[${device.hostname}] Task Sequence ${tsOk ? 'completed' : 'failed'}.`, tsOk ? 'success' : 'error');
+                        }));
+                        dispatch({ type: 'PIPELINE_SET_STAGE', payload: 'post-imaging' });
+                        addPipelineLog('Task sequences finished. Proceed to post-imaging checks.', 'success');
+                        break;
+                    }
+
+                    case 'post-imaging': {
+                        addPipelineLog('Running post-imaging checks...', 'info');
+                        await Promise.all(pipeline.devices.filter(d => d.status === 'ts-complete').map(async (device) => {
+                            const checks = await api.runPostImagingChecks(device);
+                            dispatch({ type: 'PIPELINE_UPDATE_DEVICE', payload: { id: device.id, status: 'post-imaging-complete', postImagingChecks: checks } });
+                            const passed = checks.filter(c => c.passed).length;
+                            addPipelineLog(`[${device.hostname}] Post-imaging: ${passed}/${checks.length} checks passed.`, passed === checks.length ? 'success' : 'warn');
+                        }));
+                        addPipelineLog('Post-imaging complete. Pipeline finished.', 'success');
+                        break;
+                    }
+                }
+                dispatch({ type: 'PIPELINE_SET_RUNNING', payload: false });
+                break;
+            }
+
             default:
                 break;
         }
