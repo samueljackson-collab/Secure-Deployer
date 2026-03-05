@@ -1,10 +1,11 @@
 
 
-import React, { useState } from 'react';
-import type { Device, DeploymentStatus, DeviceFormFactor } from '../src/types';
+import React, { useState, useRef } from 'react';
+import type { Device, DeploymentStatus, DeviceFormFactor, DeploymentOperationType } from '../types';
 import { DeviceIcon, icons } from './DeviceIcon';
 // FIX: Import target versions from App.tsx where they are now defined and exported.
 import { TARGET_BIOS_VERSION, TARGET_DCU_VERSION, TARGET_WIN_VERSION } from '../App';
+import { Info, Package, Cpu, Play, Download, Trash2, ChevronDown, ChevronUp, CheckCircle, AlertTriangle } from 'lucide-react';
 
 const statusColors: Record<DeploymentStatus, string> = {
     Pending: 'text-gray-400',
@@ -38,11 +39,48 @@ const statusColors: Record<DeploymentStatus, string> = {
     'Action Failed': 'text-red-400',
 };
 
+const statusTooltips: Record<DeploymentStatus, string> = {
+    Pending: 'Device is queued and waiting for processing.',
+    'Pending Validation': 'Device is waiting for validation checks.',
+    'Waking Up': 'Attempting to wake the device via Wake-on-LAN.',
+    Connecting: 'Establishing connection to the device.',
+    'Retrying...': 'Previous attempt failed, retrying operation.',
+    Validating: 'Verifying device state and connectivity.',
+    'Checking Info': 'Retrieving system information.',
+    'Checking BIOS': 'Verifying BIOS version compliance.',
+    'Checking DCU': 'Verifying Dell Command Update version.',
+    'Checking Windows': 'Verifying Windows OS version.',
+    'Scan Complete': 'Initial scan finished. Ready for updates or actions.',
+    Updating: 'Applying general updates.',
+    'Updating BIOS': 'Installing BIOS update.',
+    'Updating DCU': 'Installing Dell Command Update.',
+    'Updating Windows': 'Installing Windows updates.',
+    'Update Complete (Reboot Pending)': 'Updates installed, waiting for reboot.',
+    'Rebooting...': 'Device is restarting.',
+    Success: 'All operations completed successfully.',
+    Failed: 'Operation failed. Check logs for details.',
+    Offline: 'Device is not reachable.',
+    Cancelled: 'Operation was manually cancelled.',
+    'Pending File': 'Waiting for a script file to be selected.',
+    'Ready for Execution': 'Script loaded and ready to run.',
+    'Executing Script': 'Running the selected script on the device.',
+    'Execution Complete': 'Script execution finished successfully.',
+    'Execution Failed': 'Script execution encountered an error.',
+    'Deploying Action': 'Performing bulk deployment action.',
+    'Action Complete': 'Bulk action finished successfully.',
+    'Action Failed': 'Bulk action failed.',
+};
+
 const StatusBadge: React.FC<{ status: DeploymentStatus; retryAttempt?: number }> = ({ status, retryAttempt }) => {
     const color = statusColors[status] || 'text-gray-400';
     const text = status === 'Retrying...' && retryAttempt ? `Retrying... (${retryAttempt})` : status;
+    const tooltip = statusTooltips[status] || status;
+    
     return (
-        <span className={`px-2 py-1 text-xs font-medium rounded-full bg-gray-800 ${color}`}>
+        <span 
+            className={`px-2 py-1 text-xs font-medium rounded-full bg-gray-800 ${color} cursor-help`}
+            title={tooltip}
+        >
             {text}
         </span>
     );
@@ -80,7 +118,7 @@ const ComplianceChecklistItem: React.FC<{
 const MetadataItem: React.FC<{ label: string; value: string | undefined; onCopy: (value: string | undefined, label: string) => void }> = ({ label, value, onCopy }) => (
     <li 
         className="flex justify-between items-center py-1 border-b border-gray-800/50 cursor-pointer group hover:bg-gray-800/50 px-2 -mx-2 rounded-md transition-colors"
-        onClick={() => onCopy(value, label)}
+        onClick={(e) => { e.stopPropagation(); onCopy(value, label); }}
         title={`Click to copy: ${value}`}
     >
         <span className="text-sm text-gray-400 font-bold">{label}</span>
@@ -111,6 +149,41 @@ const UpdateResult: React.FC<{ result: Device['lastUpdateResult'] }> = ({ result
     );
 };
 
+const DeviceDetails: React.FC<{ device: Device }> = ({ device }) => (
+    <div className="mt-4 bg-black/40 p-4 rounded-lg border border-gray-800 text-sm animate-fade-in">
+        <h4 className="text-[#39FF14] font-bold mb-3 uppercase text-xs tracking-wider flex items-center gap-2">
+            <Info className="w-4 h-4" />
+            Extended Device Information
+        </h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <h5 className="text-gray-400 font-bold mb-2 flex items-center gap-2">
+                    <Package className="w-3 h-3" /> Installed Packages
+                </h5>
+                <div className="bg-gray-900/50 rounded border border-gray-800 p-2 max-h-40 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-700">
+                    <ul className="space-y-1">
+                        {device.installedPackages?.length ? device.installedPackages.map((pkg, i) => (
+                            <li key={i} className="text-gray-300 truncate text-xs border-b border-gray-800/50 last:border-0 py-1">{pkg}</li>
+                        )) : <li className="text-gray-500 italic text-xs">No packages detected</li>}
+                    </ul>
+                </div>
+            </div>
+            <div>
+                <h5 className="text-gray-400 font-bold mb-2 flex items-center gap-2">
+                    <Cpu className="w-3 h-3" /> Running Programs
+                </h5>
+                <div className="bg-gray-900/50 rounded border border-gray-800 p-2 max-h-40 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-700">
+                    <ul className="space-y-1">
+                        {device.runningPrograms?.length ? device.runningPrograms.map((prog, i) => (
+                            <li key={i} className="text-gray-300 truncate text-xs border-b border-gray-800/50 last:border-0 py-1">{prog}</li>
+                        )) : <li className="text-gray-500 italic text-xs">No programs detected</li>}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+);
+
 interface DeviceStatusTableProps {
     devices: Device[];
     selectedDeviceIds: Set<number>;
@@ -123,12 +196,16 @@ interface DeviceStatusTableProps {
     onDeviceSelect: (deviceId: number) => void;
     onSelectAll: (select: boolean) => void;
     deploymentState: 'idle' | 'running' | 'complete';
+    onBulkDeployOperation?: (payload: { operation: DeploymentOperationType; file: File }) => void;
 }
 
-export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, selectedDeviceIds, onUpdateDevice, onRebootDevice, onValidateDevice, onSetScriptFile, onExecuteScript, onRemoteIn, onDeviceSelect, onSelectAll, deploymentState }) => {
+export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, selectedDeviceIds, onUpdateDevice, onRebootDevice, onValidateDevice, onSetScriptFile, onExecuteScript, onRemoteIn, onDeviceSelect, onSelectAll, deploymentState, onBulkDeployOperation }) => {
     const [showLegend, setShowLegend] = useState(false);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; deviceId: number } | null>(null);
     const [copyNotification, setCopyNotification] = useState<string | null>(null);
+    const [expandedDeviceId, setExpandedDeviceId] = useState<number | null>(null);
+    const [pendingBulkOp, setPendingBulkOp] = useState<DeploymentOperationType | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const copyToClipboard = (text: string | undefined, fieldName: string) => {
         if (!text) return;
@@ -150,15 +227,72 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
         }
     };
 
+    const toggleExpand = (id: number) => {
+        setExpandedDeviceId(expandedDeviceId === id ? null : id);
+    };
+
+    const getComplianceSummary = (device: Device) => {
+        const checks = [
+            device.isBiosUpToDate,
+            device.isDcuUpToDate,
+            device.isWinUpToDate,
+            device.encryptionStatus === 'Enabled',
+            device.crowdstrikeStatus === 'Running',
+            device.sccmStatus === 'Healthy'
+        ];
+        const passed = checks.filter(Boolean).length;
+        const total = checks.length;
+        return { passed, total };
+    };
+
+    const handleBulkFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files?.[0] && pendingBulkOp && onBulkDeployOperation) {
+            onBulkDeployOperation({ operation: pendingBulkOp, file: e.target.files[0] });
+            setPendingBulkOp(null);
+            // Reset input
+            e.target.value = '';
+        }
+    };
+
+    const triggerBulkOp = (op: DeploymentOperationType) => {
+        setPendingBulkOp(op);
+        fileInputRef.current?.click();
+    };
+
     return (
-                <div className="bg-black/50 rounded-lg overflow-hidden border border-gray-800 h-full flex flex-col relative" onClick={() => setContextMenu(null)}>
+        <div className="bg-black/50 rounded-lg overflow-hidden border border-gray-800 h-full flex flex-col relative" onClick={() => setContextMenu(null)}>
             {copyNotification && (
                 <div className="absolute top-4 right-4 bg-green-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg z-20 animate-fade-out-fast">
                     {copyNotification}
                 </div>
             )}
             <div className="p-3 bg-black/25 border-b border-gray-800 flex justify-between items-center">
-                <h3 className="font-semibold text-gray-200">Device Status</h3>
+                <div className="flex items-center gap-4">
+                    <h3 className="font-semibold text-gray-200">Device Status</h3>
+                    {selectedDeviceIds.size > 0 && onBulkDeployOperation && (
+                        <div className="flex items-center gap-2 animate-fade-in">
+                            <span className="text-xs text-gray-400 font-mono">|</span>
+                            <span className="text-xs text-[#39FF14] font-bold">{selectedDeviceIds.size} Selected</span>
+                            <div className="flex bg-gray-900 rounded-md border border-gray-700 ml-2">
+                                <button onClick={() => triggerBulkOp('run')} className="px-2 py-1 hover:bg-gray-800 text-xs text-gray-300 border-r border-gray-700 flex items-center gap-1" title="Run File">
+                                    <Play className="w-3 h-3" /> Run
+                                </button>
+                                <button onClick={() => triggerBulkOp('install')} className="px-2 py-1 hover:bg-gray-800 text-xs text-gray-300 border-r border-gray-700 flex items-center gap-1" title="Install File">
+                                    <Download className="w-3 h-3" /> Install
+                                </button>
+                                <button onClick={() => triggerBulkOp('delete')} className="px-2 py-1 hover:bg-gray-800 text-xs text-red-400 flex items-center gap-1" title="Delete File">
+                                    <Trash2 className="w-3 h-3" /> Delete
+                                </button>
+                            </div>
+                            <input 
+                                type="file" 
+                                ref={fileInputRef} 
+                                className="hidden" 
+                                onChange={handleBulkFileSelect} 
+                            />
+                        </div>
+                    )}
+                </div>
                 <div className="flex items-center" title="Select or deselect all devices in the list">
                     <label htmlFor="selectAll" className="text-xs text-gray-400 mr-2 cursor-pointer font-bold">Select All</label>
                     <input 
@@ -177,15 +311,18 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
                     const showScanDetails = !['Pending', 'Waking Up', 'Pending Validation'].includes(device.status);
                     const showDeploymentDetails = ['Pending File', 'Ready for Execution', 'Executing Script', 'Execution Complete', 'Execution Failed'].includes(device.status);
                     const isSelected = selectedDeviceIds.has(device.id);
+                    const isExpanded = expandedDeviceId === device.id;
+                    const compliance = getComplianceSummary(device);
 
                     return (
                         <div
                             key={device.id}
-                            className={`bg-black/50 border rounded-lg p-3 transition-all duration-200 ${isSelected ? 'border-[#39FF14] shadow-lg' : 'border-gray-800'}`}
+                            className={`bg-black/50 border rounded-lg p-3 transition-all duration-200 ${isSelected ? 'border-[#39FF14] shadow-[0_0_10px_rgba(57,255,20,0.1)] bg-[#39FF14]/5' : 'border-gray-800 hover:border-gray-600'}`}
                             onContextMenu={(e) => {
                                 e.preventDefault();
                                 setContextMenu({ x: e.clientX, y: e.clientY, deviceId: device.id });
                             }}
+                            onClick={() => toggleExpand(device.id)}
                         >
                             <div className="flex justify-between items-start mb-2">
                                 <div className="flex items-center gap-3">
@@ -193,105 +330,130 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
                                         type="checkbox" 
                                         className="h-4 w-4 rounded bg-gray-700 border-gray-600 text-[#39FF14] focus:ring-[#39FF14]"
                                         checked={isSelected}
-                                        onChange={() => onDeviceSelect(device.id)}
+                                        onChange={(e) => { e.stopPropagation(); onDeviceSelect(device.id); }}
+                                        onClick={(e) => e.stopPropagation()}
                                         aria-label={`Select device ${device.hostname}`}
                                     />
                                     <DeviceIcon type={device.deviceType} />
-                                    <h4 className="font-bold text-gray-100 break-all">{device.hostname}</h4>
+                                    <div>
+                                        <h4 className="font-bold text-gray-100 break-all flex items-center gap-2">
+                                            {device.hostname}
+                                            {isExpanded ? <ChevronUp className="w-3 h-3 text-gray-500" /> : <ChevronDown className="w-3 h-3 text-gray-500" />}
+                                        </h4>
+                                        {showScanDetails && (
+                                            <div className="flex items-center gap-2 mt-1" title="Click for details">
+                                                <div className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-900 rounded border border-gray-800">
+                                                    {compliance.passed === compliance.total ? (
+                                                        <CheckCircle className="w-3 h-3 text-[#39FF14]" />
+                                                    ) : (
+                                                        <AlertTriangle className="w-3 h-3 text-yellow-500" />
+                                                    )}
+                                                    <span className={`text-[10px] font-mono ${compliance.passed === compliance.total ? 'text-gray-300' : 'text-yellow-500'}`}>
+                                                        {compliance.passed}/{compliance.total} Checks
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                                 <StatusBadge status={device.status} retryAttempt={device.retryAttempt} />
                             </div>
                             
-                            {(showScanDetails && !showDeploymentDetails) && (
-                                <>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3 mt-3 border-t border-gray-700 pt-3">
-                                        <div>
-                                            <h5 className="text-xs font-bold uppercase text-gray-500 mb-1">System Details</h5>
-                                            <ul className="space-y-1">
-                                                <MetadataItem label="Model" value={device.model} onCopy={copyToClipboard} />
-                                                <MetadataItem label="Serial #" value={device.serialNumber} onCopy={copyToClipboard} />
-                                                <MetadataItem label="Asset Tag" value={device.assetTag} onCopy={copyToClipboard} />
-                                            </ul>
-                                        </div>
-                                        <div>
-                                            <h5 className="text-xs font-bold uppercase text-gray-500 mb-1">Compliance Checklist</h5>
-                                            <ul className="space-y-1">
-                                                <ComplianceChecklistItem name="BIOS" passed={device.isBiosUpToDate} details={device.biosVersion || '-'} hoverText={`Expected: ${TARGET_BIOS_VERSION}, Found: ${device.biosVersion}`} />
-                                                <ComplianceChecklistItem name="DCU" passed={device.isDcuUpToDate} details={device.dcuVersion || '-'} hoverText={`Expected: ${TARGET_DCU_VERSION}, Found: ${device.dcuVersion}`} />
-                                                <ComplianceChecklistItem name="Windows" passed={device.isWinUpToDate} details={device.winVersion || '-'} hoverText={`Expected: ${TARGET_WIN_VERSION}, Found: ${device.winVersion}`} />
-                                                <ComplianceChecklistItem name="Encryption" passed={device.encryptionStatus === 'Enabled'} details={device.encryptionStatus || '-'} hoverText="BitLocker must be enabled." />
-                                                <ComplianceChecklistItem name="CrowdStrike" passed={device.crowdstrikeStatus === 'Running'} details={device.crowdstrikeStatus || '-'} hoverText="Agent must be running." />
-                                                <ComplianceChecklistItem name="SCCM Client" passed={device.sccmStatus === 'Healthy'} details={device.sccmStatus || '-'} hoverText="Client must be healthy." />
-                                            </ul>
-                                        </div>
-                                    </div>
-                                    
-                                    <UpdateResult result={device.lastUpdateResult} />
+                            {isExpanded && (
+                                <div className="mt-4 animate-fade-in" onClick={(e) => e.stopPropagation()}>
+                                    {(showScanDetails && !showDeploymentDetails) && (
+                                        <>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3 border-t border-gray-700 pt-3">
+                                                <div>
+                                                    <h5 className="text-xs font-bold uppercase text-gray-500 mb-1">System Details</h5>
+                                                    <ul className="space-y-1">
+                                                        <MetadataItem label="Model" value={device.model} onCopy={copyToClipboard} />
+                                                        <MetadataItem label="Serial #" value={device.serialNumber} onCopy={copyToClipboard} />
+                                                        <MetadataItem label="Asset Tag" value={device.assetTag} onCopy={copyToClipboard} />
+                                                    </ul>
+                                                </div>
+                                                <div>
+                                                    <h5 className="text-xs font-bold uppercase text-gray-500 mb-1">Compliance Checklist</h5>
+                                                    <ul className="space-y-1">
+                                                        <ComplianceChecklistItem name="BIOS" passed={device.isBiosUpToDate} details={device.biosVersion || '-'} hoverText={`Expected: ${TARGET_BIOS_VERSION}, Found: ${device.biosVersion}`} />
+                                                        <ComplianceChecklistItem name="DCU" passed={device.isDcuUpToDate} details={device.dcuVersion || '-'} hoverText={`Expected: ${TARGET_DCU_VERSION}, Found: ${device.dcuVersion}`} />
+                                                        <ComplianceChecklistItem name="Windows" passed={device.isWinUpToDate} details={device.winVersion || '-'} hoverText={`Expected: ${TARGET_WIN_VERSION}, Found: ${device.winVersion}`} />
+                                                        <ComplianceChecklistItem name="Encryption" passed={device.encryptionStatus === 'Enabled'} details={device.encryptionStatus || '-'} hoverText="BitLocker must be enabled." />
+                                                        <ComplianceChecklistItem name="CrowdStrike" passed={device.crowdstrikeStatus === 'Running'} details={device.crowdstrikeStatus || '-'} hoverText="Agent must be running." />
+                                                        <ComplianceChecklistItem name="SCCM Client" passed={device.sccmStatus === 'Healthy'} details={device.sccmStatus || '-'} hoverText="Client must be healthy." />
+                                                    </ul>
+                                                </div>
+                                            </div>
+                                            
+                                            <UpdateResult result={device.lastUpdateResult} />
+                                            <DeviceDetails device={device} />
 
-                                    <div className="mt-3 flex gap-2">
-                                        {needsUpdate && device.status === 'Scan Complete' && (
-                                            <button 
-                                                onClick={() => onUpdateDevice(device.id)}
-                                                className="w-full px-4 py-2 bg-[#39FF14] text-black text-sm font-semibold rounded-lg hover:bg-[#2ECC10] transition duration-200 shadow-md focus:outline-none focus:ring-2 focus:ring-[#39FF14] focus:ring-opacity-50"
-                                                title="Install all required updates on this device."
-                                            >
-                                                Run Updates
-                                            </button>
-                                        )}
-                                        {device.status === 'Update Complete (Reboot Pending)' && (
-                                            <button
-                                                onClick={() => onRebootDevice(device.id)}
-                                                className="w-full px-4 py-2 bg-orange-600 text-white text-sm font-semibold rounded-lg hover:bg-orange-700 transition duration-200 shadow-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-opacity-50"
-                                                title="Reboot this device to apply updates."
-                                            >
-                                                Reboot Device
-                                            </button>
-                                        )}
-                                        {isScanActionable(device.status) && (
-                                            <button
-                                                onClick={() => onValidateDevice(device.id)}
-                                                disabled={deploymentState === 'running'}
-                                                className="w-full px-4 py-2 bg-gray-600 text-white text-sm font-semibold rounded-lg hover:bg-gray-500 transition duration-200 shadow-md focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50 disabled:bg-gray-800 disabled:cursor-not-allowed"
-                                                title="Re-run the compliance scan on this device."
-                                            >
-                                                Re-run Checks
-                                            </button>
-                                        )}
-                                    </div>
-                                </>
-                            )}
-                            
-                            {showDeploymentDetails && (
-                                <div className="mt-3 border-t border-gray-700 pt-3">
-                                    <h5 className="text-xs font-bold uppercase text-gray-500 mb-2">Post-Imaging Deployment</h5>
-                                    <div className="flex flex-col gap-2">
-                                        {device.status === 'Pending File' && (
-                                            <label className="w-full text-center px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-500 transition duration-200 cursor-pointer">
-                                                Select Script...
-                                                <input type="file" className="hidden" onChange={handleFileChange(device.id)} />
-                                            </label>
-                                        )}
-                                        {device.status === 'Ready for Execution' && (
-                                            <>
-                                                <p className="text-sm text-gray-300 truncate">File: <span className="font-bold text-gray-100">{device.scriptFile?.name}</span></p>
-                                                <button
-                                                    onClick={() => onExecuteScript(device.id)}
-                                                    className="w-full px-4 py-2 bg-yellow-500 text-black text-sm font-semibold rounded-lg hover:bg-yellow-400 transition duration-200 shadow-md"
-                                                >
-                                                    Execute
-                                                </button>
-                                            </>
-                                        )}
-                                        {device.status === 'Executing Script' && (
-                                            <p className="text-sm text-center text-[#39FF14] font-bold animate-pulse">Running script...</p>
-                                        )}
-                                         {device.status === 'Execution Complete' && (
-                                            <p className="text-sm text-center text-[#39FF14] font-bold">Deployment successful.</p>
-                                        )}
-                                        {device.status === 'Execution Failed' && (
-                                            <p className="text-sm text-center text-red-400 font-bold">Deployment failed.</p>
-                                        )}
-                                    </div>
+                                            <div className="mt-3 flex gap-2">
+                                                {needsUpdate && device.status === 'Scan Complete' && (
+                                                    <button 
+                                                        onClick={() => onUpdateDevice(device.id)}
+                                                        className="w-full px-4 py-2 bg-[#39FF14] text-black text-sm font-semibold rounded-lg hover:bg-[#2ECC10] transition duration-200 shadow-md focus:outline-none focus:ring-2 focus:ring-[#39FF14] focus:ring-opacity-50"
+                                                        title="Install all required updates on this device."
+                                                    >
+                                                        Run Updates
+                                                    </button>
+                                                )}
+                                                {device.status === 'Update Complete (Reboot Pending)' && (
+                                                    <button
+                                                        onClick={() => onRebootDevice(device.id)}
+                                                        className="w-full px-4 py-2 bg-orange-600 text-white text-sm font-semibold rounded-lg hover:bg-orange-700 transition duration-200 shadow-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-opacity-50"
+                                                        title="Reboot this device to apply updates."
+                                                    >
+                                                        Reboot Device
+                                                    </button>
+                                                )}
+                                                {isScanActionable(device.status) && (
+                                                    <button
+                                                        onClick={() => onValidateDevice(device.id)}
+                                                        disabled={deploymentState === 'running'}
+                                                        className="w-full px-4 py-2 bg-gray-600 text-white text-sm font-semibold rounded-lg hover:bg-gray-500 transition duration-200 shadow-md focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50 disabled:bg-gray-800 disabled:cursor-not-allowed"
+                                                        title="Re-run the compliance scan on this device."
+                                                    >
+                                                        Re-run Checks
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </>
+                                    )}
+                                    
+                                    {showDeploymentDetails && (
+                                        <div className="mt-3 border-t border-gray-700 pt-3">
+                                            <h5 className="text-xs font-bold uppercase text-gray-500 mb-2">Post-Imaging Deployment</h5>
+                                            <div className="flex flex-col gap-2">
+                                                {device.status === 'Pending File' && (
+                                                    <label className="w-full text-center px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-500 transition duration-200 cursor-pointer">
+                                                        Select Script...
+                                                        <input type="file" className="hidden" onChange={handleFileChange(device.id)} />
+                                                    </label>
+                                                )}
+                                                {device.status === 'Ready for Execution' && (
+                                                    <>
+                                                        <p className="text-sm text-gray-300 truncate">File: <span className="font-bold text-gray-100">{device.scriptFile?.name}</span></p>
+                                                        <button
+                                                            onClick={() => onExecuteScript(device.id)}
+                                                            className="w-full px-4 py-2 bg-yellow-500 text-black text-sm font-semibold rounded-lg hover:bg-yellow-400 transition duration-200 shadow-md"
+                                                        >
+                                                            Execute
+                                                        </button>
+                                                    </>
+                                                )}
+                                                {device.status === 'Executing Script' && (
+                                                    <p className="text-sm text-center text-[#39FF14] font-bold animate-pulse">Running script...</p>
+                                                )}
+                                                 {device.status === 'Execution Complete' && (
+                                                    <p className="text-sm text-center text-[#39FF14] font-bold">Deployment successful.</p>
+                                                )}
+                                                {device.status === 'Execution Failed' && (
+                                                    <p className="text-sm text-center text-red-400 font-bold">Deployment failed.</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -303,7 +465,7 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
             </div>
             <div className="p-3 border-t border-gray-800 bg-black/25">
                 <button
-                    onClick={() => setShowLegend(!showLegend)}
+                    onClick={(e) => { e.stopPropagation(); setShowLegend(!showLegend); }}
                     className="w-full text-left text-xs font-bold text-gray-400 hover:text-white flex justify-between items-center transition-colors"
                     aria-expanded={showLegend}
                 >

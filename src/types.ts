@@ -163,9 +163,8 @@ export interface AppState {
     monitor: {
         devices: ImagingDevice[];
     };
-    pipeline: ImagingPipelineState;
     ui: {
-        activeTab: 'monitor' | 'runner' | 'build' | 'script' | 'remote' | 'pipeline';
+        activeTab: 'monitor' | 'runner' | 'build' | 'script' | 'remote' | 'pxe';
         csvFile: File | null;
         isCredentialModalOpen: boolean;
         isComplianceModalOpen: boolean;
@@ -179,63 +178,9 @@ export interface AppState {
     credentials?: Credentials;
 }
 
-// --- Types for Imaging Pipeline ---
-
-export type PipelineStage =
-  | 'pxe-connect'
-  | 'autotag'
-  | 'export-csv'
-  | 'sccm-import'
-  | 'sccm-wait'
-  | 'task-sequence'
-  | 'post-imaging';
-
-export type PipelineDeviceStatus =
-  | 'pending'
-  | 'connecting'
-  | 'connected'
-  | 'running-autotag'
-  | 'autotag-complete'
-  | 'autotag-failed'
-  | 'sccm-importing'
-  | 'sccm-imported'
-  | 'sccm-failed'
-  | 'ts-starting'
-  | 'ts-running'
-  | 'ts-complete'
-  | 'ts-failed'
-  | 'post-imaging-pending'
-  | 'post-imaging-complete'
-  | 'error';
-
-export interface PipelineDevice {
-  id: string;
-  hostname: string;
-  macAddress: string;
-  ipAddress: string;
-  model: string;
-  serialNumber: string;
-  slot: string;
-  status: PipelineDeviceStatus;
-  autotagOutput?: string;
-  sccmResourceId?: string;
-  tsPackageId?: string;
-  postImagingChecks?: { label: string; passed: boolean }[];
-}
-
-export interface ImagingPipelineState {
-  devices: PipelineDevice[];
-  activeStage: PipelineStage;
-  sccmWaitStartTime: number | null;   // ms epoch when wait started
-  sccmWaitDurationMs: number;         // configurable, default 20 min
-  selectedPackageId: string;
-  isRunning: boolean;
-  logs: { time: number; message: string; level: 'info' | 'success' | 'error' | 'warn' }[];
-}
-
 export type AppAction =
   // UI Actions
-  | { type: 'SET_ACTIVE_TAB'; payload: 'monitor' | 'runner' | 'build' | 'script' | 'remote' | 'pipeline' }
+  | { type: 'SET_ACTIVE_TAB'; payload: 'monitor' | 'runner' | 'build' | 'script' | 'remote' }
   | { type: 'SET_CSV_FILE'; payload: File | null }
   | { type: 'SET_CREDENTIAL_MODAL_OPEN'; payload: boolean }
   | { type: 'SET_COMPLIANCE_MODAL_OPEN'; payload: boolean }
@@ -273,25 +218,12 @@ export type AppAction =
   | { type: 'BULK_EXECUTE' }
   | { type: 'BULK_REMOVE' }
   | { type: 'BULK_DEPLOY_OPERATION'; payload: { operation: DeploymentOperationType; file: File } }
-  | { type: 'REMOTE_IN_DEVICE'; payload: number }
   | { type: 'PROMPT_REMOTE_CREDENTIALS'; payload: number }
   | { type: 'REMOTE_IN_WITH_CREDENTIALS'; payload: Credentials }
   | { type: 'CLOSE_REMOTE_CREDENTIAL_MODAL' }
   | { type: 'RESCAN_ALL_DEVICES_PROMPT' }
   | { type: 'RESCAN_ALL_DEVICES_CONFIRMED' }
   
-  // Pipeline Actions
-  | { type: 'PIPELINE_ADD_DEVICES'; payload: PipelineDevice[] }
-  | { type: 'PIPELINE_UPDATE_DEVICE'; payload: Partial<PipelineDevice> & { id: string } }
-  | { type: 'PIPELINE_SET_STAGE'; payload: PipelineStage }
-  | { type: 'PIPELINE_SET_RUNNING'; payload: boolean }
-  | { type: 'PIPELINE_START_SCCM_WAIT' }
-  | { type: 'PIPELINE_SET_PACKAGE'; payload: string }
-  | { type: 'PIPELINE_ADD_LOG'; payload: ImagingPipelineState['logs'][number] }
-  | { type: 'PIPELINE_CLEAR' }
-  | { type: 'PIPELINE_IMPORT_FROM_MONITOR' }
-  | { type: 'RUN_PIPELINE_STAGE'; payload: PipelineStage }
-
   // Monitor Actions
   | { type: 'SET_IMAGING_DEVICES'; payload: ImagingDevice[] }
   | { type: 'RENAME_IMAGING_DEVICE'; payload: { deviceId: string; newHostname: string } }

@@ -1,8 +1,9 @@
 
 
 import { sleep, normalizeMacAddress, detectDeviceType } from '../utils/helpers';
-import type { Device, ImagingDevice, DeploymentRun, ChecklistItem, ComplianceResult, Credentials, PipelineDevice, DeploymentOperationType } from '../src/types';
-import { TARGET_BIOS_VERSION, TARGET_DCU_VERSION, TARGET_WIN_VERSION } from '../src/constants';
+// FIX: Import DeploymentStatus to correctly type the device state.
+import type { Device, ImagingDevice, DeploymentRun, ChecklistItem, ComplianceResult } from '../types';
+import { TARGET_BIOS_VERSION, TARGET_DCU_VERSION, TARGET_WIN_VERSION } from '../App';
 import { ParseResult } from 'papaparse';
 
 // --- HELPERS ---
@@ -385,74 +386,9 @@ export const runComplianceChecks = async (devices: ImagingDevice[], onProgress: 
 };
 
 export const revalidateImagingDevices = async (devices: ImagingDevice[], onProgress: (device: ImagingDevice) => void): Promise<void> => {
-    for (const device of devices) {
+     for (const device of devices) {
         onProgress({ ...device, status: 'Checking Compliance', complianceCheck: undefined });
         const result = await runSingleComplianceCheck();
         onProgress({ ...device, complianceCheck: result, status: 'Completed' });
     }
-};
-
-// --- IMAGING PIPELINE SERVICE ---
-
-export const transformImagingToPipelineDevices = (imagingDevices: ImagingDevice[]): PipelineDevice[] => {
-    return imagingDevices.map(d => ({
-        id: d.id,
-        hostname: d.hostname,
-        macAddress: d.macAddress,
-        ipAddress: d.ipAddress,
-        model: d.model,
-        serialNumber: d.serialNumber,
-        slot: d.slot,
-        status: 'pending' as const,
-    }));
-};
-
-export const buildPipelineRdpFile = (device: PipelineDevice): string => {
-    const address = device.ipAddress || device.hostname;
-    return [
-        'screen mode id:i:2',
-        'use multimon:i:0',
-        'session bpp:i:32',
-        'desktopwidth:i:1280',
-        'desktopheight:i:720',
-        `full address:s:${address}`,
-        'prompt for credentials:i:1',
-        'authentication level:i:0',
-        'redirectclipboard:i:1',
-    ].join('\n');
-};
-
-export const runAutoTag = async (device: PipelineDevice): Promise<{ ok: boolean; output: string }> => {
-    await sleep(1500 + Math.random() * 1500);
-    const ok = Math.random() > 0.1;
-    if (ok) {
-        return { ok: true, output: `Tagged: ${device.hostname} / SN:${device.serialNumber} / Asset:${device.hostname.toUpperCase()}-AT` };
-    }
-    return { ok: false, output: 'AutoTag WMI query timed out. Ensure WinPE network stack is active.' };
-};
-
-export const importDeviceToSccm = async (_device: PipelineDevice): Promise<{ ok: boolean; resourceId?: string; error?: string }> => {
-    await sleep(800 + Math.random() * 600);
-    if (Math.random() > 0.08) {
-        const resourceId = `SCCM-${Math.floor(10000000 + Math.random() * 90000000)}`;
-        return { ok: true, resourceId };
-    }
-    return { ok: false, error: 'SCCM WMI call failed — check site server connectivity.' };
-};
-
-export const runPostImagingChecks = async (_device: PipelineDevice): Promise<{ label: string; passed: boolean }[]> => {
-    await sleep(2000 + Math.random() * 1000);
-    return [
-        { label: 'BitLocker Enabled', passed: Math.random() > 0.05 },
-        { label: 'SCCM Client Running', passed: Math.random() > 0.08 },
-        { label: 'CrowdStrike Sensor Active', passed: Math.random() > 0.05 },
-        { label: 'Windows Activation', passed: Math.random() > 0.05 },
-        { label: 'Domain Join Verified', passed: Math.random() > 0.1 },
-        { label: 'Hostname Matches Asset Tag', passed: Math.random() > 0.05 },
-        { label: 'Print Driver Installed', passed: Math.random() > 0.15 },
-        { label: 'VPN Client Installed', passed: Math.random() > 0.08 },
-    ];
-};
-
-// Re-export sleep so pipeline effectRunner can reference it.
-export { sleep };
+}

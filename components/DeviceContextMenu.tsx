@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import type { Device } from '../src/types';
+import type { Device } from '../types';
 
 interface DeviceContextMenuProps {
     device: Device;

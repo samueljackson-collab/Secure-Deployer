@@ -1,6 +1,6 @@
 
 import React from 'react';
-import type { ComplianceResult, ChecklistItem } from '../src/types';
+import type { ComplianceResult, ChecklistItem } from '../types';
 
 interface ComplianceDetailsModalProps {
     isOpen: boolean;

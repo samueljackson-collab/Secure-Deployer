@@ -1,6 +1,6 @@
 
 import React from 'react';
-import type { Device, DeploymentStatus } from '../src/types';
+import type { Device, DeploymentStatus } from '../types';
 
 interface DeploymentProgressProps {
     devices: Device[];
