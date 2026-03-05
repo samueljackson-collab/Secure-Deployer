@@ -1,6 +1,6 @@
 
 import React, { useEffect, useRef, useState } from 'react';
-import type { LogEntry } from '../types';
+import type { LogEntry } from '../src/types';
 
 const levelColors: Record<LogEntry['level'], string> = {
     INFO: 'text-gray-400',

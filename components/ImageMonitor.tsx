@@ -1,8 +1,23 @@
 
 import React, { useState } from 'react';
-import type { ImagingDevice, DeploymentRun, ComplianceResult } from '../types';
+import type { ImagingDevice, DeploymentRun, ComplianceResult } from '../src/types';
 import { ImageRack } from './ImageRack';
 import { ImageTrends } from './ImageTrends';
+
+const exportDeviceCsv = (devices: ImagingDevice[]) => {
+    const rows = ['Hostname,MAC Address,IP Address,Model,Serial Number,Slot,Status'];
+    for (const d of devices) {
+        rows.push(`${d.hostname},${d.macAddress},${d.ipAddress},${d.model},${d.serialNumber},${d.slot},${d.status}`);
+    }
+    const csv = rows.join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `imaging-devices-${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+};
 
 interface ImageMonitorProps {
     devices: ImagingDevice[];
@@ -97,14 +112,25 @@ export const ImageMonitor: React.FC<ImageMonitorProps> = ({ devices, history, on
                             Tracking devices from the imaging task sequence. Ready to receive live data from the network share.
                         </p>
                     </div>
-                     {completedCount > 0 && activeTab === 'rack' && (
-                        <button
-                            onClick={onTransferAllCompleted}
-                            className="px-6 py-2 bg-[#39FF14] text-black font-semibold rounded-lg hover:bg-[#2ECC10] transition duration-200 shadow-md focus:outline-none focus:ring-2 focus:ring-[#39FF14] focus:ring-opacity-50"
-                        >
-                            Transfer {completedCount} Completed Device(s)
-                        </button>
-                    )}
+                    <div className="flex gap-2 flex-wrap">
+                        {devices.length > 0 && activeTab === 'rack' && (
+                            <button
+                                onClick={() => exportDeviceCsv(devices)}
+                                className="px-4 py-2 bg-gray-700 text-white font-semibold rounded-lg hover:bg-gray-600 transition duration-200 shadow-md text-sm"
+                                title="Export all devices to CSV"
+                            >
+                                Export CSV
+                            </button>
+                        )}
+                        {completedCount > 0 && activeTab === 'rack' && (
+                            <button
+                                onClick={onTransferAllCompleted}
+                                className="px-6 py-2 bg-[#39FF14] text-black font-semibold rounded-lg hover:bg-[#2ECC10] transition duration-200 shadow-md focus:outline-none focus:ring-2 focus:ring-[#39FF14] focus:ring-opacity-50"
+                            >
+                                Transfer {completedCount} Completed Device(s)
+                            </button>
+                        )}
+                    </div>
                 </div>
                  <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
                     <div className="bg-black/50 p-3 rounded-lg">

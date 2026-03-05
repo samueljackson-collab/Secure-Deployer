@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { Device } from '../types';
+import type { Device } from '../src/types';
 import { DeviceIcon } from './DeviceIcon';
 import { Search, Monitor, ArrowRight, Shield } from 'lucide-react';
 

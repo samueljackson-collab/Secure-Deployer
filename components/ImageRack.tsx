@@ -1,7 +1,7 @@
 
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import type { ImagingDevice, ImagingStatus, ComplianceResult } from '../types';
+import type { ImagingDevice, ImagingStatus, ComplianceResult } from '../src/types';
 import { DeviceIcon } from './DeviceIcon';
 // FIX: Import detectDeviceType from its new centralized location in utils/helpers.
 import { detectDeviceType } from '../utils/helpers';

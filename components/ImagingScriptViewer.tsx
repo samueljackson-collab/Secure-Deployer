@@ -150,7 +150,8 @@ catch {
 Start-Sleep -Seconds 3
 `;
 
-export const ImagingScriptViewer: React.FC = () => {
+// devices prop accepted for API compatibility (App.tsx passes it) but not used here.
+export const ImagingScriptViewer: React.FC<{ devices?: unknown[] }> = () => {
     const [copySuccess, setCopySuccess] = useState(false);
 
     const handleCopy = () => {

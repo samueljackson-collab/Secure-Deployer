@@ -1,6 +1,6 @@
 
 import React from 'react';
-import type { DeploymentRun } from '../types';
+import type { DeploymentRun } from '../src/types';
 import { HistoryChart, AnalyticsChart } from './DeploymentAnalytics';
 
 interface ImageTrendsProps {
