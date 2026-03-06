@@ -409,9 +409,15 @@ Click: Deployment Runner tab
 
 Verify:
   ✓ Device hostname appears in the device list
-  ✓ Status shows: Pending
+  ✓ Status shows: Pending File  ← this is the correct starting status for transferred devices
+                                   (set by transformImagingToRunnerDevices in deploymentService.ts)
   ✓ MAC address matches the physical device
   ✓ Device type icon matches (laptop, desktop, tower, etc.)
+
+Note: Devices loaded via CSV start with status 'Pending'.
+      Devices transferred from Image Monitor start with status 'Pending File'.
+      Both are scanned the same way — the different starting status reflects that
+      transferred devices have default deployment files pre-staged for script execution.
 ```
 
 ---
@@ -492,15 +498,27 @@ They are NEVER stored in browser, localStorage, or application state.
 ```
 Each device row updates in real time:
 
-  Pending → Pending Validation → Waking Up → Connecting
-         → Retrying... (if connection fails on first try)
-         → Checking Info → Checking BIOS → Checking DCU → Checking Windows
+Initial scan (runDeploymentFlow):
+  Pending / Pending File
+    → Connecting  (validateDevice starts — WoL is a 2s global sleep before the loop,
+                   not shown per-device)
+    → Retrying... (if connection fails, up to maxRetries times)
+    → Checking Info → Checking BIOS → Checking DCU → Checking Windows
 
-Terminal outcomes (bold = action needed):
+Re-scan (RESCAN_ALL_DEVICES_CONFIRMED / VALIDATE_DEVICES):
+  All devices reset to: Pending Validation  (version/compliance data cleared)
+    → Validating
+    → Connecting → [Retrying...] → Checking Info → Checking BIOS → Checking DCU → Checking Windows
+
+WAKE_ON_LAN action (separate button — not part of scan):
+  Selected devices → Waking Up  (then stay there until next scan starts)
+
+Terminal outcomes:
   ✅ Success          — all checks passed, device is compliant
   ⚠️  Scan Complete   — checks done, one or more failed → needs remediation
   ❌  Offline         — could not connect after all retries → check power/network
-  ❌  Failed          — scan error (not connectivity) → see logs
+  ❌  Failed          — update error (not scan error)
+  ⬜  Cancelled       — scan was cancelled mid-run
 ```
 
 #### Step 5.4 — Review per-device compliance detail
