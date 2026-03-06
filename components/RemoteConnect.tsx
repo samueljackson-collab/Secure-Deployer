@@ -118,21 +118,20 @@ interface RemoteConnectProps {
 }
 
 export const RemoteConnect: React.FC<RemoteConnectProps> = ({ devices }) => {
-    const { dispatch } = useAppContext();
+    const { state, dispatch } = useAppContext();
+    // Persisted remote settings from AppState so choices survive tab switches
+    const { rdpResolution, rdpColorDepth, sshPort, sshUsernamename } = state.runner.settings;
 
     // Device list state
     const [selectedDeviceId, setSelectedDeviceId] = useState<number | null>(null);
     const [filter, setFilter] = useState<ConnectionFilter>('all');
     const [searchQuery, setSearchQuery] = useState('');
 
-    // RDP options state
-    const [rdpResolution, setRdpResolution] = useState<RdpOptions['resolution']>('1600x900');
-    const [rdpColorDepth, setRdpColorDepth] = useState<16 | 32>(32);
+    // RDP clipboard option — not persisted (session-level preference only)
     const [rdpClipboard, setRdpClipboard] = useState(true);
 
-    // SSH state
-    const [sshUser, setSshUser] = useState('admin');
-    const [sshPort, setSshPort] = useState(22);
+    // RDP download error state
+    const [rdpError, setRdpError] = useState<string | null>(null);
 
     // Notes state (per device)
     const [notesMap, setNotesMap] = useState<Record<number, string>>({});
@@ -163,22 +162,28 @@ export const RemoteConnect: React.FC<RemoteConnectProps> = ({ devices }) => {
 
     const selectedDevice = devices.find(d => d.id === selectedDeviceId) || null;
 
-    // RDP download
+    // RDP download — persisted settings used so resolution/depth survive tab switches
     const handleRdpDownload = () => {
         if (!selectedDevice) return;
-        const content = buildRemoteDesktopFile(selectedDevice, {
-            resolution: rdpResolution,
-            colorDepth: rdpColorDepth,
-            redirectClipboard: rdpClipboard,
-        });
-        const blob = new Blob([content], { type: 'application/rdp' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `${selectedDevice.hostname}.rdp`;
-        link.click();
-        URL.revokeObjectURL(url);
-        addSessionLog(`Downloaded RDP file for ${selectedDevice.hostname} (${rdpResolution})`);
+        setRdpError(null);
+        try {
+            const content = buildRemoteDesktopFile(selectedDevice, {
+                resolution: rdpResolution,
+                colorDepth: rdpColorDepth,
+                redirectClipboard: rdpClipboard,
+            });
+            const blob = new Blob([content], { type: 'application/rdp' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${selectedDevice.hostname}.rdp`;
+            link.click();
+            URL.revokeObjectURL(url);
+            addSessionLog(`Downloaded RDP file for ${selectedDevice.hostname} (${rdpResolution})`);
+        } catch (err) {
+            const message = err instanceof Error ? err.message : 'Unknown error generating RDP file.';
+            setRdpError(message);
+        }
     };
 
     // WoL
@@ -219,6 +224,7 @@ export const RemoteConnect: React.FC<RemoteConnectProps> = ({ devices }) => {
                         {/* Search */}
                         <input
                             type="text"
+                            aria-label="Search devices by hostname or IP"
                             placeholder="Search hostname or IP..."
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
@@ -343,7 +349,7 @@ export const RemoteConnect: React.FC<RemoteConnectProps> = ({ devices }) => {
                                             </div>
                                             <select
                                                 value={rdpResolution}
-                                                onChange={e => setRdpResolution(e.target.value as RdpOptions['resolution'])}
+                                                onChange={e => dispatch({ type: 'SET_SETTINGS', payload: { rdpResolution: e.target.value as typeof rdpResolution } })}
                                                 className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-[#39FF14]"
                                             >
                                                 <option value="1280x720">1280×720</option>
@@ -361,7 +367,7 @@ export const RemoteConnect: React.FC<RemoteConnectProps> = ({ devices }) => {
                                                 {([16, 32] as const).map(d => (
                                                     <button
                                                         key={d}
-                                                        onClick={() => setRdpColorDepth(d)}
+                                                        onClick={() => dispatch({ type: 'SET_SETTINGS', payload: { rdpColorDepth: d } })}
                                                         className={`px-2.5 py-1 rounded text-xs font-bold transition-colors ${rdpColorDepth === d ? 'bg-[#39FF14] text-black' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
                                                     >
                                                         {d}-bit
@@ -388,6 +394,11 @@ export const RemoteConnect: React.FC<RemoteConnectProps> = ({ devices }) => {
                                         >
                                             Download .rdp File
                                         </button>
+                                        {rdpError && (
+                                            <p className="text-xs text-red-400 mt-1 px-1" role="alert">
+                                                Error: {rdpError}
+                                            </p>
+                                        )}
                                         <div className="flex items-center bg-black/30 rounded px-3 py-1.5 mt-1 border border-gray-800">
                                             <span className="text-xs text-gray-500 font-mono flex-1 truncate">
                                                 mstsc /v:{selectedDevice.ipAddress || selectedDevice.hostname}
@@ -411,8 +422,8 @@ export const RemoteConnect: React.FC<RemoteConnectProps> = ({ devices }) => {
                                             </div>
                                             <input
                                                 type="text"
-                                                value={sshUser}
-                                                onChange={e => setSshUser(e.target.value)}
+                                                value={sshUsername}
+                                                onChange={e => dispatch({ type: 'SET_SETTINGS', payload: { sshUsernamename: e.target.value } })}
                                                 className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-200 w-28 focus:outline-none focus:border-[#39FF14] font-mono"
                                             />
                                         </div>
@@ -424,7 +435,7 @@ export const RemoteConnect: React.FC<RemoteConnectProps> = ({ devices }) => {
                                             <input
                                                 type="number"
                                                 value={sshPort}
-                                                onChange={e => setSshPort(Math.min(65535, Math.max(1, parseInt(e.target.value, 10) || 22)))}
+                                                onChange={e => dispatch({ type: 'SET_SETTINGS', payload: { sshPort: Math.min(65535, Math.max(1, parseInt(e.target.value, 10) || 22)) } })}
                                                 className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-200 w-20 text-center focus:outline-none focus:border-[#39FF14] font-mono"
                                             />
                                         </div>
@@ -432,10 +443,10 @@ export const RemoteConnect: React.FC<RemoteConnectProps> = ({ devices }) => {
                                             <p className="text-xs text-gray-500 mb-1 font-semibold">SSH Command</p>
                                             <div className="flex items-center">
                                                 <span className="text-xs text-[#39FF14] font-mono flex-1 truncate">
-                                                    ssh {sshUser}@{selectedDevice.ipAddress || selectedDevice.hostname}{sshPort !== 22 ? ` -p ${sshPort}` : ''}
+                                                    ssh {sshUsername}@{selectedDevice.ipAddress || selectedDevice.hostname}{sshPort !== 22 ? ` -p ${sshPort}` : ''}
                                                 </span>
                                                 <CopyButton
-                                                    value={`ssh ${sshUser}@${selectedDevice.ipAddress || selectedDevice.hostname}${sshPort !== 22 ? ` -p ${sshPort}` : ''}`}
+                                                    value={`ssh ${sshUsername}@${selectedDevice.ipAddress || selectedDevice.hostname}${sshPort !== 22 ? ` -p ${sshPort}` : ''}`}
                                                     label="SSH command"
                                                 />
                                             </div>

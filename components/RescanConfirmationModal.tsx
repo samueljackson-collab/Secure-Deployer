@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { useEscapeKey } from '../utils/hooks';
 
 interface RescanConfirmationModalProps {
     isOpen: boolean;
@@ -9,6 +10,8 @@ interface RescanConfirmationModalProps {
 }
 
 export const RescanConfirmationModal: React.FC<RescanConfirmationModalProps> = ({ isOpen, onClose, onConfirm, deviceCount }) => {
+    useEscapeKey(onClose, isOpen);
+
     if (!isOpen) {
         return null;
     }

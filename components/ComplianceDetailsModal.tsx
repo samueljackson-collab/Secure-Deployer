@@ -1,6 +1,7 @@
 
 import React from 'react';
 import type { ComplianceResult, ChecklistItem } from '../types';
+import { useEscapeKey } from '../utils/hooks';
 
 interface ComplianceDetailsModalProps {
     isOpen: boolean;
@@ -24,6 +25,9 @@ const CheckRow: React.FC<{ item: ChecklistItem }> = ({ item }) => (
 );
 
 export const ComplianceDetailsModal: React.FC<ComplianceDetailsModalProps> = ({ isOpen, onClose, result }) => {
+    // Close on Escape key for keyboard accessibility
+    useEscapeKey(onClose, isOpen);
+
     if (!isOpen || !result) {
         return null;
     }

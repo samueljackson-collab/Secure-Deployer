@@ -23,6 +23,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({ selectedDeviceIds, on
                     disabled={!hasSelection}
                     className="px-4 py-2 bg-[#39FF14] text-black text-sm font-semibold rounded-lg hover:bg-[#2ECC10] disabled:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed transition duration-200 shadow-md focus:outline-none focus:ring-2 focus:ring-[#39FF14] focus:ring-opacity-50"
                     title={hasSelection ? `Send Wake-on-LAN signal to ${selectedDeviceIds.size} selected device(s)` : 'Select devices to send Wake-on-LAN signal'}
+                    aria-label={hasSelection ? `Send Wake-on-LAN to ${selectedDeviceIds.size} selected device(s)` : 'Wake-on-LAN (no devices selected)'}
                 >
                     Wake-on-LAN ({selectedDeviceIds.size})
                 </button>

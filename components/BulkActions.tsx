@@ -74,7 +74,7 @@ export const BulkActions: React.FC<BulkActionsProps> = ({ selectedCount, onUpdat
                 </Tooltip>
                 <Tooltip content="Choose the file to run, install, or delete on selected devices." position="top">
                     <label className="px-4 py-2 bg-blue-700 text-white text-sm font-semibold rounded-lg hover:bg-blue-600 transition duration-200 shadow-md cursor-pointer">
-                        Select Deploy File
+                        {selectedFile ? selectedFile.name.slice(0, 24) + (selectedFile.name.length > 24 ? '…' : '') : 'Select Deploy File'}
                         <input type="file" className="hidden" onChange={(e) => setSelectedFile(e.target.files?.[0] || null)} />
                     </label>
                 </Tooltip>

@@ -235,7 +235,9 @@ const DeviceCard: React.FC<{
             </div>
             <div className="mt-2">
                 <div className="w-full bg-gray-700 rounded-full h-2.5">
-                    <div className={`${bg} h-2.5 rounded-full transition-all duration-500 ease-linear`} style={{ width: `${currentProgress}%` }}></div>
+                    <div className={`relative ${bg} h-2.5 rounded-full transition-all duration-500 ease-linear`} style={{ width: `${currentProgress}%` }}>
+                        <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-black mix-blend-difference">{device.progress}%</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -321,8 +323,15 @@ export const ImageRack: React.FC<ImageRackProps> = ({ devices, rackConfig, selec
     if (devices.length === 0 && expandedSlots.size === 0 && discoveredSlotsRef.current.size === 0) {
         return (
             <div className="bg-gray-950 p-6 rounded-lg shadow-lg border border-gray-800 text-center">
-                <h3 className="text-lg font-bold text-gray-400">Awaiting Devices...</h3>
-                <p className="text-sm text-gray-500">No imaging processes have been detected. The rack will populate as devices come online.</p>
+                <div className="col-span-full flex flex-col items-center justify-center py-16 text-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-gray-700 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" />
+                    </svg>
+                    <p className="text-gray-500 font-bold text-lg">No Devices Detected</p>
+                    <p className="text-gray-600 text-sm mt-2 max-w-sm">
+                        Devices appear here automatically as the imaging task sequence runs. Start imaging, then return to this tab to monitor progress.
+                    </p>
+                </div>
                 <div className={`${gridClasses} mt-4`}>
                     {slots.map(slotId => <EmptySlotCard key={slotId} slotId={slotId} />)}
                 </div>

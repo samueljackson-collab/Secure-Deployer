@@ -3,7 +3,7 @@
 import { sleep, normalizeMacAddress, detectDeviceType } from '../utils/helpers';
 // FIX: Import DeploymentStatus to correctly type the device state.
 import type { Device, DeploymentStatus, ImagingDevice, DeploymentRun, ChecklistItem, ComplianceResult } from '../types';
-import { TARGET_BIOS_VERSION, TARGET_DCU_VERSION, TARGET_WIN_VERSION } from '../App';
+import { TARGET_BIOS_VERSION, TARGET_DCU_VERSION, TARGET_WIN_VERSION } from '../utils/constants';
 import { ParseResult } from 'papaparse';
 
 // --- HELPERS ---

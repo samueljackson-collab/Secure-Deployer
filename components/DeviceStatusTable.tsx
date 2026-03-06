@@ -3,43 +3,10 @@
 import React, { useState } from 'react';
 import type { Device, DeploymentStatus, DeviceFormFactor } from '../types';
 import { DeviceIcon, icons } from './DeviceIcon';
-// FIX: Import target versions from App.tsx where they are now defined and exported.
-import { TARGET_BIOS_VERSION, TARGET_DCU_VERSION, TARGET_WIN_VERSION } from '../App';
-
-const statusColors: Record<DeploymentStatus, string> = {
-    Pending: 'text-gray-400',
-    'Pending Validation': 'text-purple-400',
-    'Waking Up': 'text-yellow-400 animate-pulse',
-    Connecting: 'text-cyan-400 animate-pulse',
-    'Retrying...': 'text-yellow-500 animate-pulse',
-    Validating: 'text-cyan-400 animate-pulse',
-    'Checking Info': 'text-cyan-400 animate-pulse',
-    'Checking BIOS': 'text-cyan-400 animate-pulse',
-    'Checking DCU': 'text-cyan-400 animate-pulse',
-    'Checking Windows': 'text-cyan-400 animate-pulse',
-    'Scan Complete': 'text-yellow-400',
-    Updating: 'text-blue-400 animate-pulse',
-    'Updating BIOS': 'text-blue-400 animate-pulse',
-    'Updating DCU': 'text-blue-400 animate-pulse',
-    'Updating Windows': 'text-blue-400 animate-pulse',
-    'Update Complete (Reboot Pending)': 'text-purple-400',
-    'Rebooting...': 'text-teal-400 animate-pulse',
-    Success: 'text-[#39FF14]',
-    Failed: 'text-red-400',
-    Offline: 'text-orange-400',
-    Cancelled: 'text-gray-500',
-    'Pending File': 'text-blue-400',
-    'Ready for Execution': 'text-yellow-400',
-    'Executing Script': 'text-blue-400 animate-pulse',
-    'Execution Complete': 'text-[#39FF14]',
-    'Execution Failed': 'text-red-400',
-    'Deploying Action': 'text-cyan-400 animate-pulse',
-    'Action Complete': 'text-[#39FF14]',
-    'Action Failed': 'text-red-400',
-};
+import { TARGET_BIOS_VERSION, TARGET_DCU_VERSION, TARGET_WIN_VERSION, STATUS_COLORS } from '../utils/constants';
 
 const StatusBadge: React.FC<{ status: DeploymentStatus; retryAttempt?: number }> = ({ status, retryAttempt }) => {
-    const color = statusColors[status] || 'text-gray-400';
+    const color = STATUS_COLORS[status] || 'text-gray-400';
     const text = status === 'Retrying...' && retryAttempt ? `Retrying... (${retryAttempt})` : status;
     return (
         <span className={`px-2 py-1 text-xs font-medium rounded-full bg-gray-800 ${color}`}>
@@ -164,9 +131,10 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
                 <h3 className="font-semibold text-gray-200">Device Status</h3>
                 <div className="flex items-center" title="Select or deselect all devices in the list">
                     <label htmlFor="selectAll" className="text-xs text-gray-400 mr-2 cursor-pointer font-bold">Select All</label>
-                    <input 
-                        type="checkbox" 
+                    <input
+                        type="checkbox"
                         id="selectAll"
+                        aria-label="Select all devices"
                         className="h-4 w-4 rounded bg-gray-700 border-gray-600 text-[#39FF14] focus:ring-[#39FF14] cursor-pointer"
                         checked={allSelected}
                         onChange={(e) => onSelectAll(e.target.checked)}

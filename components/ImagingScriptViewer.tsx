@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 const powershellScript = `
 #Requires -Version 5.1
@@ -153,11 +153,15 @@ Start-Sleep -Seconds 3
 export const ImagingScriptViewer: React.FC = () => {
     const [copySuccess, setCopySuccess] = useState(false);
 
+    // useEffect cleans up the timer if the component unmounts before it fires
+    useEffect(() => {
+        if (!copySuccess) return;
+        const timer = setTimeout(() => setCopySuccess(false), 2000);
+        return () => clearTimeout(timer);
+    }, [copySuccess]);
+
     const handleCopy = () => {
-        navigator.clipboard.writeText(powershellScript.trim()).then(() => {
-            setCopySuccess(true);
-            setTimeout(() => setCopySuccess(false), 2000);
-        });
+        navigator.clipboard.writeText(powershellScript.trim()).then(() => setCopySuccess(true));
     };
 
     return (

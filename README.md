@@ -867,3 +867,64 @@ Helpful reviewer comments for preservation-driven docs work should:
 - This is intentional to support both current maintainers and long-time operators.
 - When in doubt, preserve first, then expand with clarifying detail.
 
+---
+
+## 👩‍💻 Developer Reference
+
+### Tech Stack
+| Layer | Technology | Notes |
+|---|---|---|
+| Framework | React 19 + TypeScript | Strict mode enabled |
+| Bundler | Vite 6 | Dev server binds to localhost only (not 0.0.0.0) |
+| Styling | Tailwind CSS | Black + neon green (`#39FF14`) theme; hover darken `#2ECC10` |
+| State | `useReducer` + Context API | See `contexts/AppContext.tsx` |
+| CSV parsing | PapaParse | Used in `deploymentService.parseDevicesFromCsv` |
+
+### State Architecture
+
+Global state lives in a single `AppState` object managed by `appReducer` in `contexts/AppContext.tsx`.
+
+**Key pattern — `wrappedDispatch`**: Components always call `wrappedDispatch` (never the raw `dispatch` from `useReducer`). This function:
+1. Calls the synchronous reducer immediately (pure state transition).
+2. Passes the action to `effectRunner`, an async callback that handles side-effects (API calls, timers, async deployment flows) triggered by specific action types.
+
+This keeps the reducer pure while co-locating complex async orchestration with the state definition.
+
+### Key Architectural Decisions
+
+| Decision | Rationale |
+|---|---|
+| Slot format `”RACK-POSITION”` | `ImagingDevice.slot` is a string like `”1-8”` meaning rack 1, slot 8. `ImageRack` generates slot labels by splitting on `-`. |
+| `rackConfig: RackDefinition[]` in `monitor` state | Allows operators to configure arbitrary rack/slot counts from the Image Monitor Settings tab. Defaults to 2 racks × 16 slots. Overflow device slots (outside configured racks) are still rendered. |
+| `LogEntry.id = crypto.randomUUID()` | Each log entry gets a stable UUID so `LogViewer` can use it as a React list key, preventing animation glitches and stale rows when filters change. |
+| Credentials cleared in `finally` | `INITIALIZE_DEPLOYMENT` wraps the deployment flow in `try/finally`. `CLEAR_CREDENTIALS` is dispatched in the `finally` block, guaranteeing credentials are wiped from memory whether the deployment succeeds, throws, or is cancelled. |
+| `useEscapeKey` hook in `utils/hooks.ts` | All modal components import this shared hook for consistent Escape-key support. Pass `enabled={isOpen}` to avoid registering the listener when the modal is closed. |
+| `STATUS_COLORS` in `utils/constants.ts` | Single source of truth for Tailwind status colour classes. Previously duplicated across `DeploymentProgress`, `DeviceStatusTable`, and `ImageRack`. |
+| `TARGET_*_VERSION` in `utils/constants.ts` | Compliance version targets moved from `App.tsx` to break the backward dependency (`deploymentService → App`). `App.tsx` re-exports them for any remaining direct consumers. |
+
+### Stubbed / Planned Features
+
+These features have type definitions and UI placeholders but are **not yet functional**:
+
+| Feature | File | Status |
+|---|---|---|
+| Gemini AI script analysis | `services/geminiService.ts` | Planned — throws on call; `ScriptAnalysisModal` shows placeholder |
+| Dynamic PS script generation | `services/powershellScript.ts` | Planned — throws on call; static script shown in `ImagingScriptViewer` |
+| Live WoL magic packets | `WAKE_ON_LAN` in `AppContext.tsx` | Planned — currently only updates device status in UI state |
+| Parallel scan execution | `runner.settings.parallelScanCount` | Planned — stored in state, not consumed by `runDeploymentFlow` |
+| Reboot wait timeout | `runner.settings.maxRebootWait` | Planned — stored in state, not consumed by `rebootDevice` |
+
+Settings rows for planned features are labelled with a `planned` badge in the UI to inform operators.
+
+### Adding a New Tab
+1. Add the tab name to the `ActiveTab` union in `types.ts`
+2. Add a `TabButton` entry in `App.tsx`
+3. Add `{ui.activeTab === 'your-tab' && <YourComponent />}` in `App.tsx`'s `<main>`
+4. Create `components/YourComponent.tsx` with a `/** ... */` JSDoc block describing its role
+
+### Adding a New Setting
+1. Add the field to `RunnerSettings` in `types.ts` (include a comment noting unit/range)
+2. Add a default value to `defaultSettings` in `contexts/AppContext.tsx`
+3. Add a `<SettingRow>` entry in the relevant `<SettingSection>` in `App.tsx`
+4. If the setting is not yet wired to a service, add the `planned` badge and document it in the table above
+

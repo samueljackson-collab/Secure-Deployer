@@ -22,10 +22,8 @@ import { InfoIcon } from './components/Tooltip';
 import type { ActiveTab, Credentials } from './types';
 import { AppProvider, useAppContext } from './contexts/AppContext';
 
-// Compliance version targets — imported by deploymentService for consistency
-export const TARGET_BIOS_VERSION = 'A24';
-export const TARGET_DCU_VERSION = '5.1.0';
-export const TARGET_WIN_VERSION = '23H2';
+// Version targets — re-exported for backwards compatibility with any remaining direct imports
+export { TARGET_BIOS_VERSION, TARGET_DCU_VERSION, TARGET_WIN_VERSION } from './utils/constants';
 
 // --- Settings Section ---
 // Collapsible settings group for the Advanced Settings panel
@@ -52,7 +50,7 @@ const SettingSection: React.FC<{ title: string; defaultOpen?: boolean; children:
 };
 
 // Row with label + optional InfoIcon + control aligned right
-const SettingRow: React.FC<{ label: string; tooltip: string; children: React.ReactNode }> = ({ label, tooltip, children }) => (
+const SettingRow: React.FC<{ label: React.ReactNode; tooltip: string; children: React.ReactNode }> = ({ label, tooltip, children }) => (
     <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 flex-1 min-w-0">
             <label className="text-sm text-gray-300 font-bold">{label}</label>
@@ -189,7 +187,7 @@ const AppContent: React.FC = () => {
                                                 <SettingRow label="Conn. Timeout (sec)" tooltip="Seconds to wait for an initial connection response before considering the device unreachable.">
                                                     {numInput(runner.settings.connectionTimeout, 5, 120, v => dispatch({ type: 'SET_SETTINGS', payload: { connectionTimeout: v } }))}
                                                 </SettingRow>
-                                                <SettingRow label="Parallel Scans" tooltip="How many devices to scan simultaneously. Higher values finish faster but increase network load. Start with 1 on congested networks.">
+                                                <SettingRow label={<>Parallel Scans <span className="ml-1 text-[10px] text-gray-600 font-normal border border-gray-700 rounded px-1">planned</span></>} tooltip="How many devices to scan simultaneously. Higher values finish faster but increase network load. Start with 1 on congested networks.">
                                                     {numInput(runner.settings.parallelScanCount, 1, 10, v => dispatch({ type: 'SET_SETTINGS', payload: { parallelScanCount: v } }))}
                                                 </SettingRow>
                                             </SettingSection>
@@ -211,7 +209,7 @@ const AppContent: React.FC = () => {
                                                 <SettingRow label="Reboot Delay (sec)" tooltip="Seconds to wait after issuing the reboot command before the runner proceeds to the next step.">
                                                     {numInput(runner.settings.rebootDelay, 10, 300, v => dispatch({ type: 'SET_SETTINGS', payload: { rebootDelay: v } }))}
                                                 </SettingRow>
-                                                <SettingRow label="Max Reboot Wait (sec)" tooltip="Maximum seconds to wait for a device to come back online after a reboot before marking it as timed out.">
+                                                <SettingRow label={<>Max Reboot Wait (sec) <span className="ml-1 text-[10px] text-gray-600 font-normal border border-gray-700 rounded px-1">planned</span></>} tooltip="Maximum seconds to wait for a device to come back online after a reboot before marking it as timed out.">
                                                     {numInput(runner.settings.maxRebootWait, 30, 600, v => dispatch({ type: 'SET_SETTINGS', payload: { maxRebootWait: v } }))}
                                                 </SettingRow>
                                             </SettingSection>
@@ -219,7 +217,7 @@ const AppContent: React.FC = () => {
                                             {/* WoL Settings */}
                                             <SettingSection title="Wake-on-LAN" defaultOpen={false}>
                                                 <SettingRow
-                                                    label="Broadcast Address"
+                                                    label={<>Broadcast Address <span className="ml-1 text-[10px] text-gray-600 font-normal border border-gray-700 rounded px-1">planned</span></>}
                                                     tooltip="Network broadcast address for WoL magic packets. Use 255.255.255.255 for all subnets, or a subnet-specific address like 192.168.1.255 for directed broadcasts."
                                                 >
                                                     <input
@@ -231,7 +229,7 @@ const AppContent: React.FC = () => {
                                                     />
                                                 </SettingRow>
                                                 <SettingRow
-                                                    label="WoL Port"
+                                                    label={<>WoL Port <span className="ml-1 text-[10px] text-gray-600 font-normal border border-gray-700 rounded px-1">planned</span></>}
                                                     tooltip="UDP port for WoL magic packets. Standard ports are 7 (echo) and 9 (discard). Port 9 is recommended."
                                                 >
                                                     {numInput(runner.settings.wolPort, 1, 65535, v => dispatch({ type: 'SET_SETTINGS', payload: { wolPort: v } }))}

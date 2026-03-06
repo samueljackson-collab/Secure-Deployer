@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import type { ImagingDevice, ComplianceResult, ChecklistItem } from '../types';
+import { useEscapeKey } from '../utils/hooks';
 
 const CheckRow: React.FC<{ item: ChecklistItem }> = ({ item }) => (
     <tr className={`border-b border-gray-800 ${item.passed ? 'bg-gray-900/50' : 'bg-red-900/20'}`}>
@@ -67,6 +68,9 @@ interface AllComplianceDetailsModalProps {
 }
 
 export const AllComplianceDetailsModal: React.FC<AllComplianceDetailsModalProps> = ({ isOpen, onClose, devices }) => {
+    // Close on Escape key for keyboard accessibility
+    useEscapeKey(onClose, isOpen);
+
     if (!isOpen) {
         return null;
     }

@@ -8,20 +8,27 @@ import Papa from 'papaparse';
 const defaultSettings: RunnerSettings = {
     // Scan
     maxRetries: 3,
-    retryDelay: 2,
-    connectionTimeout: 30,
-    parallelScanCount: 1,
+    retryDelay: 2,          // seconds between retry attempts
+    connectionTimeout: 30,  // seconds before a device is considered unreachable
+    parallelScanCount: 1,   // stored; not yet consumed by service layer (planned feature)
     // Reboot
     autoRebootEnabled: false,
-    rebootDelay: 60,
-    maxRebootWait: 300,
+    rebootDelay: 60,        // seconds to wait after issuing a reboot command
+    maxRebootWait: 300,     // seconds; stored but not yet consumed by service layer (planned)
     // Wake-on-LAN
+    // NOTE: live WoL packets are not yet implemented — these values are stored but unused.
+    // When implemented, they will control the broadcast target and UDP port for magic packets.
     wolBroadcastAddress: '255.255.255.255',
     wolPort: 9,
     // Display
     compactView: false,
     showOfflineDevices: true,
     logLevelFilter: 'ALL',
+    // Remote Connect — persisted across tab switches
+    rdpResolution: '1920x1080',
+    rdpColorDepth: 32,
+    sshPort: 22,
+    sshUsername: 'admin',
 };
 
 const initialState: AppState = {
@@ -70,7 +77,7 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
             return { ...state, runner: { ...state.runner, settings: { ...state.runner.settings, ...action.payload } } };
         case 'START_DEPLOYMENT_PROMPT':
              if (!state.ui.csvFile && state.runner.devices.length === 0) {
-                return { ...state, runner: { ...state.runner, logs: [...state.runner.logs, { timestamp: new Date(), message: "Please select a device list or transfer devices from the monitor.", level: 'ERROR' }] } };
+                return { ...state, runner: { ...state.runner, logs: [...state.runner.logs, { id: crypto.randomUUID(), timestamp: new Date(), message: "Please select a device list or transfer devices from the monitor.", level: 'ERROR' }] } };
             }
             return { ...state, ui: { ...state.ui, isCredentialModalOpen: true } };
         case 'SET_CREDENTIAL_MODAL_OPEN':
@@ -87,9 +94,9 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
                     ...state.runner,
                     devices: action.payload.devices,
                     logs: [
-                        { timestamp: new Date(), message: "Deployment process initiated.", level: 'INFO' },
+                        { id: crypto.randomUUID(), timestamp: new Date(), message: "Deployment process initiated.", level: 'INFO' },
                         // Security: do not log username or any credential details
-                        { timestamp: new Date(), message: "Authenticated session started.", level: 'INFO' },
+                        { id: crypto.randomUUID(), timestamp: new Date(), message: "Authenticated session started.", level: 'INFO' },
                     ],
                     deploymentState: 'running',
                     isCancelled: false,
@@ -189,7 +196,7 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
             return { ...state, ui: { ...state.ui, isRescanModalOpen: action.payload } };
         case 'RESCAN_ALL_DEVICES_PROMPT':
             if (state.runner.devices.length === 0) {
-                return { ...state, runner: { ...state.runner, logs: [...state.runner.logs, { timestamp: new Date(), message: "No devices to re-scan.", level: 'WARNING' }] } };
+                return { ...state, runner: { ...state.runner, logs: [...state.runner.logs, { id: crypto.randomUUID(), timestamp: new Date(), message: "No devices to re-scan.", level: 'WARNING' }] } };
             }
             return { ...state, ui: { ...state.ui, isRescanModalOpen: true } };
         case 'RESCAN_ALL_DEVICES_CONFIRMED':
@@ -201,7 +208,7 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
                     deploymentState: 'running',
                     isCancelled: false,
                     batchHistory: [],
-                    logs: [...state.runner.logs, { timestamp: new Date(), message: "Initiating re-scan for all devices...", level: 'INFO' }],
+                    logs: [...state.runner.logs, { id: crypto.randomUUID(), timestamp: new Date(), message: "Initiating re-scan for all devices...", level: 'INFO' }],
                     devices: state.runner.devices.map(d => ({
                         ...d,
                         status: 'Pending Validation',
@@ -258,7 +265,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const { runner } = state;
 
         const addLog = (message: string, level: LogEntry['level'] = 'INFO') => {
-            dispatch({ type: 'ADD_LOG', payload: { timestamp: new Date(), message, level } });
+            // Each log entry gets a stable UUID so LogViewer can use it as a React key,
+            // avoiding diff glitches when entries are filtered or reordered.
+            dispatch({ type: 'ADD_LOG', payload: { id: crypto.randomUUID(), timestamp: new Date(), message, level } });
         };
         const sendNotification = (title: string, body: string) => {
             if ('Notification' in window && Notification.permission === 'granted') {
@@ -512,6 +521,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
     }, [state]);
 
+    /**
+     * wrappedDispatch is the public-facing dispatch function exposed via AppContext.
+     *
+     * Why not use the raw `dispatch` from useReducer directly?
+     * The reducer is synchronous and handles pure state transitions. Side-effects
+     * (API calls, timers, async flows) are triggered separately by `effectRunner`,
+     * which inspects the action type and the state snapshot at dispatch time.
+     *
+     * This two-step pattern keeps the reducer pure while still allowing complex
+     * async orchestration (e.g. the full deployment pipeline) to be co-located with
+     * the state logic rather than scattered across components.
+     */
     const wrappedDispatch = useCallback((action: AppAction) => {
         dispatch(action);
         effectRunner(state, action);

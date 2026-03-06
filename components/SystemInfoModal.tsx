@@ -1,5 +1,6 @@
 import React from 'react';
 import { useAppContext } from '../contexts/AppContext';
+import { useEscapeKey } from '../utils/hooks';
 import { calculateAnalytics } from './DeploymentAnalytics';
 
 export const SystemInfoModal: React.FC = () => {
@@ -12,6 +13,9 @@ export const SystemInfoModal: React.FC = () => {
     const handleClose = () => {
         dispatch({ type: 'SET_SYSTEM_INFO_MODAL_OPEN', payload: false });
     };
+
+    // Close on Escape key for keyboard accessibility
+    useEscapeKey(handleClose);
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">

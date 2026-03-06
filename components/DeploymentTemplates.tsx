@@ -8,7 +8,7 @@ export const DeploymentTemplates: React.FC = () => {
 
     const handleSave = () => {
         if (!newTemplateName.trim() || state.runner.devices.length === 0) {
-            dispatch({ type: 'ADD_LOG', payload: { timestamp: new Date(), message: 'Template name cannot be empty and must have devices to save.', level: 'ERROR' } });
+            dispatch({ type: 'ADD_LOG', payload: { id: crypto.randomUUID(), timestamp: new Date(), message: 'Template name cannot be empty and must have devices to save.', level: 'ERROR' } });
             return;
         }
         dispatch({ type: 'SAVE_TEMPLATE', payload: { name: newTemplateName, description: newTemplateDesc } });

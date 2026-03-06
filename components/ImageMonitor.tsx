@@ -77,6 +77,8 @@ export const ImageMonitor: React.FC<ImageMonitorProps> = ({ devices, history, ra
     const TabButton: React.FC<{tabName: 'rack' | 'trends' | 'settings', label: string, icon: React.ReactNode}> = ({ tabName, label, icon }) => (
       <button
         onClick={() => setActiveTab(tabName)}
+        role="tab"
+        aria-selected={activeTab === tabName}
         className={`flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-t-lg border-b-2 transition-colors duration-200 ${
           activeTab === tabName
             ? 'border-[#39FF14] text-[#39FF14]'

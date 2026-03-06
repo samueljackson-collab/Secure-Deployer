@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import type { Credentials } from '../types';
 import { CredentialsForm } from './CredentialsForm';
+import { useEscapeKey } from '../utils/hooks';
 
 interface SecureCredentialModalProps {
     isOpen: boolean;
@@ -11,6 +12,9 @@ interface SecureCredentialModalProps {
 
 export const SecureCredentialModal: React.FC<SecureCredentialModalProps> = ({ isOpen, onClose, onConfirm }) => {
     const [credentials, setCredentials] = useState<Credentials>({ username: '', password: '' });
+
+    // Close on Escape key for keyboard accessibility
+    useEscapeKey(onClose, isOpen);
 
     if (!isOpen) {
         return null;

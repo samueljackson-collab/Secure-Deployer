@@ -77,6 +77,8 @@ export interface DeploymentBatchSummary {
 }
 
 export interface LogEntry {
+  /** Stable unique ID (crypto.randomUUID) used as React list key to prevent diff glitches. */
+  id: string;
   timestamp: Date;
   message: string;
   level: 'INFO' | 'WARNING' | 'ERROR' | 'SUCCESS';
@@ -158,18 +160,23 @@ export interface RunnerSettings {
     maxRetries: number;
     retryDelay: number;         // seconds
     connectionTimeout: number;  // seconds
-    parallelScanCount: number;  // 1-10
+    parallelScanCount: number;  // 1-10 — stored but not yet wired to service (planned)
     // Reboot
     autoRebootEnabled: boolean;
     rebootDelay: number;        // seconds
-    maxRebootWait: number;      // seconds
+    maxRebootWait: number;      // seconds — stored but not yet wired to service (planned)
     // Wake-on-LAN
-    wolBroadcastAddress: string;
-    wolPort: number;
+    wolBroadcastAddress: string; // planned: used when live WoL packets are implemented
+    wolPort: number;             // planned: used when live WoL packets are implemented
     // Display
     compactView: boolean;
     showOfflineDevices: boolean;
     logLevelFilter: 'ALL' | 'INFO' | 'WARNING' | 'ERROR';
+    // Remote Connect — persisted so tab switches don't reset user's choices
+    rdpResolution: '1280x720' | '1600x900' | '1920x1080' | 'fullscreen';
+    rdpColorDepth: 16 | 32;
+    sshPort: number;
+    sshUsername: string;
 }
 
 export interface AppState {
