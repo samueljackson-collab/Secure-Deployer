@@ -50,11 +50,14 @@ export const Tooltip: React.FC<TooltipProps> = ({ content, children, position = 
 
 export const InfoIcon: React.FC<{ tooltip: string; position?: TooltipProps['position'] }> = ({ tooltip, position = 'top' }) => (
     <Tooltip content={tooltip} position={position}>
-        <span
+        <button
+            type="button"
             className="inline-flex items-center justify-center w-4 h-4 text-[10px] font-bold text-gray-500 hover:text-gray-300 cursor-help rounded-full border border-gray-600 hover:border-gray-400 transition-colors select-none"
             aria-label={`Info: ${tooltip}`}
         >
             i
-        </span>
+        </button>
+    </Tooltip>
+);
     </Tooltip>
 );
