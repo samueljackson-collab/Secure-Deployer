@@ -143,6 +143,16 @@ export interface ImagingDevice {
   complianceCheck?: ComplianceResult;
 }
 
+// --- Types for Deployment Templates ---
+
+export interface DeploymentTemplate {
+    id: string;
+    name: string;
+    description: string;
+    devices: Pick<Device, 'id' | 'hostname' | 'mac' | 'deviceType'>[];
+    createdAt: string;
+}
+
 // --- Types for AppContext ---
 
 export interface AppState {
@@ -174,6 +184,7 @@ export interface AppState {
         isRescanModalOpen: boolean;
         isRemoteCredentialModalOpen: boolean;
         remoteTargetDeviceId: number | null;
+        templates: DeploymentTemplate[];
     };
     credentials?: Credentials;
 }
@@ -223,7 +234,12 @@ export type AppAction =
   | { type: 'CLOSE_REMOTE_CREDENTIAL_MODAL' }
   | { type: 'RESCAN_ALL_DEVICES_PROMPT' }
   | { type: 'RESCAN_ALL_DEVICES_CONFIRMED' }
-  
+
+  // Template Actions
+  | { type: 'SAVE_TEMPLATE'; payload: { name: string; description: string } }
+  | { type: 'LOAD_TEMPLATE'; payload: string }
+  | { type: 'DELETE_TEMPLATE'; payload: string }
+
   // Monitor Actions
   | { type: 'SET_IMAGING_DEVICES'; payload: ImagingDevice[] }
   | { type: 'RENAME_IMAGING_DEVICE'; payload: { deviceId: string; newHostname: string } }

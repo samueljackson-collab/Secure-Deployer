@@ -1,6 +1,6 @@
 
 import React, { createContext, useReducer, useContext, useEffect, useCallback } from 'react';
-import type { AppState, AppAction, AppDispatch, Device, LogEntry, ImagingDevice, DeploymentOperationType, DeploymentBatchSummary } from '../src/types';
+import type { AppState, AppAction, AppDispatch, Device, LogEntry, ImagingDevice, DeploymentOperationType, DeploymentBatchSummary, DeploymentTemplate } from '../src/types';
 import * as api from '../services/deploymentService';
 import Papa from 'papaparse';
 
@@ -33,6 +33,7 @@ const initialState: AppState = {
         isRescanModalOpen: false,
         isRemoteCredentialModalOpen: false,
         remoteTargetDeviceId: null,
+        templates: [],
     },
 };
 
@@ -216,6 +217,42 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
             // This is handled in effectRunner, but we can close the modal here if we want.
             // Actually, it's better to close it in effectRunner after success.
             return state;
+
+        case 'SAVE_TEMPLATE': {
+            const newTemplate: DeploymentTemplate = {
+                id: `template-${Date.now()}`,
+                name: action.payload.name,
+                description: action.payload.description,
+                devices: state.runner.devices.map(d => ({ id: d.id, hostname: d.hostname, mac: d.mac, deviceType: d.deviceType })),
+                createdAt: new Date().toISOString(),
+            };
+            const existing = state.ui.templates.findIndex(t => t.name === action.payload.name);
+            const updated = existing >= 0
+                ? state.ui.templates.map((t, i) => i === existing ? newTemplate : t)
+                : [...state.ui.templates, newTemplate];
+            return { ...state, ui: { ...state.ui, templates: updated } };
+        }
+        case 'LOAD_TEMPLATE': {
+            const template = state.ui.templates.find(t => t.id === action.payload);
+            if (!template) return state;
+            const restoredDevices: Device[] = template.devices.map(d => ({
+                ...d,
+                status: 'Pending',
+                availableFiles: [],
+                installedPackages: [],
+                runningPrograms: [],
+            }));
+            return {
+                ...state,
+                runner: {
+                    ...state.runner,
+                    devices: restoredDevices,
+                    logs: [...state.runner.logs, { timestamp: new Date(), message: `Loaded template "${template.name}" with ${restoredDevices.length} device(s).`, level: 'INFO' }],
+                }
+            };
+        }
+        case 'DELETE_TEMPLATE':
+            return { ...state, ui: { ...state.ui, templates: state.ui.templates.filter(t => t.id !== action.payload) } };
 
         default:
             return state;

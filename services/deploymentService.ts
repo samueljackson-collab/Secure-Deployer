@@ -5,6 +5,7 @@ import { sleep, normalizeMacAddress, detectDeviceType } from '../utils/helpers';
 import type { Device, ImagingDevice, DeploymentRun, ChecklistItem, ComplianceResult } from '../types';
 import { TARGET_BIOS_VERSION, TARGET_DCU_VERSION, TARGET_WIN_VERSION } from '../App';
 import { ParseResult } from 'papaparse';
+import { generatePsCommand, simulatePsExecution } from './powershellScript';
 
 // --- HELPERS ---
 
@@ -232,18 +233,24 @@ export const updateDevice = async (
     onProgress(currentDeviceState);
 
     if (currentDeviceState.status === 'Update Complete (Reboot Pending)' && settings.autoRebootEnabled) {
-        await rebootDevice();
+        await rebootDevice(currentDeviceState);
         onProgress({ ...currentDeviceState, status: 'Success' });
     }
 };
 
-export const rebootDevice = async (): Promise<void> => {
-    await sleep(8000 + Math.random() * 4000);
+export const rebootDevice = async (device?: Device): Promise<void> => {
+    if (device) {
+        const cmd = generatePsCommand('reboot', device);
+        await simulatePsExecution(cmd);
+    } else {
+        await sleep(8000 + Math.random() * 4000);
+    }
 };
 
-export const executeScript = async (): Promise<boolean> => {
-    await sleep(5000 + Math.random() * 5000);
-    return Math.random() > 0.2;
+export const executeScript = async (device: Device): Promise<boolean> => {
+    const cmd = generatePsCommand('execute-script', device);
+    const result = await simulatePsExecution(cmd);
+    return result.exitCode === 0;
 };
 
 export const buildRemoteDesktopFile = (device: Device, credentials?: Credentials): string => {

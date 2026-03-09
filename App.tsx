@@ -19,6 +19,7 @@ import { AllComplianceDetailsModal } from './components/AllComplianceDetailsModa
 import { PassedComplianceDetailsModal } from './components/PassedComplianceDetailsModal';
 import { RescanConfirmationModal } from './components/RescanConfirmationModal';
 import { RemoteCredentialModal } from './components/RemoteCredentialModal';
+import { DeploymentTemplates } from './components/DeploymentTemplates';
 // FIX: Import DeviceFormFactor type
 import type { Credentials } from './types';
 import { AppProvider, useAppContext } from './contexts/AppContext';
@@ -128,6 +129,7 @@ const AppContent: React.FC = () => {
                                 </div>
                             </div>
                              <DeploymentHistory history={runner.history} />
+                             <DeploymentTemplates />
                         </div>
                         <div className="lg:col-span-2 flex flex-col gap-8">
                             <div className="bg-gray-950 p-6 rounded-lg shadow-lg border border-gray-800">
