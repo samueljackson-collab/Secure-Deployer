@@ -872,6 +872,7 @@ Helpful reviewer comments for preservation-driven docs work should:
 ## 👩‍💻 Developer Reference
 
 ### Tech Stack
+
 | Layer | Technology | Notes |
 |---|---|---|
 | Framework | React 19 + TypeScript | Strict mode enabled |
