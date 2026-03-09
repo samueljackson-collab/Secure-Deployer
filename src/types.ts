@@ -143,17 +143,19 @@ export interface ImagingDevice {
   complianceCheck?: ComplianceResult;
 }
 
-// --- Types for Deployment Templates ---
+// --- Types for AppContext ---
 
 export interface DeploymentTemplate {
-    id: string;
-    name: string;
-    description: string;
-    devices: Pick<Device, 'id' | 'hostname' | 'mac' | 'deviceType'>[];
-    createdAt: string;
+  id: string;
+  name: string;
+  description: string;
+  settings: {
+    maxRetries: number;
+    retryDelay: number;
+    autoRebootEnabled: boolean;
+  };
+  devices: Device[]; // Keep devices for backward compatibility with the existing component
 }
-
-// --- Types for AppContext ---
 
 export interface AppState {
     runner: {
@@ -174,7 +176,7 @@ export interface AppState {
         devices: ImagingDevice[];
     };
     ui: {
-        activeTab: 'monitor' | 'runner' | 'build' | 'script' | 'remote' | 'pxe';
+        activeTab: 'monitor' | 'runner' | 'build' | 'script' | 'remote' | 'pxe' | 'analytics' | 'video';
         csvFile: File | null;
         isCredentialModalOpen: boolean;
         isComplianceModalOpen: boolean;
@@ -191,7 +193,7 @@ export interface AppState {
 
 export type AppAction =
   // UI Actions
-  | { type: 'SET_ACTIVE_TAB'; payload: 'monitor' | 'runner' | 'build' | 'script' | 'remote' }
+  | { type: 'SET_ACTIVE_TAB'; payload: 'monitor' | 'runner' | 'build' | 'script' | 'remote' | 'pxe' | 'analytics' | 'video' }
   | { type: 'SET_CSV_FILE'; payload: File | null }
   | { type: 'SET_CREDENTIAL_MODAL_OPEN'; payload: boolean }
   | { type: 'SET_COMPLIANCE_MODAL_OPEN'; payload: boolean }
@@ -200,6 +202,9 @@ export type AppAction =
   | { type: 'SHOW_COMPLIANCE_DETAILS'; payload: ComplianceResult }
   | { type: 'ADD_LOG'; payload: LogEntry }
   | { type: 'SET_RESCAN_MODAL_OPEN', payload: boolean }
+  | { type: 'SAVE_TEMPLATE'; payload: { name: string; description: string } }
+  | { type: 'LOAD_TEMPLATE'; payload: string }
+  | { type: 'DELETE_TEMPLATE'; payload: string }
 
   // Runner Actions
   | { type: 'START_DEPLOYMENT_PROMPT' }
@@ -234,12 +239,7 @@ export type AppAction =
   | { type: 'CLOSE_REMOTE_CREDENTIAL_MODAL' }
   | { type: 'RESCAN_ALL_DEVICES_PROMPT' }
   | { type: 'RESCAN_ALL_DEVICES_CONFIRMED' }
-
-  // Template Actions
-  | { type: 'SAVE_TEMPLATE'; payload: { name: string; description: string } }
-  | { type: 'LOAD_TEMPLATE'; payload: string }
-  | { type: 'DELETE_TEMPLATE'; payload: string }
-
+  
   // Monitor Actions
   | { type: 'SET_IMAGING_DEVICES'; payload: ImagingDevice[] }
   | { type: 'RENAME_IMAGING_DEVICE'; payload: { deviceId: string; newHostname: string } }

@@ -7,8 +7,13 @@ export const PxeTaskSequence: React.FC = () => {
     const [networkShare, setNetworkShare] = useState<string>('\\\\server\\share\\AutoTag');
     const [scriptContent, setScriptContent] = useState<string>('');
     const [activeTab, setActiveTab] = useState<'bat' | 'ps1'>('bat');
-    // logs state removed as it was unused in the UI
     const [integrationMethod, setIntegrationMethod] = useState<'usb' | 'pxe'>('pxe');
+    
+    // Boot Image Management States
+    const [targetDeviceMac, setTargetDeviceMac] = useState('');
+    const [sccmStatus, setSccmStatus] = useState<'idle' | 'checking' | 'found' | 'not_found'>('idle');
+    const [availableImages, setAvailableImages] = useState<{id: string, name: string, version: string}[]>([]);
+    const [selectedImage, setSelectedImage] = useState<string>('');
     
     // Validation States
     const [isValidating, setIsValidating] = useState(false);
@@ -209,6 +214,27 @@ timeout /t 5
         navigator.clipboard.writeText(snippet);
     };
 
+    const checkSccmForDevice = () => {
+        if (!targetDeviceMac) return;
+        setSccmStatus('checking');
+        setAvailableImages([]);
+        setSelectedImage('');
+        
+        // Simulate SCCM API call
+        setTimeout(() => {
+            if (Math.random() > 0.2) {
+                setSccmStatus('found');
+                setAvailableImages([
+                    { id: 'img1', name: 'Windows 10 Enterprise 22H2', version: '10.0.19045.3086' },
+                    { id: 'img2', name: 'Windows 11 Enterprise 22H2', version: '10.0.22621.1848' },
+                    { id: 'img3', name: 'Windows 10 LTSC 2021', version: '10.0.19044.1288' }
+                ]);
+            } else {
+                setSccmStatus('not_found');
+            }
+        }, 1500);
+    };
+
     const validateNetworkPath = () => {
         setIsValidating(true);
         setValidationResults({ path: null, permissions: null, diskSpace: null, writeSpeed: null });
@@ -241,27 +267,65 @@ timeout /t 5
         setRemoteLogs([]);
         setRemoteProgress(0);
 
-        const steps = [
-            { msg: `Connecting to ${remoteIp}...`, delay: 1000 },
-            { msg: "Connection established. Verifying credentials...", delay: 1500 },
-            { msg: "Authenticated successfully.", delay: 500 },
-            { msg: "Copying AutoTag scripts to C:\\Temp\\AutoTag...", delay: 2000 },
-            { msg: "Starting AutoTag.bat execution...", delay: 1000 },
-            { msg: "[INFO] Starting AutoTag Sequence...", delay: 500 },
-            { msg: "[INFO] Checking network share access...", delay: 800 },
-            { msg: "[SUCCESS] Network share is accessible.", delay: 500 },
-            { msg: "[INFO] Gathering hardware information...", delay: 1200 },
-            { msg: "[INFO] Hardware info gathered successfully.", delay: 500 },
-            { msg: "[SUCCESS] Metadata saved to network share.", delay: 800 },
-            { msg: "[SUCCESS] AutoTag sequence completed successfully.", delay: 500 },
-            { msg: "Remote execution finished.", delay: 500 }
-        ];
+        const isSuccess = Math.random() > 0.4;
+        let steps: { msg: string; delay: number; isError?: boolean }[] = [];
+
+        if (isSuccess) {
+            steps = [
+                { msg: `Connecting to ${remoteIp}...`, delay: 1000 },
+                { msg: "Connection established. Verifying credentials...", delay: 1500 },
+                { msg: "Authenticated successfully.", delay: 500 },
+                { msg: "Copying AutoTag scripts to C:\\Temp\\AutoTag...", delay: 2000 },
+                { msg: "Starting AutoTag.bat execution...", delay: 1000 },
+                { msg: "[INFO] Starting AutoTag Sequence...", delay: 500 },
+                { msg: "[INFO] Checking network share access...", delay: 800 },
+                { msg: "[SUCCESS] Network share is accessible.", delay: 500 },
+                { msg: "[INFO] Gathering hardware information...", delay: 1200 },
+                { msg: "[INFO] Hardware info gathered successfully.", delay: 500 },
+                { msg: "[SUCCESS] Metadata saved to network share.", delay: 800 },
+                { msg: "[SUCCESS] AutoTag sequence completed successfully.", delay: 500 },
+                { msg: "Remote execution finished.", delay: 500 }
+            ];
+        } else {
+            const errors = [
+                {
+                    err: "Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))",
+                    ts: "Verify that the provided credentials have administrative privileges on the target device. Check if WinRM is configured to allow remote connections."
+                },
+                {
+                    err: "The term 'Get-WindowsUpdate' is not recognized as the name of a cmdlet, function, script file, or operable program.",
+                    ts: "Ensure the required PowerShell module (e.g., PSWindowsUpdate) is installed on the target device before running this script."
+                },
+                {
+                    err: "Connecting to remote server failed with the following error message : The WinRM client cannot process the request.",
+                    ts: "Check if the target device is online, on the same network, and has the WinRM service running. Verify firewall rules allow port 5985/5986."
+                },
+                {
+                    err: "Cannot find path '\\\\server\\share\\AutoTag' because it does not exist.",
+                    ts: "Verify that the network share path is correct and accessible from the target device. Check DNS resolution and network connectivity."
+                }
+            ];
+            const randomError = errors[Math.floor(Math.random() * errors.length)];
+            
+            steps = [
+                { msg: `Connecting to ${remoteIp}...`, delay: 1000 },
+                { msg: "Connection established. Verifying credentials...", delay: 1500 },
+                { msg: "Authenticated successfully.", delay: 500 },
+                { msg: "Copying AutoTag scripts to C:\\Temp\\AutoTag...", delay: 2000 },
+                { msg: "Starting AutoTag.bat execution...", delay: 1000 },
+                { msg: "[INFO] Starting AutoTag Sequence...", delay: 500 },
+                { msg: "[ERROR] Execution failed.", delay: 800, isError: true },
+                { msg: `[POWERSHELL ERROR] ${randomError.err}`, delay: 500, isError: true },
+                { msg: `[TROUBLESHOOTING] ${randomError.ts}`, delay: 500, isError: true },
+                { msg: "Remote execution aborted.", delay: 500, isError: true }
+            ];
+        }
 
         let currentStep = 0;
 
         const executeStep = () => {
             if (currentStep >= steps.length) {
-                setRemoteStatus('completed');
+                setRemoteStatus(isSuccess ? 'completed' : 'failed');
                 setRemoteProgress(100);
                 return;
             }
@@ -311,13 +375,13 @@ timeout /t 5
             <div className="mb-8">
                 <div className="flex items-center justify-between relative">
                     <div className="absolute left-0 top-1/2 transform -translate-y-1/2 w-full h-1 bg-gray-800 -z-10"></div>
-                    {[1, 2, 3].map((step) => (
+                    {[1, 2, 3, 4].map((step) => (
                         <div key={step} className={`flex flex-col items-center gap-2 bg-gray-900 px-4 ${currentStep >= step ? 'text-[#39FF14]' : 'text-gray-600'}`}>
                             <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold border-2 transition-colors ${currentStep >= step ? 'border-[#39FF14] bg-[#39FF14]/10' : 'border-gray-600 bg-gray-800'}`}>
                                 {step}
                             </div>
                             <span className="text-xs font-medium uppercase">
-                                {step === 1 ? 'Configuration' : step === 2 ? 'Integration' : 'Deployment'}
+                                {step === 1 ? 'Configuration' : step === 2 ? 'Boot Image' : step === 3 ? 'Integration' : 'Deployment'}
                             </span>
                         </div>
                     ))}
@@ -401,6 +465,86 @@ timeout /t 5
                                 className="bg-gray-800 rounded-lg p-6 border border-gray-700 shadow-lg"
                             >
                                 <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                                    <HardDrive className="w-5 h-5 text-yellow-400" />
+                                    Boot Image Management
+                                </h3>
+                                <p className="text-sm text-gray-400 mb-6">
+                                    Select the primary boot image (WIM file) to be used for PXE deployments. 
+                                    The device must be added to SCCM to retrieve available images.
+                                </p>
+                                
+                                <div className="space-y-6">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-400 mb-1">
+                                            Target Device MAC Address
+                                        </label>
+                                        <div className="flex gap-2">
+                                            <input 
+                                                type="text" 
+                                                value={targetDeviceMac}
+                                                onChange={(e) => setTargetDeviceMac(e.target.value)}
+                                                className="flex-grow bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white focus:ring-2 focus:ring-yellow-500 focus:outline-none"
+                                                placeholder="e.g., 00:1A:2B:3C:4D:5E"
+                                            />
+                                            <button 
+                                                onClick={checkSccmForDevice}
+                                                disabled={sccmStatus === 'checking' || !targetDeviceMac}
+                                                className="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-500 disabled:bg-gray-700 disabled:cursor-not-allowed flex items-center gap-2"
+                                            >
+                                                {sccmStatus === 'checking' ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Server className="w-4 h-4" />}
+                                                Check SCCM
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {sccmStatus === 'not_found' && (
+                                        <div className="bg-red-900/20 border border-red-500/50 p-4 rounded flex items-start gap-3">
+                                            <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5" />
+                                            <div>
+                                                <h4 className="text-red-400 font-medium text-sm">Device Not Found in SCCM</h4>
+                                                <p className="text-gray-400 text-xs mt-1">
+                                                    The device with MAC address {targetDeviceMac} could not be found in SCCM. 
+                                                    Please ensure the device is imported into SCCM before selecting a boot image.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {sccmStatus === 'found' && (
+                                        <div className="space-y-3">
+                                            <label className="block text-sm font-medium text-gray-400">
+                                                Available Boot Images
+                                            </label>
+                                            <div className="grid grid-cols-1 gap-3">
+                                                {availableImages.map(img => (
+                                                    <div 
+                                                        key={img.id}
+                                                        onClick={() => setSelectedImage(img.id)}
+                                                        className={`p-3 rounded border cursor-pointer transition-colors flex items-center justify-between ${selectedImage === img.id ? 'bg-yellow-500/10 border-yellow-500' : 'bg-gray-900 border-gray-700 hover:border-gray-500'}`}
+                                                    >
+                                                        <div>
+                                                            <div className="font-medium text-white">{img.name}</div>
+                                                            <div className="text-xs text-gray-400">Version: {img.version}</div>
+                                                        </div>
+                                                        {selectedImage === img.id && <CheckCircle className="w-5 h-5 text-yellow-500" />}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </motion.div>
+                        )}
+
+                        {currentStep === 3 && (
+                            <motion.div 
+                                key="step2"
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: 20 }}
+                                className="bg-gray-800 rounded-lg p-6 border border-gray-700 shadow-lg"
+                            >
+                                <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                                     <Usb className="w-5 h-5 text-purple-400" />
                                     Integration Method
                                 </h3>
@@ -450,7 +594,7 @@ timeout /t 5
                             </motion.div>
                         )}
 
-                        {currentStep === 3 && (
+                        {currentStep === 4 && (
                             <motion.div 
                                 key="step3"
                                 initial={{ opacity: 0, x: -20 }}
@@ -521,8 +665,8 @@ timeout /t 5
                             <ChevronLeft size={16} /> Back
                         </button>
                         <button 
-                            onClick={() => setCurrentStep(prev => Math.min(3, prev + 1))}
-                            disabled={currentStep === 3}
+                            onClick={() => setCurrentStep(prev => Math.min(4, prev + 1))}
+                            disabled={currentStep === 4}
                             className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                         >
                             Next <ChevronRight size={16} />
@@ -644,11 +788,21 @@ timeout /t 5
                                 {remoteLogs.length === 0 ? (
                                     <span className="text-gray-600 italic">Waiting for connection...</span>
                                 ) : (
-                                    remoteLogs.map((log, i) => (
-                                        <div key={i} className="text-gray-300 py-0.5">
-                                            {log}
-                                        </div>
-                                    ))
+                                    remoteLogs.map((log, i) => {
+                                        let textColor = "text-gray-300";
+                                        if (log.includes("[ERROR]") || log.includes("[POWERSHELL ERROR]")) {
+                                            textColor = "text-red-400 font-bold";
+                                        } else if (log.includes("[TROUBLESHOOTING]")) {
+                                            textColor = "text-yellow-400";
+                                        } else if (log.includes("[SUCCESS]")) {
+                                            textColor = "text-emerald-400 font-bold";
+                                        }
+                                        return (
+                                            <div key={i} className={`${textColor} py-0.5`}>
+                                                {log}
+                                            </div>
+                                        );
+                                    })
                                 )}
                                 <div ref={remoteLogEndRef} />
                             </div>

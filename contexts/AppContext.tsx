@@ -1,6 +1,6 @@
 
 import React, { createContext, useReducer, useContext, useEffect, useCallback } from 'react';
-import type { AppState, AppAction, AppDispatch, Device, LogEntry, ImagingDevice, DeploymentOperationType, DeploymentBatchSummary, DeploymentTemplate } from '../src/types';
+import type { AppState, AppAction, AppDispatch, Device, LogEntry, ImagingDevice, DeploymentOperationType, DeploymentBatchSummary } from '../src/types';
 import * as api from '../services/deploymentService';
 import Papa from 'papaparse';
 
@@ -49,6 +49,30 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
             return { ...state, runner: { ...state.runner, logs: [...state.runner.logs, action.payload] } };
         case 'SET_SETTINGS':
             return { ...state, runner: { ...state.runner, settings: { ...state.runner.settings, ...action.payload } } };
+        case 'SAVE_TEMPLATE': {
+            const newTemplate = {
+                id: Date.now().toString(),
+                name: action.payload.name,
+                description: action.payload.description,
+                settings: { ...state.runner.settings },
+                devices: [...state.runner.devices]
+            };
+            return { ...state, ui: { ...state.ui, templates: [...state.ui.templates, newTemplate] } };
+        }
+        case 'LOAD_TEMPLATE': {
+            const template = state.ui.templates.find(t => t.id === action.payload);
+            if (!template) return state;
+            return {
+                ...state,
+                runner: {
+                    ...state.runner,
+                    settings: { ...template.settings },
+                    devices: [...template.devices]
+                }
+            };
+        }
+        case 'DELETE_TEMPLATE':
+            return { ...state, ui: { ...state.ui, templates: state.ui.templates.filter(t => t.id !== action.payload) } };
         case 'START_DEPLOYMENT_PROMPT':
              if (!state.ui.csvFile && state.runner.devices.length === 0) {
                 return { ...state, runner: { ...state.runner, logs: [...state.runner.logs, { timestamp: new Date(), message: "Please select a device list or transfer devices from the monitor.", level: 'ERROR' }] } };
@@ -218,42 +242,6 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
             // Actually, it's better to close it in effectRunner after success.
             return state;
 
-        case 'SAVE_TEMPLATE': {
-            const newTemplate: DeploymentTemplate = {
-                id: `template-${Date.now()}`,
-                name: action.payload.name,
-                description: action.payload.description,
-                devices: state.runner.devices.map(d => ({ id: d.id, hostname: d.hostname, mac: d.mac, deviceType: d.deviceType })),
-                createdAt: new Date().toISOString(),
-            };
-            const existing = state.ui.templates.findIndex(t => t.name === action.payload.name);
-            const updated = existing >= 0
-                ? state.ui.templates.map((t, i) => i === existing ? newTemplate : t)
-                : [...state.ui.templates, newTemplate];
-            return { ...state, ui: { ...state.ui, templates: updated } };
-        }
-        case 'LOAD_TEMPLATE': {
-            const template = state.ui.templates.find(t => t.id === action.payload);
-            if (!template) return state;
-            const restoredDevices: Device[] = template.devices.map(d => ({
-                ...d,
-                status: 'Pending',
-                availableFiles: [],
-                installedPackages: [],
-                runningPrograms: [],
-            }));
-            return {
-                ...state,
-                runner: {
-                    ...state.runner,
-                    devices: restoredDevices,
-                    logs: [...state.runner.logs, { timestamp: new Date(), message: `Loaded template "${template.name}" with ${restoredDevices.length} device(s).`, level: 'INFO' }],
-                }
-            };
-        }
-        case 'DELETE_TEMPLATE':
-            return { ...state, ui: { ...state.ui, templates: state.ui.templates.filter(t => t.id !== action.payload) } };
-
         default:
             return state;
     }
@@ -380,10 +368,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 addLog(`Initiating execution for ${devicesToExecute.length} device(s)...`, 'INFO');
                 await Promise.all(devicesToExecute.map(async device => {
                     dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, status: 'Executing Script' } });
-                    const success = await api.executeScript(device);
+                    const result = await api.executeScript(device);
                     if (!state.runner.isCancelled) {
-                         dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, status: success ? 'Execution Complete' : 'Execution Failed' } });
-                         addLog(`Script execution ${success ? 'succeeded' : 'failed'} on ${device.hostname}.`, success ? 'SUCCESS' : 'ERROR');
+                         dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, status: result.success ? 'Execution Complete' : 'Execution Failed' } });
+                         if (result.success) {
+                             addLog(`Script execution succeeded on ${device.hostname}. Output: ${result.output}`, 'SUCCESS');
+                         } else {
+                             addLog(`Script execution failed on ${device.hostname}. Error: ${result.error} | Troubleshooting: ${result.troubleshooting}`, 'ERROR');
+                         }
                     }
                 }));
                  if (action.type === 'BULK_EXECUTE') dispatch({ type: 'CLEAR_SELECTIONS' });

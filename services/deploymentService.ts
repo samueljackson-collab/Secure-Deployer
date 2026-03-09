@@ -5,7 +5,6 @@ import { sleep, normalizeMacAddress, detectDeviceType } from '../utils/helpers';
 import type { Device, ImagingDevice, DeploymentRun, ChecklistItem, ComplianceResult } from '../types';
 import { TARGET_BIOS_VERSION, TARGET_DCU_VERSION, TARGET_WIN_VERSION } from '../App';
 import { ParseResult } from 'papaparse';
-import { generatePsCommand, simulatePsExecution } from './powershellScript';
 
 // --- HELPERS ---
 
@@ -233,24 +232,48 @@ export const updateDevice = async (
     onProgress(currentDeviceState);
 
     if (currentDeviceState.status === 'Update Complete (Reboot Pending)' && settings.autoRebootEnabled) {
-        await rebootDevice(currentDeviceState);
+        await rebootDevice();
         onProgress({ ...currentDeviceState, status: 'Success' });
     }
 };
 
-export const rebootDevice = async (device?: Device): Promise<void> => {
-    if (device) {
-        const cmd = generatePsCommand('reboot', device);
-        await simulatePsExecution(cmd);
-    } else {
-        await sleep(8000 + Math.random() * 4000);
-    }
+export const rebootDevice = async (): Promise<void> => {
+    await sleep(8000 + Math.random() * 4000);
 };
 
-export const executeScript = async (device: Device): Promise<boolean> => {
-    const cmd = generatePsCommand('execute-script', device);
-    const result = await simulatePsExecution(cmd);
-    return result.exitCode === 0;
+export const executeScript = async (device?: Device): Promise<{ success: boolean; output: string; error?: string; troubleshooting?: string }> => {
+    await sleep(3000 + Math.random() * 4000);
+    const isSuccess = Math.random() > 0.3;
+    
+    if (isSuccess) {
+        return {
+            success: true,
+            output: `[INFO] Connecting to ${device?.hostname || 'target'}...\n[INFO] Authenticated successfully.\n[INFO] Executing script...\n[SUCCESS] Script completed with exit code 0.`
+        };
+    } else {
+        const errors = [
+            {
+                err: "Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))",
+                ts: "Verify that the provided credentials have administrative privileges on the target device. Check if WinRM is configured to allow remote connections."
+            },
+            {
+                err: "The term 'Get-WindowsUpdate' is not recognized as the name of a cmdlet, function, script file, or operable program.",
+                ts: "Ensure the required PowerShell module (e.g., PSWindowsUpdate) is installed on the target device before running this script."
+            },
+            {
+                err: "Connecting to remote server failed with the following error message : The WinRM client cannot process the request.",
+                ts: "Check if the target device is online, on the same network, and has the WinRM service running. Verify firewall rules allow port 5985/5986."
+            }
+        ];
+        const randomError = errors[Math.floor(Math.random() * errors.length)];
+        
+        return {
+            success: false,
+            output: `[INFO] Connecting to ${device?.hostname || 'target'}...\n[ERROR] Execution failed.`,
+            error: randomError.err,
+            troubleshooting: randomError.ts
+        };
+    }
 };
 
 export const buildRemoteDesktopFile = (device: Device, credentials?: Credentials): string => {
