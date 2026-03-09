@@ -236,7 +236,7 @@ const DeviceCard: React.FC<{
             <div className="mt-2">
                 <div className="w-full bg-gray-700 rounded-full h-2.5">
                     <div className={`relative ${bg} h-2.5 rounded-full transition-all duration-500 ease-linear`} style={{ width: `${currentProgress}%` }}>
-                        <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-black mix-blend-difference">{device.progress}%</span>
+                        <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-black mix-blend-difference">{Math.round(currentProgress)}%</span>
                     </div>
                 </div>
             </div>
