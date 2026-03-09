@@ -423,7 +423,7 @@ export const RemoteConnect: React.FC<RemoteConnectProps> = ({ devices }) => {
                                             <input
                                                 type="text"
                                                 value={sshUsername}
-                                                onChange={e => dispatch({ type: 'SET_SETTINGS', payload: { sshUsernamename: e.target.value } })}
+                                                onChange={e => dispatch({ type: 'SET_SETTINGS', payload: { sshUsername: e.target.value } })}
                                                 className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-200 w-28 focus:outline-none focus:border-[#39FF14] font-mono"
                                             />
                                         </div>
