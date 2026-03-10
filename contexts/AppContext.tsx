@@ -33,7 +33,6 @@ const initialState: AppState = {
         isRescanModalOpen: false,
         isRemoteCredentialModalOpen: false,
         remoteTargetDeviceId: null,
-        templates: [],
     },
 };
 
@@ -49,30 +48,6 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
             return { ...state, runner: { ...state.runner, logs: [...state.runner.logs, action.payload] } };
         case 'SET_SETTINGS':
             return { ...state, runner: { ...state.runner, settings: { ...state.runner.settings, ...action.payload } } };
-        case 'SAVE_TEMPLATE': {
-            const newTemplate = {
-                id: Date.now().toString(),
-                name: action.payload.name,
-                description: action.payload.description,
-                settings: { ...state.runner.settings },
-                devices: [...state.runner.devices]
-            };
-            return { ...state, ui: { ...state.ui, templates: [...state.ui.templates, newTemplate] } };
-        }
-        case 'LOAD_TEMPLATE': {
-            const template = state.ui.templates.find(t => t.id === action.payload);
-            if (!template) return state;
-            return {
-                ...state,
-                runner: {
-                    ...state.runner,
-                    settings: { ...template.settings },
-                    devices: [...template.devices]
-                }
-            };
-        }
-        case 'DELETE_TEMPLATE':
-            return { ...state, ui: { ...state.ui, templates: state.ui.templates.filter(t => t.id !== action.payload) } };
         case 'START_DEPLOYMENT_PROMPT':
              if (!state.ui.csvFile && state.runner.devices.length === 0) {
                 return { ...state, runner: { ...state.runner, logs: [...state.runner.logs, { timestamp: new Date(), message: "Please select a device list or transfer devices from the monitor.", level: 'ERROR' }] } };
@@ -219,6 +194,12 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
                     }))
                 }
             };
+        case 'SAVE_TEMPLATE':
+            return { ...state, runner: { ...state.runner, templates: [...(state.runner.templates || []), action.payload] } };
+        case 'DELETE_TEMPLATE':
+            return { ...state, runner: { ...state.runner, templates: (state.runner.templates || []).filter(t => t.id !== action.payload) } };
+        case 'APPLY_TEMPLATE':
+            return { ...state, runner: { ...state.runner, settings: action.payload.settings } };
         case 'PROMPT_REMOTE_CREDENTIALS':
             return {
                 ...state,
@@ -368,14 +349,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 addLog(`Initiating execution for ${devicesToExecute.length} device(s)...`, 'INFO');
                 await Promise.all(devicesToExecute.map(async device => {
                     dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, status: 'Executing Script' } });
-                    const result = await api.executeScript(device);
+                    const success = await api.executeScript(device);
                     if (!state.runner.isCancelled) {
-                         dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, status: result.success ? 'Execution Complete' : 'Execution Failed' } });
-                         if (result.success) {
-                             addLog(`Script execution succeeded on ${device.hostname}. Output: ${result.output}`, 'SUCCESS');
-                         } else {
-                             addLog(`Script execution failed on ${device.hostname}. Error: ${result.error} | Troubleshooting: ${result.troubleshooting}`, 'ERROR');
-                         }
+                         dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, status: success ? 'Execution Complete' : 'Execution Failed' } });
+                         addLog(`Script execution ${success ? 'succeeded' : 'failed'} on ${device.hostname}.`, success ? 'SUCCESS' : 'ERROR');
                     }
                 }));
                  if (action.type === 'BULK_EXECUTE') dispatch({ type: 'CLEAR_SELECTIONS' });

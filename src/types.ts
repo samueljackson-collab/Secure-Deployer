@@ -68,6 +68,19 @@ export type DeploymentStatus =
 
 export type DeploymentOperationType = 'run' | 'install' | 'delete';
 
+export interface DeploymentTemplate {
+  id: string;
+  name: string;
+  description: string;
+  settings: {
+    maxRetries: number;
+    retryDelay: number;
+    autoRebootEnabled: boolean;
+  };
+  packages: string[];
+  scriptContent?: string;
+}
+
 export interface DeploymentBatchSummary {
   id: number;
   operation: DeploymentOperationType;
@@ -145,18 +158,6 @@ export interface ImagingDevice {
 
 // --- Types for AppContext ---
 
-export interface DeploymentTemplate {
-  id: string;
-  name: string;
-  description: string;
-  settings: {
-    maxRetries: number;
-    retryDelay: number;
-    autoRebootEnabled: boolean;
-  };
-  devices: Device[]; // Keep devices for backward compatibility with the existing component
-}
-
 export interface AppState {
     runner: {
         devices: Device[];
@@ -171,12 +172,13 @@ export interface AppState {
         };
         isCancelled: boolean;
         batchHistory: DeploymentBatchSummary[];
+        templates: DeploymentTemplate[];
     };
     monitor: {
         devices: ImagingDevice[];
     };
     ui: {
-        activeTab: 'monitor' | 'runner' | 'build' | 'script' | 'remote' | 'pxe' | 'analytics' | 'video';
+        activeTab: 'monitor' | 'runner' | 'build' | 'script' | 'remote' | 'pxe' | 'analytics' | 'templates';
         csvFile: File | null;
         isCredentialModalOpen: boolean;
         isComplianceModalOpen: boolean;
@@ -186,14 +188,13 @@ export interface AppState {
         isRescanModalOpen: boolean;
         isRemoteCredentialModalOpen: boolean;
         remoteTargetDeviceId: number | null;
-        templates: DeploymentTemplate[];
     };
     credentials?: Credentials;
 }
 
 export type AppAction =
   // UI Actions
-  | { type: 'SET_ACTIVE_TAB'; payload: 'monitor' | 'runner' | 'build' | 'script' | 'remote' | 'pxe' | 'analytics' | 'video' }
+  | { type: 'SET_ACTIVE_TAB'; payload: 'monitor' | 'runner' | 'build' | 'script' | 'remote' | 'pxe' | 'analytics' | 'templates' }
   | { type: 'SET_CSV_FILE'; payload: File | null }
   | { type: 'SET_CREDENTIAL_MODAL_OPEN'; payload: boolean }
   | { type: 'SET_COMPLIANCE_MODAL_OPEN'; payload: boolean }
@@ -202,9 +203,6 @@ export type AppAction =
   | { type: 'SHOW_COMPLIANCE_DETAILS'; payload: ComplianceResult }
   | { type: 'ADD_LOG'; payload: LogEntry }
   | { type: 'SET_RESCAN_MODAL_OPEN', payload: boolean }
-  | { type: 'SAVE_TEMPLATE'; payload: { name: string; description: string } }
-  | { type: 'LOAD_TEMPLATE'; payload: string }
-  | { type: 'DELETE_TEMPLATE'; payload: string }
 
   // Runner Actions
   | { type: 'START_DEPLOYMENT_PROMPT' }
@@ -239,6 +237,9 @@ export type AppAction =
   | { type: 'CLOSE_REMOTE_CREDENTIAL_MODAL' }
   | { type: 'RESCAN_ALL_DEVICES_PROMPT' }
   | { type: 'RESCAN_ALL_DEVICES_CONFIRMED' }
+  | { type: 'SAVE_TEMPLATE'; payload: DeploymentTemplate }
+  | { type: 'DELETE_TEMPLATE'; payload: string }
+  | { type: 'APPLY_TEMPLATE'; payload: DeploymentTemplate }
   
   // Monitor Actions
   | { type: 'SET_IMAGING_DEVICES'; payload: ImagingDevice[] }
