@@ -1,0 +1,115 @@
+name: Tauri Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag (e.g. v1.0.0)'
+        required: false
+        default: 'v1.0.0-dev'
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'windows-latest'
+            args: ''
+            artifact-name: 'windows-installer'
+            artifact-path: 'src-tauri/target/release/bundle/msi/*.msi'
+
+          - platform: 'macos-latest'
+            args: '--target aarch64-apple-darwin'
+            artifact-name: 'macos-dmg-arm'
+            artifact-path: 'src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg'
+
+          - platform: 'macos-latest'
+            args: '--target x86_64-apple-darwin'
+            artifact-name: 'macos-dmg-intel'
+            artifact-path: 'src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg'
+
+          - platform: 'ubuntu-22.04'
+            args: ''
+            artifact-name: 'linux-appimage'
+            artifact-path: 'src-tauri/target/release/bundle/appimage/*.AppImage'
+
+    runs-on: ${{ matrix.platform }}
+    name: Build (${{ matrix.platform }})
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux system dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libgtk-3-dev
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Cache Rust build artifacts
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        - name: Build Tauri app
+          uses: tauri-apps/tauri-action@v0
+          env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          with:
+            tagName: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+            releaseName: 'Secure Deployment Runner ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}'
+          releaseBody: |
+            ## Secure Deployment Runner ${{ github.ref_name }}
+
+            ### Downloads
+            - **Windows**: `.msi` installer (double-click to install)
+            - **macOS**: `.dmg` disk image
+            - **Linux**: `.AppImage` (mark as executable, then run)
+
+            ### What''s New
+            See [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
+
+            ### USB Portable (No Install Required)
+            Download the PWA build artifact from the CI run and follow `scripts/serve-usb.bat` instructions.
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
+
+      - name: Upload installer artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: ${{ matrix.artifact-path }}
+          retention-days: 30
+          if-no-files-found: warn
