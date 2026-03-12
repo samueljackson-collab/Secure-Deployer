@@ -27,6 +27,11 @@ jobs:
             artifact-name: 'macos-dmg-arm'
             artifact-path: 'src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg'
 
+          - platform: 'macos-latest'
+            args: '--target x86_64-apple-darwin'
+            artifact-name: 'macos-dmg-intel'
+            artifact-path: 'src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg'
+
           - platform: 'ubuntu-22.04'
             args: ''
             artifact-name: 'linux-appimage'
