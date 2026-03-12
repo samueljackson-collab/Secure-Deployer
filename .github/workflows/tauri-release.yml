@@ -102,7 +102,7 @@ jobs:
           args: ${{ matrix.args }}
 
       - name: Upload installer artifact
-        if: always()
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact-name }}
