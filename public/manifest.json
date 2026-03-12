@@ -1,0 +1,25 @@
+{
+  "name": "Secure Deployment Runner",
+  "short_name": "SecureDeploy",
+  "description": "IT endpoint imaging and compliance deployment dashboard for Windows environments",
+  "theme_color": "#000000",
+  "background_color": "#000000",
+  "display": "standalone",
+  "orientation": "landscape",
+  "start_url": ".",
+  "scope": ".",
+  "categories": ["productivity", "utilities"],
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
