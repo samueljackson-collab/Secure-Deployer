@@ -1,6 +1,6 @@
 
 import React, { createContext, useReducer, useContext, useEffect, useCallback } from 'react';
-import type { AppState, AppAction, AppDispatch, Device, LogEntry, ImagingDevice, DeploymentOperationType, DeploymentBatchSummary, DeploymentTemplate } from '../src/types';
+import type { AppState, AppAction, AppDispatch, Device, LogEntry, ImagingDevice, DeploymentOperationType, DeploymentBatchSummary, DeploymentTemplate } from '../types';
 import * as api from '../services/deploymentService';
 import Papa from 'papaparse';
 

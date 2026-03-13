@@ -1,5 +1,5 @@
 
-import type { Device } from '../src/types';
+import type { Device } from '../types';
 import { sleep } from '../utils/helpers';
 
 // --- PowerShell Command Generation ---
