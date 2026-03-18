@@ -21,6 +21,7 @@ import { AllComplianceDetailsModal } from './components/AllComplianceDetailsModa
 import { PassedComplianceDetailsModal } from './components/PassedComplianceDetailsModal';
 import { RescanConfirmationModal } from './components/RescanConfirmationModal';
 import { RemoteCredentialModal } from './components/RemoteCredentialModal';
+import { SystemInfoModal } from './components/SystemInfoModal';
 import type { Credentials } from './types';
 import { AppProvider, useAppContext } from './contexts/AppContext';
 
@@ -219,6 +220,7 @@ const AppContent: React.FC = () => {
                 onConfirm={(credentials: Credentials) => dispatch({ type: 'REMOTE_IN_WITH_CREDENTIALS', payload: credentials })}
                 deviceHostname={runner.devices.find(d => d.id === ui.remoteTargetDeviceId)?.hostname || ''}
             />
+            {ui.isSystemInfoModalOpen && <SystemInfoModal />}
         </div>
     );
 };
