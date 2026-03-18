@@ -69,14 +69,16 @@ pub async fn execute_powershell_remote(
     usb_path: String,
     network_share: String,
 ) -> Result<String, String> {
-    // Build the PowerShell WinRM remote execution script
+    // Build the PowerShell WinRM remote execution script.
+    // Credentials are passed via environment variables (PS_USER / PS_PASS) so they
+    // never appear in the script body, command-line arguments, or process listings.
     let script = format!(
         r#"
 $ErrorActionPreference = 'Stop'
 try {{
     Write-Output "[INFO] Setting up credentials for {target_ip}..."
-    $SecPass = ConvertTo-SecureString '{password}' -AsPlainText -Force
-    $Cred = New-Object System.Management.Automation.PSCredential('{username}', $SecPass)
+    $SecPass = ConvertTo-SecureString $env:PS_PASS -AsPlainText -Force
+    $Cred = New-Object System.Management.Automation.PSCredential($env:PS_USER, $SecPass)
 
     Write-Output "[INFO] Establishing PSSession to {target_ip}..."
     $Session = New-PSSession -ComputerName '{target_ip}' -Credential $Cred -ErrorAction Stop
@@ -101,14 +103,14 @@ try {{
 }}
 "#,
         target_ip = target_ip,
-        username = username,
-        password = password,
         usb_path = usb_path,
         network_share = network_share,
     );
 
     let output = Command::new("powershell")
         .args(["-NonInteractive", "-NoProfile", "-Command", &script])
+        .env("PS_USER", &username)
+        .env("PS_PASS", &password)
         .output()
         .map_err(|e| format!("Failed to launch PowerShell: {}", e))?;
 
