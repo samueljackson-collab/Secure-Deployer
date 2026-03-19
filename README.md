@@ -36,11 +36,11 @@ execution, and complete run evidence for operations and leadership review.
 
 | Area | Status | Notes | Next Milestone |
 |---|---|---|---|
-| Core deployment actions | 🟠 In Progress | Validate/update/script/reboot/cancel/remove workflows run via mock service layer. | Remove duplicate reducer action cases and unify transitions. |
+| Core deployment actions | 🟢 Done | Validate/update/script/reboot/cancel/remove workflows run via mock service layer. | Add regression tests around transfer and remediation edge cases. |
 | Imaging intake + transfer | 🟢 Done | Image Monitor transfer (selected/all), rename/remove, and filtering are available. | Add regression tests around transfer edge cases. |
 | CSV onboarding | 🟢 Done | Hostname/MAC normalization with explicit row-level error handling is present. | Add malformed-header and parser-fixture tests. |
-| Quality gates | 🟠 In Progress | Build passes; lint currently fails due to pre-existing unused-variable issues. | Reach clean lint baseline and add automated tests. |
-| CI/CD + observability automation | 🔵 Planned | No committed GitHub workflow yet. | Add CI for lint/build and artifact publishing. |
+| Quality gates | 🟢 Done | Build passes; lint passes with 0 errors and 0 warnings. | Add automated unit/integration tests (Sprint +2). |
+| CI/CD + observability automation | 🟢 Done | GitHub Actions CI workflow runs lint + typecheck + build + artifact upload on every push and PR. | Add observability signals (error rate dashboards, alerting). |
 | Production API/auth integration | 🔵 Planned | Runtime behavior is intentionally simulated. | Introduce API adapter + environment-driven service selection. |
 | PXE / zero-touch imaging | 🔵 Planned | PowerShell script exists; full zero-touch requires WDS/MDT config. | See `docs/AUTOMATION.md` for tiers. |
 | End-to-end process documentation | 🟢 Done | `docs/PROCESS.md` covers full add→image→finish→remove SOP. | Keep in sync with service changes. |
@@ -321,16 +321,14 @@ short of automated unit/integration/e2e coverage.
 |---|---|---|---|
 | Unit | Not yet implemented | n/a | Planned — Sprint +2 |
 | Integration | Not yet implemented | n/a | Planned — Sprint +2 |
-| Static lint | `npm run lint` | **Fail** — known unused-variable issues | `package.json` + terminal output |
-| Build | `npm run build` | **Pass** (warnings: duplicate reducer cases, large chunk) | `package.json` + terminal output |
+| Static lint | `npm run lint` | **Pass** — 0 errors, 0 warnings | `package.json` + `.github/workflows/ci.yml` |
+| Build | `npm run build` | **Pass** | `package.json` + `.github/workflows/ci.yml` |
 | E2E / Manual | Operator walkthrough | In use for mock workflow validation | `App.tsx`, `components/`, `contexts/AppContext.tsx` |
 
 ### Known Quality Gaps
 
-- No automated unit, integration, or e2e test harness is committed.
-- Lint baseline is red (unused variables in several component files).
-- Build warnings flag duplicate reducer `case` labels in `AppContext.tsx` and a large JS chunk size.
-- No CI pipeline (GitHub Actions workflow) is committed.
+- No automated unit, integration, or e2e test harness is committed (planned Sprint +2).
+- Lint and build pass cleanly; CI runs on every push and pull request via `.github/workflows/ci.yml`.
 
 ---
 
@@ -395,8 +393,9 @@ flowchart LR
 
 | Milestone | Status | Target | Owner | Dependency / Blocker |
 |---|---|---|---|---|
-| Restore green lint baseline | 🟠 In Progress | Next sprint | Frontend maintainer | Existing unused-variable issues |
-| Add CI workflow (`lint` + `build`) | 🔵 Planned | Next sprint | Frontend maintainer | `.github/workflows` not yet initialized |
+| Restore green lint baseline | 🟢 Done | Completed | Frontend maintainer | — |
+| Add CI workflow (`lint` + `build`) | 🟢 Done | Completed | Frontend maintainer | — |
+| Create supplementary docs (PROCESS, CAPACITY, AUTOMATION) | 🟢 Done | Completed | Frontend maintainer | — |
 | Add test foundation (unit + reducer tests) | 🔵 Planned | Sprint +2 | Frontend maintainer | Test harness setup |
 | Backend adapter POC | 🔵 Planned | Sprint +3 | Platform engineer | API contract finalization |
 | Parallelise scan loop for large cohorts | 🔵 Planned | Sprint +3 | Platform engineer | Service layer refactor; see `docs/CAPACITY.md` |
