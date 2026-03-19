@@ -10,7 +10,7 @@ These limits are enforced directly in the application code and should be underst
 
 | Resource | Limit | Source | Notes |
 |---|---|---|---|
-| Run history retained | 10 runs | `services/deploymentService.ts` — `generateRunArchive()` | Oldest run is dropped when the 11th is appended. Export CSVs before archiving. |
+| Run history retained | 10 runs | `contexts/AppContext.tsx` — history state management | Oldest run is dropped when the 11th is appended. Export CSVs before archiving. |
 | Image Monitor rack slots | 16 slots | `components/ImageRack.tsx` — rack grid layout | Devices beyond slot 16 are not displayed in the rack view. |
 | CSV import row limit | Unlimited (parser) | `services/deploymentService.ts` — `parseDevicesFromCsv()` | No hard row cap, but performance degrades beyond ~200 devices in the browser. |
 | Max retries per device | Configurable (default: 3) | `state.runner.settings.maxRetries` | Configurable via Advanced Settings without code changes. |
