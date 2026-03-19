@@ -18,6 +18,7 @@ const initialState: AppState = {
         },
         isCancelled: false,
         batchHistory: [],
+        templates: [],
     },
     monitor: {
         devices: [],
@@ -33,6 +34,7 @@ const initialState: AppState = {
         isRescanModalOpen: false,
         isRemoteCredentialModalOpen: false,
         remoteTargetDeviceId: null,
+        isSystemInfoModalOpen: false,
     },
 };
 
@@ -162,6 +164,8 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
             return { ...state, ui: { ...state.ui, isPassedComplianceModalOpen: action.payload } };
         case 'SET_RESCAN_MODAL_OPEN':
             return { ...state, ui: { ...state.ui, isRescanModalOpen: action.payload } };
+        case 'SET_SYSTEM_INFO_MODAL_OPEN':
+            return { ...state, ui: { ...state.ui, isSystemInfoModalOpen: action.payload } };
         case 'RESCAN_ALL_DEVICES_PROMPT':
             if (state.runner.devices.length === 0) {
                  return { ...state, runner: { ...state.runner, logs: [...state.runner.logs, { timestamp: new Date(), message: "No devices to re-scan.", level: 'WARNING' }] } };
@@ -424,7 +428,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
              case 'BULK_CANCEL': {
                 addLog(`Cancelling tasks for ${runner.selectedDeviceIds.size} devices...`, 'WARNING');
                 const cancellable: (Device['status'])[] = ['Connecting', 'Retrying...', 'Updating', 'Waking Up', 'Checking Info', 'Checking BIOS', 'Checking DCU', 'Checking Windows', 'Updating BIOS', 'Updating DCU', 'Updating Windows', 'Executing Script'];
-                const newDevices = runner.devices.map(d => runner.selectedDeviceIds.has(d.id) && cancellable.includes(d.status) ? { ...d, status: 'Cancelled' } : d);
+                const newDevices = runner.devices.map(d => runner.selectedDeviceIds.has(d.id) && cancellable.includes(d.status) ? { ...d, status: 'Cancelled' as const } : d);
                 dispatch({ type: 'SET_DEVICES', payload: newDevices });
                 dispatch({ type: 'CLEAR_SELECTIONS' });
                 break;
@@ -432,7 +436,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
             case 'WAKE_ON_LAN': {
                 if (action.payload.size === 0) break;
-                const newDevices = runner.devices.map(d => action.payload.has(d.id) ? { ...d, status: 'Waking Up' } : d);
+                const newDevices = runner.devices.map(d => action.payload.has(d.id) ? { ...d, status: 'Waking Up' as const } : d);
                 dispatch({ type: 'SET_DEVICES', payload: newDevices });
                 addLog(`Sent Wake-on-LAN to ${action.payload.size} device(s).`, 'INFO');
                 dispatch({ type: 'CLEAR_SELECTIONS' });

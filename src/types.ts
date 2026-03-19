@@ -188,6 +188,7 @@ export interface AppState {
         isRescanModalOpen: boolean;
         isRemoteCredentialModalOpen: boolean;
         remoteTargetDeviceId: number | null;
+        isSystemInfoModalOpen: boolean;
     };
     credentials?: Credentials;
 }
@@ -203,6 +204,7 @@ export type AppAction =
   | { type: 'SHOW_COMPLIANCE_DETAILS'; payload: ComplianceResult }
   | { type: 'ADD_LOG'; payload: LogEntry }
   | { type: 'SET_RESCAN_MODAL_OPEN', payload: boolean }
+  | { type: 'SET_SYSTEM_INFO_MODAL_OPEN'; payload: boolean }
 
   // Runner Actions
   | { type: 'START_DEPLOYMENT_PROMPT' }
@@ -233,6 +235,7 @@ export type AppAction =
   | { type: 'BULK_REMOVE' }
   | { type: 'BULK_DEPLOY_OPERATION'; payload: { operation: DeploymentOperationType; file: File } }
   | { type: 'PROMPT_REMOTE_CREDENTIALS'; payload: number }
+  | { type: 'REMOTE_IN_DEVICE'; payload: number }
   | { type: 'REMOTE_IN_WITH_CREDENTIALS'; payload: Credentials }
   | { type: 'CLOSE_REMOTE_CREDENTIAL_MODAL' }
   | { type: 'RESCAN_ALL_DEVICES_PROMPT' }
