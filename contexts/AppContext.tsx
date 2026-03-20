@@ -94,7 +94,7 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
                     ...state.runner,
                     isCancelled: true,
                     deploymentState: 'idle',
-                    devices: state.runner.devices.map(d => cancellableStatuses.includes(d.status) ? { ...d, status: 'Cancelled' } : d)
+                    devices: state.runner.devices.map(d => cancellableStatuses.includes(d.status) ? { ...d, status: 'Cancelled' as const } : d)
                 }
             };
         case 'ARCHIVE_RUN':
@@ -183,7 +183,7 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
                     logs: [...state.runner.logs, { timestamp: new Date(), message: "Initiating re-scan for all devices...", level: 'INFO' }],
                     devices: state.runner.devices.map(d => ({
                         ...d,
-                        status: 'Pending Validation',
+                        status: 'Pending Validation' as const,
                         biosVersion: undefined,
                         dcuVersion: undefined,
                         winVersion: undefined,

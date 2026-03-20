@@ -58,6 +58,28 @@ pub fn detect_usb_drives() -> Vec<String> {
     }
 }
 
+/// Validate an IP address or hostname: only allow alphanumeric, dots, hyphens, and brackets for IPv6.
+fn validate_host(host: &str) -> Result<(), String> {
+    if host.is_empty() || host.len() > 253 {
+        return Err("Invalid host: must be 1–253 characters".to_string());
+    }
+    if !host.chars().all(|c| c.is_alphanumeric() || c == '.' || c == '-' || c == '[' || c == ']' || c == ':') {
+        return Err("Invalid host: contains disallowed characters".to_string());
+    }
+    Ok(())
+}
+
+/// Validate a MAC address: only allow hex digits, colons, and hyphens.
+fn validate_mac(mac: &str) -> Result<(), String> {
+    if mac.is_empty() || mac.len() > 17 {
+        return Err("Invalid MAC address format".to_string());
+    }
+    if !mac.chars().all(|c| c.is_ascii_hexdigit() || c == ':' || c == '-') {
+        return Err("Invalid MAC address: contains disallowed characters".to_string());
+    }
+    Ok(())
+}
+
 /// Execute AutoTag on a remote device via PowerShell WinRM.
 /// Copies the AutoTag scripts from the USB path, then runs them on the target.
 /// Returns the combined stdout output.
@@ -69,46 +91,51 @@ pub async fn execute_powershell_remote(
     usb_path: String,
     network_share: String,
 ) -> Result<String, String> {
-    // Build the PowerShell WinRM remote execution script
-    let script = format!(
-        r#"
+    validate_host(&target_ip)?;
+
+    // All variable user inputs are passed via environment variables so they
+    // never appear in the script body, command-line arguments, or process listings.
+    let script = r#"
 $ErrorActionPreference = 'Stop'
-try {{
-    Write-Output "[INFO] Setting up credentials for {target_ip}..."
-    $SecPass = ConvertTo-SecureString '{password}' -AsPlainText -Force
-    $Cred = New-Object System.Management.Automation.PSCredential('{username}', $SecPass)
+try {
+    $TargetIp    = $env:PS_TARGET_IP
+    $UsbPath     = $env:PS_USB_PATH
+    $NetworkShare = $env:PS_NETWORK_SHARE
 
-    Write-Output "[INFO] Establishing PSSession to {target_ip}..."
-    $Session = New-PSSession -ComputerName '{target_ip}' -Credential $Cred -ErrorAction Stop
+    Write-Output "[INFO] Setting up credentials for $TargetIp..."
+    $SecPass = ConvertTo-SecureString $env:PS_PASS -AsPlainText -Force
+    $Cred = New-Object System.Management.Automation.PSCredential($env:PS_USER, $SecPass)
 
-    Write-Output "[INFO] Copying AutoTag scripts from USB ({usb_path}) to remote device..."
+    Write-Output "[INFO] Establishing PSSession to $TargetIp..."
+    $Session = New-PSSession -ComputerName $TargetIp -Credential $Cred -ErrorAction Stop
+
+    Write-Output "[INFO] Copying AutoTag scripts from USB ($UsbPath) to remote device..."
     New-Item -ItemType Directory -Path 'C:\Temp\AutoTag' -Force | Out-Null
-    Copy-Item -Path '{usb_path}AutoTag\*' -Destination 'C:\Temp\AutoTag\' -ToSession $Session -Recurse -Force
+    Copy-Item -Path "${UsbPath}AutoTag\*" -Destination 'C:\Temp\AutoTag\' -ToSession $Session -Recurse -Force
 
-    Write-Output "[INFO] Executing AutoTag.ps1 on {target_ip}..."
-    $result = Invoke-Command -Session $Session -ScriptBlock {{
+    Write-Output "[INFO] Executing AutoTag.ps1 on $TargetIp..."
+    $result = Invoke-Command -Session $Session -ScriptBlock {
         param($share)
         Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force | Out-Null
         & 'C:\Temp\AutoTag\AutoTag.ps1' -NetworkSharePath $share
-    }} -ArgumentList '{network_share}'
+    } -ArgumentList $NetworkShare
 
     Remove-PSSession $Session
-    Write-Output "[SUCCESS] AutoTag completed on {target_ip}."
+    Write-Output "[SUCCESS] AutoTag completed on $TargetIp."
     Write-Output $result
-}} catch {{
+} catch {
     Write-Output "[ERROR] $($_.Exception.Message)"
     exit 1
-}}
-"#,
-        target_ip = target_ip,
-        username = username,
-        password = password,
-        usb_path = usb_path,
-        network_share = network_share,
-    );
+}
+"#;
 
     let output = Command::new("powershell")
-        .args(["-NonInteractive", "-NoProfile", "-Command", &script])
+        .args(["-NonInteractive", "-NoProfile", "-Command", script])
+        .env("PS_USER", &username)
+        .env("PS_PASS", &password)
+        .env("PS_TARGET_IP", &target_ip)
+        .env("PS_USB_PATH", &usb_path)
+        .env("PS_NETWORK_SHARE", &network_share)
         .output()
         .map_err(|e| format!("Failed to launch PowerShell: {}", e))?;
 
@@ -132,52 +159,53 @@ pub async fn query_sccm_boot_images(
     sccm_server: String,
     device_mac: String,
 ) -> Result<SccmQueryResult, String> {
-    let script = format!(
-        r#"
-try {{
+    validate_mac(&device_mac)?;
+    validate_host(&sccm_server)?;
+
+    // MAC address is passed via environment variable to prevent script injection.
+    let script = r#"
+try {
     # Load SCCM PowerShell module
     $ModulePath = "$env:SMS_ADMIN_UI_PATH\..\..\..\bin\ConfigurationManager.psd1"
-    if (-not (Test-Path $ModulePath)) {{
+    if (-not (Test-Path $ModulePath)) {
         $ModulePath = "C:\Program Files (x86)\Microsoft Configuration Manager\AdminConsole\bin\ConfigurationManager.psd1"
-    }}
+    }
     Import-Module $ModulePath -ErrorAction Stop
 
     # Connect to SCCM site
     $SiteCode = (Get-PSDrive -PSProvider CMSite).Name | Select-Object -First 1
     Set-Location "$($SiteCode):"
 
-    # Search for device by MAC address
-    $NormalizedMac = '{mac}' -replace '[:\-]', ''
-    $Device = Get-CMDevice | Where-Object {{
+    # Search for device by MAC address (read from env to avoid injection)
+    $NormalizedMac = $env:PS_DEVICE_MAC -replace '[:\-]', ''
+    $Device = Get-CMDevice | Where-Object {
         ($_.MACAddresses -replace '[:\-]', '') -like "*$NormalizedMac*"
-    }} | Select-Object -First 1
+    } | Select-Object -First 1
 
-    if (-not $Device) {{
-        Write-Output '{{"found":false,"device_name":null,"images":[],"error":null}}'
+    if (-not $Device) {
+        Write-Output '{"found":false,"device_name":null,"images":[],"error":null}'
         return
-    }}
+    }
 
     # Get available boot images
-    $Images = Get-CMBootImage | Select-Object @{{n='id';e={{$_.PackageID}}}}, @{{n='name';e={{$_.Name}}}}, @{{n='version';e={{$_.Version}}}}, @{{n='package_id';e={{$_.PackageID}}}}
-    $ImagesJson = $Images | ConvertTo-Json -Compress -AsArray
+    $Images = Get-CMBootImage | Select-Object @{n='id';e={$_.PackageID}}, @{n='name';e={$_.Name}}, @{n='version';e={$_.Version}}, @{n='package_id';e={$_.PackageID}}
 
-    $Output = [PSCustomObject]@{{
+    $Output = [PSCustomObject]@{
         found = $true
         device_name = $Device.Name
         images = $Images
         error = $null
-    }}
+    }
     Write-Output ($Output | ConvertTo-Json -Compress)
-}} catch {{
+} catch {
     $err = $_.Exception.Message -replace '"', "'"
-    Write-Output "{{""found"":false,""device_name"":null,""images"":[],""error"":""$err""}}"
-}}
-"#,
-        mac = device_mac,
-    );
+    Write-Output "{""found"":false,""device_name"":null,""images"":[],""error"":""$err""}"
+}
+"#;
 
     let output = Command::new("powershell")
-        .args(["-NonInteractive", "-NoProfile", "-Command", &script])
+        .args(["-NonInteractive", "-NoProfile", "-Command", script])
+        .env("PS_DEVICE_MAC", &device_mac)
         .output()
         .map_err(|e| format!("Failed to launch PowerShell: {}", e))?;
 
