@@ -204,6 +204,7 @@ export type AppAction =
   | { type: 'SHOW_COMPLIANCE_DETAILS'; payload: ComplianceResult }
   | { type: 'ADD_LOG'; payload: LogEntry }
   | { type: 'SET_RESCAN_MODAL_OPEN', payload: boolean }
+  | { type: 'SET_SYSTEM_INFO_MODAL_OPEN'; payload: boolean }
 
   // Runner Actions
   | { type: 'START_DEPLOYMENT_PROMPT' }

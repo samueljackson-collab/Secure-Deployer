@@ -1,2 +1,3 @@
-// Re-export all types from src/types.ts so root-level and component imports resolve correctly.
+// Re-export all types from src/types so that components importing '../types'
+// and root-level files importing './types' both resolve correctly.
 export * from './src/types';
