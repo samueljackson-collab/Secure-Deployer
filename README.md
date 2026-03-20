@@ -79,33 +79,33 @@ flowchart LR
 flowchart TD
   A[Device Powers On] --> B[PXE Boot via WDS/MDT]
   B --> C[Task Sequence Wizard]
-  C --> D[F8 → PowerShell → autotag.bat]
-  D --> E[AutoTag collects MAC / Serial / Model / IP]
-  E --> F[Tech enters: Rack Slot · Hostname · Name]
+  C --> D["F8 -> PowerShell -> autotag.bat"]
+  D --> E["AutoTag collects MAC, Serial, Model, IP"]
+  E --> F["Tech enters: Rack Slot, Hostname, Name"]
   F --> G[JSON written to Network Share]
   G --> H[Image Monitor polls share every 30s]
   H --> I[Device card appears in rack view]
-  I --> J[Imaging progresses 0→100%]
-  J --> K[runComplianceChecks — BitLocker · Citrix · LAPS · SCCM]
+  I --> J["Imaging progresses 0->100%"]
+  J --> K["runComplianceChecks - BitLocker, Citrix, LAPS, SCCM"]
   K --> L{Compliant?}
-  L -- Yes --> M[Status: Completed ✅]
-  L -- No --> N[Status: Completed with flags ⚠️]
+  L -- Yes --> M["Status: Completed (PASS)"]
+  L -- No --> N["Status: Completed with flags (FLAGS)"]
   M --> O[Tech clicks Transfer Selected]
   N --> O
   O --> P[transformImagingToRunnerDevices creates Device records]
-  P --> Q[Deployment Runner tab — device appears]
-  Q --> R[Tech clicks Start Scan → enters credentials]
+  P --> Q[Deployment Runner tab - device appears]
+  Q --> R["Tech clicks Start Scan -> enters credentials"]
   R --> S[runDeploymentFlow iterates devices]
   S --> T[validateDevice per device]
   T --> U{All checks pass?}
-  U -- Yes --> V[Status: Success 🟢]
-  U -- No --> W[Status: Scan Complete — needs action]
-  W --> X[updateDevice — BIOS / DCU / Windows]
+  U -- Yes --> V["Status: Success (OK)"]
+  U -- No --> W["Status: Scan Complete - needs action"]
+  W --> X["updateDevice - BIOS, DCU, Windows"]
   X --> Y{Reboot required?}
-  Y -- Yes --> Z[Rebooting... → re-validate]
+  Y -- Yes --> Z["Rebooting... -> re-validate"]
   Y -- No --> V
   Z --> V
-  V --> AA[Re-Scan All → Archive Run → Remove devices]
+  V --> AA["Re-Scan All -> Archive Run -> Remove devices"]
 ```
 
 ### Component Responsibility Map
