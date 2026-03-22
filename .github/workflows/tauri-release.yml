@@ -81,13 +81,9 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        - name: Build Tauri app
-          uses: tauri-apps/tauri-action@v0
-          env:
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          with:
-            tagName: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
-            releaseName: 'Secure Deployment Runner ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}'
+        with:
+          tagName: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+          releaseName: 'Secure Deployment Runner ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}'
           releaseBody: |
             ## Secure Deployment Runner ${{ github.ref_name }}
 
@@ -96,7 +92,7 @@ jobs:
             - **macOS**: `.dmg` disk image
             - **Linux**: `.AppImage` (mark as executable, then run)
 
-            ### What''s New
+            ### What's New
             See [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
 
             ### USB Portable (No Install Required)
