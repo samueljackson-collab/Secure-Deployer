@@ -59,12 +59,23 @@ pub fn detect_usb_drives() -> Vec<String> {
 }
 
 /// Validate an IP address or hostname: only allow alphanumeric, dots, hyphens, and brackets for IPv6.
+/// Colons are only permitted inside IPv6 bracket notation (e.g. [::1]), not in plain hostnames.
 fn validate_host(host: &str) -> Result<(), String> {
     if host.is_empty() || host.len() > 253 {
         return Err("Invalid host: must be 1–253 characters".to_string());
     }
-    if !host.chars().all(|c| c.is_alphanumeric() || c == '.' || c == '-' || c == '[' || c == ']' || c == ':') {
-        return Err("Invalid host: contains disallowed characters".to_string());
+    let is_ipv6 = host.starts_with('[') && host.ends_with(']');
+    if is_ipv6 {
+        // Inside brackets: allow hex digits, colons, and dots (IPv6 with embedded IPv4)
+        let inner = &host[1..host.len() - 1];
+        if !inner.chars().all(|c| c.is_ascii_hexdigit() || c == ':' || c == '.') {
+            return Err("Invalid IPv6 address: contains disallowed characters".to_string());
+        }
+    } else {
+        // Plain hostname or IPv4: alphanumeric, dots, hyphens only — no colons
+        if !host.chars().all(|c| c.is_alphanumeric() || c == '.' || c == '-') {
+            return Err("Invalid host: contains disallowed characters".to_string());
+        }
     }
     Ok(())
 }

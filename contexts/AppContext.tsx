@@ -66,7 +66,7 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
                     devices: action.payload.devices,
                     logs: [
                         { timestamp: new Date(), message: "Deployment process initiated.", level: 'INFO' },
-                        { timestamp: new Date(), message: `User: ${action.payload.credentials.username}`, level: 'INFO' }
+                        { timestamp: new Date(), message: "Credentials accepted — session authenticated", level: 'INFO' }
                     ],
                     deploymentState: 'running',
                     isCancelled: false,
@@ -85,11 +85,12 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
                 }
             };
         case 'DEPLOYMENT_FINISHED':
-            return { ...state, runner: { ...state.runner, deploymentState: 'complete' } };
+            return { ...state, credentials: undefined, runner: { ...state.runner, deploymentState: 'complete' } };
         case 'CANCEL_DEPLOYMENT':
              const cancellableStatuses: (Device['status'])[] = ['Connecting', 'Retrying...', 'Updating', 'Waking Up', 'Checking Info', 'Checking BIOS', 'Checking DCU', 'Checking Windows', 'Updating BIOS', 'Updating DCU', 'Updating Windows', 'Rebooting...', 'Executing Script'];
             return {
                 ...state,
+                credentials: undefined,
                 runner: {
                     ...state.runner,
                     isCancelled: true,

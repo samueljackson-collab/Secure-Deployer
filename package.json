@@ -11,7 +11,9 @@
     "typecheck": "tsc --noEmit",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "test": "vitest run",
+    "test:ui": "vitest --ui"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
@@ -40,6 +42,11 @@
     "typescript": "~5.8.2",
     "typescript-eslint": "^8.56.1",
     "vite": "^6.2.0",
-    "vite-plugin-pwa": "^0.21.0"
+    "vite-plugin-pwa": "0.21.2",
+    "vitest": "^3.2.4",
+    "@vitest/ui": "^3.2.4"
+  },
+  "overrides": {
+    "serialize-javascript": ">=7.0.3"
   }
 }
