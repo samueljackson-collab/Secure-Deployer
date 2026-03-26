@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Download, Terminal, Usb, Server, AlertTriangle, CheckCircle, Activity, ChevronRight, ChevronLeft, Play, Copy, RefreshCw, HardDrive, ShieldCheck, Gauge } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { validateWindowsPath } from '../src/utils/security';
 
 export const PxeTaskSequence: React.FC = () => {
     const [currentStep, setCurrentStep] = useState(1);
     const [networkShare, setNetworkShare] = useState<string>('\\\\server\\share\\AutoTag');
+    const [shareError, setShareError] = useState<string>('');
     const [scriptContent, setScriptContent] = useState<string>('');
     const [activeTab, setActiveTab] = useState<'bat' | 'ps1'>('bat');
     const [integrationMethod, setIntegrationMethod] = useState<'usb' | 'pxe'>('pxe');
@@ -495,22 +497,37 @@ timeout /t 5
                                             Network Share Path
                                         </label>
                                         <div className="flex gap-2">
-                                            <input 
-                                                type="text" 
+                                            <input
+                                                type="text"
                                                 value={networkShare}
-                                                onChange={(e) => setNetworkShare(e.target.value)}
-                                                className="flex-grow bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    setNetworkShare(val);
+                                                    const result = validateWindowsPath(val);
+                                                    setShareError(result.valid ? '' : (result.error ?? ''));
+                                                }}
+                                                className={`flex-grow bg-gray-900 border rounded px-3 py-2 text-white focus:ring-2 focus:outline-none ${
+                                                    shareError
+                                                        ? 'border-red-500 focus:ring-red-500'
+                                                        : 'border-gray-700 focus:ring-blue-500'
+                                                }`}
                                                 placeholder="\\server\share\AutoTag"
                                             />
-                                            <button 
+                                            <button
                                                 onClick={validateNetworkPath}
-                                                disabled={isValidating}
+                                                disabled={isValidating || shareError !== ''}
                                                 className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-500 disabled:bg-gray-700 disabled:cursor-not-allowed flex items-center gap-2"
                                             >
                                                 {isValidating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
                                                 Validate Access
                                             </button>
                                         </div>
+                                        {shareError && (
+                                            <p className="mt-1 text-xs text-red-400 font-semibold flex items-center gap-1" role="alert">
+                                                <AlertTriangle className="w-3 h-3 shrink-0" />
+                                                {shareError}
+                                            </p>
+                                        )}
                                     </div>
 
                                     {/* Validation Results */}
