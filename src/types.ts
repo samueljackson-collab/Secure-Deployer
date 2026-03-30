@@ -81,6 +81,12 @@ export interface DeploymentTemplate {
   scriptContent?: string;
 }
 
+export interface SavedScript {
+  id: string;
+  name: string;
+  content: string;
+}
+
 export interface DeploymentBatchSummary {
   id: number;
   operation: DeploymentOperationType;
@@ -169,10 +175,12 @@ export interface AppState {
             maxRetries: number;
             retryDelay: number;
             autoRebootEnabled: boolean;
+            activeScriptId: string | null;
         };
         isCancelled: boolean;
         batchHistory: DeploymentBatchSummary[];
         templates: DeploymentTemplate[];
+        scripts: SavedScript[];
     };
     monitor: {
         devices: ImagingDevice[];
@@ -244,6 +252,10 @@ export type AppAction =
   | { type: 'SAVE_TEMPLATE'; payload: DeploymentTemplate }
   | { type: 'DELETE_TEMPLATE'; payload: string }
   | { type: 'APPLY_TEMPLATE'; payload: DeploymentTemplate }
+  | { type: 'ADD_SCRIPT'; payload: SavedScript }
+  | { type: 'UPDATE_SCRIPT'; payload: SavedScript }
+  | { type: 'DELETE_SCRIPT'; payload: string }
+  | { type: 'SET_ACTIVE_SCRIPT'; payload: string | null }
   
   // Monitor Actions
   | { type: 'SET_IMAGING_DEVICES'; payload: ImagingDevice[] }

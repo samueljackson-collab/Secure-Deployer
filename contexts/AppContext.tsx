@@ -1,6 +1,6 @@
 
 import React, { createContext, useReducer, useContext, useEffect, useCallback } from 'react';
-import type { AppState, AppAction, AppDispatch, Device, LogEntry, ImagingDevice, DeploymentOperationType, DeploymentBatchSummary } from '../src/types';
+import type { AppState, AppAction, AppDispatch, Device, LogEntry, ImagingDevice, DeploymentOperationType, DeploymentBatchSummary, SavedScript } from '../src/types';
 import * as api from '../services/deploymentService';
 import Papa from 'papaparse';
 
@@ -15,10 +15,12 @@ const initialState: AppState = {
             maxRetries: 3,
             retryDelay: 2,
             autoRebootEnabled: false,
+            activeScriptId: null,
         },
         isCancelled: false,
         batchHistory: [],
         templates: [],
+        scripts: [],
     },
     monitor: {
         devices: [],
@@ -205,6 +207,17 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
             return { ...state, runner: { ...state.runner, templates: (state.runner.templates || []).filter(t => t.id !== action.payload) } };
         case 'APPLY_TEMPLATE':
             return { ...state, runner: { ...state.runner, settings: action.payload.settings } };
+        case 'ADD_SCRIPT':
+            return { ...state, runner: { ...state.runner, scripts: [...state.runner.scripts, action.payload] } };
+        case 'UPDATE_SCRIPT':
+            return { ...state, runner: { ...state.runner, scripts: state.runner.scripts.map(s => s.id === action.payload.id ? action.payload : s) } };
+        case 'DELETE_SCRIPT': {
+            const remainingScripts = state.runner.scripts.filter(s => s.id !== action.payload);
+            const activeScriptId = state.runner.settings.activeScriptId === action.payload ? null : state.runner.settings.activeScriptId;
+            return { ...state, runner: { ...state.runner, scripts: remainingScripts, settings: { ...state.runner.settings, activeScriptId } } };
+        }
+        case 'SET_ACTIVE_SCRIPT':
+            return { ...state, runner: { ...state.runner, settings: { ...state.runner.settings, activeScriptId: action.payload } } };
         case 'PROMPT_REMOTE_CREDENTIALS':
             return {
                 ...state,
