@@ -18,7 +18,27 @@ const initialState: AppState = {
         },
         isCancelled: false,
         batchHistory: [],
-        templates: [],
+        packages: [],
+        templates: [
+            {
+                id: 'template-1',
+                name: 'Standard Office Deployment',
+                description: 'Default settings for standard office workstations. 3 retries, 2s delay, no auto-reboot.',
+                settings: { maxRetries: 3, retryDelay: 2, autoRebootEnabled: false }
+            },
+            {
+                id: 'template-2',
+                name: 'Kiosk Mode Setup',
+                description: 'Aggressive retry settings with auto-reboot enabled for unattended kiosks.',
+                settings: { maxRetries: 10, retryDelay: 5, autoRebootEnabled: true }
+            },
+            {
+                id: 'template-3',
+                name: 'High-Security Workstation',
+                description: 'Single attempt deployment, no auto-reboot, requires manual verification.',
+                settings: { maxRetries: 0, retryDelay: 0, autoRebootEnabled: false }
+            }
+        ]
     },
     monitor: {
         devices: [],
@@ -34,7 +54,6 @@ const initialState: AppState = {
         isRescanModalOpen: false,
         isRemoteCredentialModalOpen: false,
         remoteTargetDeviceId: null,
-        isSystemInfoModalOpen: false,
     },
 };
 
@@ -66,7 +85,7 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
                     devices: action.payload.devices,
                     logs: [
                         { timestamp: new Date(), message: "Deployment process initiated.", level: 'INFO' },
-                        { timestamp: new Date(), message: "Credentials accepted — session authenticated", level: 'INFO' }
+                        { timestamp: new Date(), message: `User: ${action.payload.credentials.username}`, level: 'INFO' }
                     ],
                     deploymentState: 'running',
                     isCancelled: false,
@@ -85,17 +104,16 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
                 }
             };
         case 'DEPLOYMENT_FINISHED':
-            return { ...state, credentials: undefined, runner: { ...state.runner, deploymentState: 'complete' } };
+            return { ...state, runner: { ...state.runner, deploymentState: 'complete' } };
         case 'CANCEL_DEPLOYMENT':
              const cancellableStatuses: (Device['status'])[] = ['Connecting', 'Retrying...', 'Updating', 'Waking Up', 'Checking Info', 'Checking BIOS', 'Checking DCU', 'Checking Windows', 'Updating BIOS', 'Updating DCU', 'Updating Windows', 'Rebooting...', 'Executing Script'];
             return {
                 ...state,
-                credentials: undefined,
                 runner: {
                     ...state.runner,
                     isCancelled: true,
                     deploymentState: 'idle',
-                    devices: state.runner.devices.map(d => cancellableStatuses.includes(d.status) ? { ...d, status: 'Cancelled' as const } : d)
+                    devices: state.runner.devices.map(d => cancellableStatuses.includes(d.status) ? { ...d, status: 'Cancelled' } : d)
                 }
             };
         case 'ARCHIVE_RUN':
@@ -118,6 +136,8 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
             return { ...state, runner: { ...state.runner, devices: action.payload } };
         case 'UPDATE_SINGLE_DEVICE':
             return { ...state, runner: { ...state.runner, devices: state.runner.devices.map(d => d.id === action.payload.id ? { ...d, ...action.payload } : d) } };
+        case 'APPEND_SCRIPT_LOG':
+            return { ...state, runner: { ...state.runner, devices: state.runner.devices.map(d => d.id === action.payload.id ? { ...d, scriptLogs: [...(d.scriptLogs || []), action.payload.log] } : d) } };
         case 'SET_BATCH_HISTORY':
             return { ...state, runner: { ...state.runner, batchHistory: action.payload } };
         
@@ -165,8 +185,6 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
             return { ...state, ui: { ...state.ui, isPassedComplianceModalOpen: action.payload } };
         case 'SET_RESCAN_MODAL_OPEN':
             return { ...state, ui: { ...state.ui, isRescanModalOpen: action.payload } };
-        case 'SET_SYSTEM_INFO_MODAL_OPEN':
-            return { ...state, ui: { ...state.ui, isSystemInfoModalOpen: action.payload } };
         case 'RESCAN_ALL_DEVICES_PROMPT':
             if (state.runner.devices.length === 0) {
                  return { ...state, runner: { ...state.runner, logs: [...state.runner.logs, { timestamp: new Date(), message: "No devices to re-scan.", level: 'WARNING' }] } };
@@ -184,7 +202,7 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
                     logs: [...state.runner.logs, { timestamp: new Date(), message: "Initiating re-scan for all devices...", level: 'INFO' }],
                     devices: state.runner.devices.map(d => ({
                         ...d,
-                        status: 'Pending Validation' as const,
+                        status: 'Pending Validation',
                         biosVersion: undefined,
                         dcuVersion: undefined,
                         winVersion: undefined,
@@ -205,6 +223,20 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
             return { ...state, runner: { ...state.runner, templates: (state.runner.templates || []).filter(t => t.id !== action.payload) } };
         case 'APPLY_TEMPLATE':
             return { ...state, runner: { ...state.runner, settings: action.payload.settings } };
+        case 'ADD_PACKAGE':
+            return { ...state, runner: { ...state.runner, packages: [...state.runner.packages, action.payload] } };
+        case 'REMOVE_PACKAGE':
+            return { ...state, runner: { ...state.runner, packages: state.runner.packages.filter(p => p.id !== action.payload) } };
+        case 'UPDATE_PACKAGE':
+            return {
+                ...state,
+                runner: {
+                    ...state.runner,
+                    packages: state.runner.packages.map(p => p.id === action.payload.id ? { ...p, ...action.payload } : p)
+                }
+            };
+        case 'REORDER_PACKAGES':
+            return { ...state, runner: { ...state.runner, packages: action.payload } };
         case 'PROMPT_REMOTE_CREDENTIALS':
             return {
                 ...state,
@@ -353,11 +385,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 }
                 addLog(`Initiating execution for ${devicesToExecute.length} device(s)...`, 'INFO');
                 await Promise.all(devicesToExecute.map(async device => {
-                    dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, status: 'Executing Script' } });
-                    const success = await api.executeScript(device);
+                    dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, status: 'Executing Script', scriptProgress: 0, scriptLogs: [] } });
+                    
+                    const onProgress = (progress: number, log: string) => {
+                        dispatch({ 
+                            type: 'UPDATE_SINGLE_DEVICE', 
+                            payload: { 
+                                id: device.id, 
+                                scriptProgress: progress,
+                                // We need to append to existing logs, but UPDATE_SINGLE_DEVICE just merges.
+                                // It's better to dispatch an action that appends, or just rely on the fact that 
+                                // we can't easily append with UPDATE_SINGLE_DEVICE without knowing current state.
+                                // Let's just pass the log and we'll handle it in the reducer if needed, 
+                                // but wait, UPDATE_SINGLE_DEVICE merges the payload.
+                                // We can't access current state here easily.
+                                // Let's add an APPEND_SCRIPT_LOG action.
+                            } 
+                        });
+                        dispatch({ type: 'APPEND_SCRIPT_LOG', payload: { id: device.id, log } });
+                    };
+
+                    const success = await api.executeScript(device, onProgress);
                     if (!state.runner.isCancelled) {
-                         dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, status: success ? 'Execution Complete' : 'Execution Failed' } });
-                         addLog(`Script execution ${success ? 'succeeded' : 'failed'} on ${device.hostname}.`, success ? 'SUCCESS' : 'ERROR');
+                         dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, status: success.success ? 'Execution Complete' : 'Execution Failed' } });
+                         if (!success.success && success.error) {
+                             dispatch({ type: 'APPEND_SCRIPT_LOG', payload: { id: device.id, log: `[ERROR] ${success.error}` } });
+                             if (success.troubleshooting) {
+                                 dispatch({ type: 'APPEND_SCRIPT_LOG', payload: { id: device.id, log: `[INFO] Tip: ${success.troubleshooting}` } });
+                             }
+                         }
+                         addLog(`Script execution ${success.success ? 'succeeded' : 'failed'} on ${device.hostname}.`, success.success ? 'SUCCESS' : 'ERROR');
                     }
                 }));
                  if (action.type === 'BULK_EXECUTE') dispatch({ type: 'CLEAR_SELECTIONS' });
@@ -429,7 +486,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
              case 'BULK_CANCEL': {
                 addLog(`Cancelling tasks for ${runner.selectedDeviceIds.size} devices...`, 'WARNING');
                 const cancellable: (Device['status'])[] = ['Connecting', 'Retrying...', 'Updating', 'Waking Up', 'Checking Info', 'Checking BIOS', 'Checking DCU', 'Checking Windows', 'Updating BIOS', 'Updating DCU', 'Updating Windows', 'Executing Script'];
-                const newDevices = runner.devices.map(d => runner.selectedDeviceIds.has(d.id) && cancellable.includes(d.status) ? { ...d, status: 'Cancelled' as const } : d);
+                const newDevices = runner.devices.map(d => runner.selectedDeviceIds.has(d.id) && cancellable.includes(d.status) ? { ...d, status: 'Cancelled' } : d);
                 dispatch({ type: 'SET_DEVICES', payload: newDevices });
                 dispatch({ type: 'CLEAR_SELECTIONS' });
                 break;
@@ -437,7 +494,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
             case 'WAKE_ON_LAN': {
                 if (action.payload.size === 0) break;
-                const newDevices = runner.devices.map(d => action.payload.has(d.id) ? { ...d, status: 'Waking Up' as const } : d);
+                const newDevices = runner.devices.map(d => action.payload.has(d.id) ? { ...d, status: 'Waking Up' } : d);
                 dispatch({ type: 'SET_DEVICES', payload: newDevices });
                 addLog(`Sent Wake-on-LAN to ${action.payload.size} device(s).`, 'INFO');
                 dispatch({ type: 'CLEAR_SELECTIONS' });

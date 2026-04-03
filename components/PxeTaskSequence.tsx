@@ -35,18 +35,9 @@ export const PxeTaskSequence: React.FC = () => {
     const [remoteStatus, setRemoteStatus] = useState<'idle' | 'connecting' | 'running' | 'completed' | 'failed'>('idle');
     const [remoteLogs, setRemoteLogs] = useState<string[]>([]);
     const [remoteProgress, setRemoteProgress] = useState(0);
+    const [selectedRemoteScript, setSelectedRemoteScript] = useState<'autotag' | 'custom'>('autotag');
+    const [customScriptFile, setCustomScriptFile] = useState<File | null>(null);
     const remoteLogEndRef = useRef<HTMLDivElement>(null);
-
-    // USB Drive States
-    const [usbDrives, setUsbDrives] = useState<string[]>([]);
-    const [selectedUsbPath, setSelectedUsbPath] = useState<string>('');
-    const [isDetectingUsb, setIsDetectingUsb] = useState(false);
-
-    // SCCM Server config
-    const [sccmServer, setSccmServer] = useState<string>('');
-
-    // Tauri availability
-    const isTauri = typeof window !== 'undefined' && !!(window as unknown as Record<string, unknown>).__TAURI__;
 
     // AutoTag Log Preview States
     const [autoTagLogs, setAutoTagLogs] = useState<string[]>([]);
@@ -225,48 +216,25 @@ timeout /t 5
         navigator.clipboard.writeText(snippet);
     };
 
-    const checkSccmForDevice = async () => {
+    const checkSccmForDevice = () => {
         if (!targetDeviceMac) return;
         setSccmStatus('checking');
         setAvailableImages([]);
         setSelectedImage('');
-
-        try {
-            if (isTauri && sccmServer) {
-                const { invoke } = await import('@tauri-apps/api/core');
-                const result = await invoke<{ found: boolean; device_name: string | null; images: { id: string; name: string; version: string; package_id: string }[]; error: string | null }>('query_sccm_boot_images', {
-                    sccmServer,
-                    deviceMac: targetDeviceMac,
-                });
-                if (result.found) {
-                    setSccmStatus('found');
-                    setAvailableImages(result.images.map(img => ({
-                        id: img.id,
-                        name: img.name,
-                        version: img.version,
-                    })));
-                } else {
-                    setSccmStatus('not_found');
-                }
+        
+        // Simulate SCCM API call
+        setTimeout(() => {
+            if (Math.random() > 0.2) {
+                setSccmStatus('found');
+                setAvailableImages([
+                    { id: 'img1', name: 'Windows 10 Enterprise 22H2', version: '10.0.19045.3086' },
+                    { id: 'img2', name: 'Windows 11 Enterprise 22H2', version: '10.0.22621.1848' },
+                    { id: 'img3', name: 'Windows 10 LTSC 2021', version: '10.0.19044.1288' }
+                ]);
             } else {
-                // Simulation mode (PWA / no SCCM server configured)
-                setTimeout(() => {
-                    if (Math.random() > 0.2) {
-                        setSccmStatus('found');
-                        setAvailableImages([
-                            { id: 'img1', name: 'Windows 10 Enterprise 22H2', version: '10.0.19045.3086' },
-                            { id: 'img2', name: 'Windows 11 Enterprise 23H2', version: '10.0.22631.3737' },
-                            { id: 'img3', name: 'Windows 10 LTSC 2021', version: '10.0.19044.1288' },
-                        ]);
-                    } else {
-                        setSccmStatus('not_found');
-                    }
-                }, 1500);
+                setSccmStatus('not_found');
             }
-        } catch (e) {
-            console.error('SCCM query failed:', e);
-            setSccmStatus('not_found');
-        }
+        }, 1500);
     };
 
     const validateNetworkPath = () => {
@@ -295,106 +263,89 @@ timeout /t 5
         }, 1000);
     };
 
-    const startRemoteExecution = async () => {
+    const startRemoteExecution = () => {
         if (!remoteIp) return;
+        if (selectedRemoteScript === 'custom' && !customScriptFile) {
+            alert("Please select a custom script file.");
+            return;
+        }
+
         setRemoteStatus('connecting');
         setRemoteLogs([]);
         setRemoteProgress(0);
 
-        const addLog = (msg: string) => setRemoteLogs(prev => [...prev, msg]);
-
-        if (isTauri) {
-            // Real execution via Tauri PowerShell backend
-            try {
-                const { invoke } = await import('@tauri-apps/api/core');
-                addLog(`[INFO] Connecting to ${remoteIp} via WinRM...`);
-                setRemoteProgress(20);
-                setRemoteStatus('running');
-
-                const usbPath = selectedUsbPath || 'D:\\';
-                const result = await invoke<string>('execute_powershell_remote', {
-                    targetIp: remoteIp,
-                    username: 'domain\\administrator',
-                    password: '',  // credentials should be passed from the credential modal
-                    usbPath,
-                    networkShare,
-                });
-
-                setRemoteProgress(100);
-                setRemoteStatus('completed');
-                result.split('\n').forEach(line => {
-                    if (line.trim()) addLog(line.trim());
-                });
-            } catch (error) {
-                setRemoteStatus('failed');
-                setRemoteProgress(100);
-                const errMsg = error instanceof Error ? error.message : String(error);
-                errMsg.split('\n').forEach(line => {
-                    if (line.trim()) addLog(`[ERROR] ${line.trim()}`);
-                });
-            }
-            return;
-        }
-
-        // Simulation mode (PWA — shows realistic output, actual execution via Tauri only)
         const isSuccess = Math.random() > 0.4;
         let steps: { msg: string; delay: number; isError?: boolean }[] = [];
-
-        const usbDisplay = selectedUsbPath || 'D:\\';
+        
+        const scriptName = selectedRemoteScript === 'custom' && customScriptFile ? customScriptFile.name : 'AutoTag.bat';
 
         if (isSuccess) {
             steps = [
-                { msg: `[INFO] Connecting to ${remoteIp} via WinRM...`, delay: 1000 },
-                { msg: `[INFO] Connection established. Verifying credentials...`, delay: 1500 },
-                { msg: `[INFO] Authenticated successfully.`, delay: 500 },
-                { msg: `[INFO] Copying AutoTag scripts from USB (${usbDisplay}AutoTag\\) to C:\\Temp\\AutoTag\\...`, delay: 2000 },
-                { msg: `[INFO] Starting AutoTag.ps1 execution on ${remoteIp}...`, delay: 1000 },
-                { msg: `[INFO] Starting AutoTag Sequence...`, delay: 500 },
-                { msg: `[INFO] Checking network share access: ${networkShare}`, delay: 800 },
-                { msg: `[SUCCESS] Network share is accessible.`, delay: 500 },
-                { msg: `[INFO] Gathering hardware information via WMI...`, delay: 1200 },
-                { msg: `[INFO] Hardware info gathered successfully.`, delay: 500 },
-                { msg: `[SUCCESS] Metadata saved to ${networkShare}\\DeviceMetadata_${remoteIp.replace(/\./g, '-')}.json`, delay: 800 },
-                { msg: `[SUCCESS] AutoTag sequence completed successfully on ${remoteIp}.`, delay: 500 },
-                { msg: `[INFO] PSSession closed. Remote execution finished.`, delay: 500 },
+                { msg: `Connecting to ${remoteIp}...`, delay: 1000 },
+                { msg: "Connection established. Verifying credentials...", delay: 1500 },
+                { msg: "Authenticated successfully.", delay: 500 },
+                { msg: `Copying ${scriptName} to C:\\Temp\\...`, delay: 2000 },
+                { msg: `Starting ${scriptName} execution...`, delay: 1000 },
+                { msg: `[INFO] Starting ${scriptName} Sequence...`, delay: 500 },
+                { msg: "[INFO] Checking network share access...", delay: 800 },
+                { msg: "[SUCCESS] Network share is accessible.", delay: 500 },
+                { msg: "[INFO] Gathering hardware information...", delay: 1200 },
+                { msg: "[INFO] Hardware info gathered successfully.", delay: 500 },
+                { msg: "[SUCCESS] Metadata saved to network share.", delay: 800 },
+                { msg: `[SUCCESS] ${scriptName} sequence completed successfully.`, delay: 500 },
+                { msg: "Remote execution finished.", delay: 500 }
             ];
         } else {
             const errors = [
                 {
                     err: "Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))",
-                    ts: "Verify credentials have local administrator privileges. Ensure WinRM is enabled on the target (run: winrm quickconfig)."
+                    ts: "Verify that the provided credentials have administrative privileges on the target device. Check if WinRM is configured to allow remote connections."
                 },
                 {
-                    err: "Connecting to remote server failed: WinRM client cannot process the request.",
-                    ts: "Check target is online, on same network, and port 5985 is open. Run: Test-NetConnection -ComputerName <IP> -Port 5985"
+                    err: `The term '${scriptName}' is not recognized as the name of a cmdlet, function, script file, or operable program.`,
+                    ts: "Ensure the required PowerShell module is installed on the target device before running this script."
                 },
                 {
-                    err: `Cannot find path '${usbDisplay}AutoTag\\AutoTag.ps1' because it does not exist.`,
-                    ts: "Verify the USB drive is correctly selected and contains the AutoTag\\ folder with scripts."
+                    err: "Connecting to remote server failed with the following error message : The WinRM client cannot process the request.",
+                    ts: "Check if the target device is online, on the same network, and has the WinRM service running. Verify firewall rules allow port 5985/5986."
                 },
+                {
+                    err: "Cannot find path '\\\\server\\share\\AutoTag' because it does not exist.",
+                    ts: "Verify that the network share path is correct and accessible from the target device. Check DNS resolution and network connectivity."
+                }
             ];
             const randomError = errors[Math.floor(Math.random() * errors.length)];
+            
             steps = [
-                { msg: `[INFO] Connecting to ${remoteIp} via WinRM...`, delay: 1000 },
-                { msg: `[INFO] Connection established. Verifying credentials...`, delay: 1500 },
-                { msg: `[INFO] Copying AutoTag scripts from USB (${usbDisplay}AutoTag\\)...`, delay: 2000 },
-                { msg: `[ERROR] Execution failed: ${randomError.err}`, delay: 800, isError: true },
+                { msg: `Connecting to ${remoteIp}...`, delay: 1000 },
+                { msg: "Connection established. Verifying credentials...", delay: 1500 },
+                { msg: "Authenticated successfully.", delay: 500 },
+                { msg: `Copying ${scriptName} to C:\\Temp\\...`, delay: 2000 },
+                { msg: `Starting ${scriptName} execution...`, delay: 1000 },
+                { msg: `[INFO] Starting ${scriptName} Sequence...`, delay: 500 },
+                { msg: "[ERROR] Execution failed.", delay: 800, isError: true },
+                { msg: `[POWERSHELL ERROR] ${randomError.err}`, delay: 500, isError: true },
                 { msg: `[TROUBLESHOOTING] ${randomError.ts}`, delay: 500, isError: true },
-                { msg: `[INFO] Remote execution aborted.`, delay: 500, isError: true },
+                { msg: "Remote execution aborted.", delay: 500, isError: true }
             ];
         }
 
-        let stepIndex = 0;
+        let currentStep = 0;
+
         const executeStep = () => {
-            if (stepIndex >= steps.length) {
+            if (currentStep >= steps.length) {
                 setRemoteStatus(isSuccess ? 'completed' : 'failed');
                 setRemoteProgress(100);
                 return;
             }
-            const step = steps[stepIndex];
-            setRemoteLogs(prev => [...prev, step.msg]);
-            setRemoteProgress(Math.round(((stepIndex + 1) / steps.length) * 90));
-            stepIndex++;
+
+            const step = steps[currentStep];
+            setRemoteLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${step.msg}`]);
+            setRemoteProgress(Math.round(((currentStep + 1) / steps.length) * 100));
+            
+            if (currentStep === 4) setRemoteStatus('running');
+
+            currentStep++;
             setTimeout(executeStep, step.delay);
         };
 
@@ -415,32 +366,6 @@ timeout /t 5
             setAutoTagLogs(newLogs);
             setIsRefreshingLogs(false);
         }, 1000);
-    };
-
-    const detectUsbDrives = async () => {
-        setIsDetectingUsb(true);
-        setUsbDrives([]);
-        try {
-            if (isTauri) {
-                const { invoke } = await import('@tauri-apps/api/core');
-                const drives = await invoke<string[]>('detect_usb_drives');
-                const autoTagDrives = drives.filter(d => d); // filter empty
-                setUsbDrives(autoTagDrives);
-                if (autoTagDrives.length > 0 && !selectedUsbPath) {
-                    setSelectedUsbPath(autoTagDrives[0]);
-                }
-            } else {
-                // PWA fallback: show common USB drive patterns for Windows
-                setTimeout(() => {
-                    setUsbDrives(['D:\\', 'E:\\', 'F:\\']);
-                }, 800);
-            }
-        } catch (e) {
-            console.error('USB detection failed:', e);
-            setUsbDrives([]);
-        } finally {
-            setTimeout(() => setIsDetectingUsb(false), 800);
-        }
     };
 
     return (
@@ -532,66 +457,10 @@ timeout /t 5
                                         </div>
                                         <div className="bg-gray-900 p-3 rounded border border-gray-700 flex items-center justify-between">
                                             <span className="text-sm text-gray-400 flex items-center gap-2"><Gauge size={16}/> Write Speed</span>
-                                            {validationResults.writeSpeed === null ? <span className="text-gray-600">-</span> :
+                                            {validationResults.writeSpeed === null ? <span className="text-gray-600">-</span> : 
                                              <span className="text-[#39FF14] text-xs font-mono">{validationResults.writeSpeed} MB/s</span>}
                                         </div>
                                     </div>
-                                </div>
-
-                                {/* USB Drive Detection */}
-                                <div className="mt-6 pt-6 border-t border-gray-700">
-                                    <h4 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-                                        <Usb className="w-4 h-4 text-purple-400" />
-                                        AutoTag USB Drive
-                                        {isTauri && <span className="text-xs bg-green-900/40 text-green-400 border border-green-500/30 px-2 py-0.5 rounded">Native Mode</span>}
-                                        {!isTauri && <span className="text-xs bg-gray-700 text-gray-400 border border-gray-600 px-2 py-0.5 rounded">Browser Mode</span>}
-                                    </h4>
-                                    <p className="text-xs text-gray-400 mb-3">
-                                        {isTauri
-                                            ? 'Plug the AutoTag USB into this machine and click Detect to find it automatically.'
-                                            : 'In browser mode, enter the USB drive path manually or select from common patterns.'}
-                                    </p>
-                                    <div className="flex gap-2 mb-3">
-                                        <button
-                                            onClick={detectUsbDrives}
-                                            disabled={isDetectingUsb}
-                                            className="px-4 py-2 bg-purple-700 text-white rounded hover:bg-purple-600 disabled:bg-gray-700 disabled:cursor-not-allowed flex items-center gap-2 text-sm"
-                                        >
-                                            {isDetectingUsb ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Usb className="w-4 h-4" />}
-                                            {isDetectingUsb ? 'Detecting...' : 'Detect USB Drives'}
-                                        </button>
-                                        <input
-                                            type="text"
-                                            value={selectedUsbPath}
-                                            onChange={(e) => setSelectedUsbPath(e.target.value)}
-                                            placeholder={isTauri ? 'Auto-detected path appears here' : 'e.g., D:\\'}
-                                            className="flex-grow bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none"
-                                        />
-                                    </div>
-                                    {usbDrives.length > 0 && (
-                                        <div className="grid grid-cols-3 gap-2">
-                                            {usbDrives.map(drive => (
-                                                <button
-                                                    key={drive}
-                                                    onClick={() => setSelectedUsbPath(drive)}
-                                                    className={`p-2 rounded border text-sm text-left flex items-center gap-2 transition-colors ${
-                                                        selectedUsbPath === drive
-                                                            ? 'bg-purple-500/10 border-purple-500 text-purple-300'
-                                                            : 'bg-gray-900 border-gray-700 text-gray-300 hover:border-gray-500'
-                                                    }`}
-                                                >
-                                                    <Usb className="w-3.5 h-3.5 shrink-0" />
-                                                    <span className="font-mono text-xs">{drive}</span>
-                                                    {selectedUsbPath === drive && <CheckCircle className="w-3.5 h-3.5 ml-auto text-purple-400" />}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-                                    {!isTauri && (
-                                        <p className="text-xs text-amber-400 mt-2">
-                                            ⚠ Install the native Tauri app for automatic USB detection and real remote execution.
-                                        </p>
-                                    )}
                                 </div>
                             </motion.div>
                         )}
@@ -614,28 +483,6 @@ timeout /t 5
                                 </p>
                                 
                                 <div className="space-y-6">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-400 mb-1">
-                                            SCCM Server / Site Server Hostname
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={sccmServer}
-                                            onChange={(e) => setSccmServer(e.target.value)}
-                                            placeholder={isTauri ? 'e.g., SCCM-SERVER01 or 192.168.1.100' : 'Not required in browser mode (simulation)'}
-                                            className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white focus:ring-2 focus:ring-yellow-500 focus:outline-none"
-                                        />
-                                        {isTauri && !sccmServer && (
-                                            <p className="text-xs text-amber-400 mt-1">
-                                                Enter your SCCM site server to query real boot images.
-                                            </p>
-                                        )}
-                                        {!isTauri && (
-                                            <p className="text-xs text-gray-500 mt-1">
-                                                Install the native app to connect to your SCCM server directly.
-                                            </p>
-                                        )}
-                                    </div>
                                     <div>
                                         <label className="block text-sm font-medium text-gray-400 mb-1">
                                             Target Device MAC Address
@@ -713,7 +560,12 @@ timeout /t 5
                                 
                                 <div className="grid grid-cols-2 gap-4">
                                     <button 
-                                        onClick={() => setIntegrationMethod('usb')}
+                                        onClick={() => {
+                                            setIntegrationMethod('usb');
+                                            if (!networkShare || networkShare.startsWith('\\\\')) {
+                                                setNetworkShare('D:\\AutoTag');
+                                            }
+                                        }}
                                         className={`p-4 rounded-lg border-2 flex flex-col items-center gap-3 transition-all ${integrationMethod === 'usb' ? 'border-[#39FF14] bg-[#39FF14]/10' : 'border-gray-700 bg-gray-900 hover:border-gray-600'}`}
                                     >
                                         <Usb className={`w-8 h-8 ${integrationMethod === 'usb' ? 'text-[#39FF14]' : 'text-gray-500'}`} />
@@ -722,7 +574,12 @@ timeout /t 5
                                     </button>
                                     
                                     <button 
-                                        onClick={() => setIntegrationMethod('pxe')}
+                                        onClick={() => {
+                                            setIntegrationMethod('pxe');
+                                            if (!networkShare || networkShare === 'D:\\AutoTag') {
+                                                setNetworkShare('\\\\sccm-server\\share\\AutoTag');
+                                            }
+                                        }}
                                         className={`p-4 rounded-lg border-2 flex flex-col items-center gap-3 transition-all ${integrationMethod === 'pxe' ? 'border-[#39FF14] bg-[#39FF14]/10' : 'border-gray-700 bg-gray-900 hover:border-gray-600'}`}
                                     >
                                         <Server className={`w-8 h-8 ${integrationMethod === 'pxe' ? 'text-[#39FF14]' : 'text-gray-500'}`} />
@@ -913,28 +770,47 @@ timeout /t 5
                         </div>
                         
                         <div className="p-6 space-y-6">
-                            <div className="flex gap-4">
-                                <input
-                                    type="text"
-                                    placeholder="Target IP Address (e.g., 192.168.1.50)"
-                                    value={remoteIp}
-                                    onChange={(e) => setRemoteIp(e.target.value)}
-                                    className="flex-grow bg-gray-800 border border-gray-700 rounded px-4 py-2 text-white focus:ring-2 focus:ring-[#39FF14] focus:outline-none"
-                                />
-                                <button
-                                    onClick={startRemoteExecution}
-                                    disabled={remoteStatus === 'running' || !remoteIp}
-                                    className="px-6 py-2 bg-[#39FF14] text-black font-bold rounded hover:bg-[#32e012] disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    {remoteStatus === 'running' ? 'Running...' : 'Connect & Run AutoTag'}
-                                </button>
-                            </div>
-                            {selectedUsbPath && (
-                                <div className="text-xs text-purple-400 bg-purple-900/20 border border-purple-500/30 rounded p-2 flex items-center gap-2">
-                                    <Usb className="w-3.5 h-3.5 shrink-0" />
-                                    USB source: <span className="font-mono">{selectedUsbPath}AutoTag\</span>
+                            <div className="flex flex-col gap-4">
+                                <div className="flex gap-4">
+                                    <input 
+                                        type="text" 
+                                        placeholder="Target IP Address (e.g., 192.168.1.50)"
+                                        value={remoteIp}
+                                        onChange={(e) => setRemoteIp(e.target.value)}
+                                        className="flex-grow bg-gray-800 border border-gray-700 rounded px-4 py-2 text-white focus:ring-2 focus:ring-[#39FF14] focus:outline-none"
+                                    />
+                                    <select
+                                        className="bg-gray-800 border border-gray-700 rounded px-4 py-2 text-white focus:ring-2 focus:ring-[#39FF14] focus:outline-none"
+                                        value={selectedRemoteScript}
+                                        onChange={(e) => setSelectedRemoteScript(e.target.value as 'autotag' | 'custom')}
+                                    >
+                                        <option value="autotag">AutoTag Sequence</option>
+                                        <option value="custom">Custom Script...</option>
+                                    </select>
+                                    <button 
+                                        onClick={startRemoteExecution}
+                                        disabled={remoteStatus === 'running' || !remoteIp || (selectedRemoteScript === 'custom' && !customScriptFile)}
+                                        className="px-6 py-2 bg-[#39FF14] text-black font-bold rounded hover:bg-[#32e012] disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {remoteStatus === 'running' ? 'Running...' : 'Connect & Run'}
+                                    </button>
                                 </div>
-                            )}
+                                {selectedRemoteScript === 'custom' && (
+                                    <div className="flex items-center gap-4">
+                                        <label className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-500 transition duration-200 cursor-pointer">
+                                            Choose File
+                                            <input 
+                                                type="file" 
+                                                className="hidden" 
+                                                onChange={(e) => setCustomScriptFile(e.target.files ? e.target.files[0] : null)} 
+                                            />
+                                        </label>
+                                        <span className="text-sm text-gray-400">
+                                            {customScriptFile ? customScriptFile.name : 'No file chosen'}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
 
                             {/* Progress Bar */}
                             <div className="space-y-2">

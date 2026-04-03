@@ -57,6 +57,8 @@ export interface Device {
   runningPrograms?: string[];
   availableFiles?: string[];
   progress?: number;
+  scriptProgress?: number;
+  scriptLogs?: string[];
 }
 
 export type DeploymentStatus = 
@@ -158,6 +160,14 @@ export interface ImagingDevice {
 
 // --- Types for AppContext ---
 
+export interface SoftwarePackage {
+  id: string;
+  name: string;
+  file: File;
+  order: number;
+  bypassAlerts: boolean;
+}
+
 export interface AppState {
     runner: {
         devices: Device[];
@@ -173,6 +183,7 @@ export interface AppState {
         isCancelled: boolean;
         batchHistory: DeploymentBatchSummary[];
         templates: DeploymentTemplate[];
+        packages: SoftwarePackage[];
     };
     monitor: {
         devices: ImagingDevice[];
@@ -188,7 +199,6 @@ export interface AppState {
         isRescanModalOpen: boolean;
         isRemoteCredentialModalOpen: boolean;
         remoteTargetDeviceId: number | null;
-        isSystemInfoModalOpen: boolean;
     };
     credentials?: Credentials;
 }
@@ -204,7 +214,6 @@ export type AppAction =
   | { type: 'SHOW_COMPLIANCE_DETAILS'; payload: ComplianceResult }
   | { type: 'ADD_LOG'; payload: LogEntry }
   | { type: 'SET_RESCAN_MODAL_OPEN', payload: boolean }
-  | { type: 'SET_SYSTEM_INFO_MODAL_OPEN'; payload: boolean }
 
   // Runner Actions
   | { type: 'START_DEPLOYMENT_PROMPT' }
@@ -221,6 +230,7 @@ export type AppAction =
   | { type: 'CLEAR_SELECTIONS' }
   | { type: 'SET_DEVICES'; payload: Device[] }
   | { type: 'UPDATE_SINGLE_DEVICE'; payload: Partial<Device> & { id: number } }
+  | { type: 'APPEND_SCRIPT_LOG'; payload: { id: number; log: string } }
   | { type: 'SET_BATCH_HISTORY'; payload: DeploymentBatchSummary[] }
   | { type: 'WAKE_ON_LAN'; payload: Set<number> }
   | { type: 'UPDATE_DEVICE'; payload: number }
@@ -235,15 +245,17 @@ export type AppAction =
   | { type: 'BULK_REMOVE' }
   | { type: 'BULK_DEPLOY_OPERATION'; payload: { operation: DeploymentOperationType; file: File } }
   | { type: 'PROMPT_REMOTE_CREDENTIALS'; payload: number }
-  | { type: 'REMOTE_IN_DEVICE'; payload: number }
   | { type: 'REMOTE_IN_WITH_CREDENTIALS'; payload: Credentials }
-  | { type: 'SET_SYSTEM_INFO_MODAL_OPEN'; payload: boolean }
   | { type: 'CLOSE_REMOTE_CREDENTIAL_MODAL' }
   | { type: 'RESCAN_ALL_DEVICES_PROMPT' }
   | { type: 'RESCAN_ALL_DEVICES_CONFIRMED' }
   | { type: 'SAVE_TEMPLATE'; payload: DeploymentTemplate }
   | { type: 'DELETE_TEMPLATE'; payload: string }
   | { type: 'APPLY_TEMPLATE'; payload: DeploymentTemplate }
+  | { type: 'ADD_PACKAGE'; payload: SoftwarePackage }
+  | { type: 'REMOVE_PACKAGE'; payload: string }
+  | { type: 'UPDATE_PACKAGE'; payload: Partial<SoftwarePackage> & { id: string } }
+  | { type: 'REORDER_PACKAGES'; payload: SoftwarePackage[] }
   
   // Monitor Actions
   | { type: 'SET_IMAGING_DEVICES'; payload: ImagingDevice[] }
