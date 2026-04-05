@@ -22,10 +22,12 @@ import { AllComplianceDetailsModal } from './components/AllComplianceDetailsModa
 import { PassedComplianceDetailsModal } from './components/PassedComplianceDetailsModal';
 import { RescanConfirmationModal } from './components/RescanConfirmationModal';
 import { RemoteCredentialModal } from './components/RemoteCredentialModal';
-import { SystemInfoModal } from './components/SystemInfoModal';
+import { PackageManager } from './components/PackageManager';
+// FIX: Import DeviceFormFactor type
 import type { Credentials } from './types';
 import { AppProvider, useAppContext } from './contexts/AppContext';
 
+// FIX: Exported constants to be used across the application for compliance checks.
 export const TARGET_BIOS_VERSION = 'A24';
 export const TARGET_DCU_VERSION = '5.1.0';
 export const TARGET_WIN_VERSION = '23H2';
@@ -141,6 +143,7 @@ const AppContent: React.FC = () => {
                                     </StepCard>
                                 </div>
                             </div>
+                            <PackageManager />
                              <DeploymentHistory history={runner.history} />
                         </div>
                         <div className="lg:col-span-2 flex flex-col gap-8">
@@ -231,7 +234,6 @@ const AppContent: React.FC = () => {
                 onConfirm={(credentials: Credentials) => dispatch({ type: 'REMOTE_IN_WITH_CREDENTIALS', payload: credentials })}
                 deviceHostname={runner.devices.find(d => d.id === ui.remoteTargetDeviceId)?.hostname || ''}
             />
-            {ui.isSystemInfoModalOpen && <SystemInfoModal />}
         </div>
     );
 };

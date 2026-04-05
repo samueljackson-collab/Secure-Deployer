@@ -219,7 +219,7 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
         });
     };
     const allSelected = devices.length > 0 && selectedDeviceIds.size === devices.length;
-    const isScanActionable = (status: DeploymentStatus) => ['Success', 'Failed', 'Offline', 'Cancelled', 'Scan Complete'].includes(status);
+    const isScanActionable = (status: DeploymentStatus) => ['Success', 'Failed', 'Offline', 'Cancelled', 'Scan Complete', 'Execution Failed'].includes(status);
 
     const handleFileChange = (deviceId: number) => (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -417,6 +417,14 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
                                                         Re-run Checks
                                                     </button>
                                                 )}
+                                                <button
+                                                    onClick={() => onRemoteIn(device.id)}
+                                                    disabled={device.status === 'Execution Failed'}
+                                                    className="w-full px-4 py-2 bg-cyan-600 text-white text-sm font-semibold rounded-lg hover:bg-cyan-500 transition duration-200 shadow-md focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-opacity-50 disabled:bg-gray-800 disabled:cursor-not-allowed"
+                                                    title="Connect to this device via Remote Desktop."
+                                                >
+                                                    Remote-In
+                                                </button>
                                             </div>
                                         </>
                                     )}
@@ -425,31 +433,62 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
                                         <div className="mt-3 border-t border-gray-700 pt-3">
                                             <h5 className="text-xs font-bold uppercase text-gray-500 mb-2">Post-Imaging Deployment</h5>
                                             <div className="flex flex-col gap-2">
-                                                {device.status === 'Pending File' && (
-                                                    <label className="w-full text-center px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-500 transition duration-200 cursor-pointer">
-                                                        Select Script...
-                                                        <input type="file" className="hidden" onChange={handleFileChange(device.id)} />
-                                                    </label>
+                                                {(device.status === 'Pending File' || device.status === 'Ready for Execution' || device.status === 'Execution Failed') && (
+                                                    <details className="group bg-gray-800 rounded-lg overflow-hidden border border-gray-700" open={device.status === 'Pending File' || device.status === 'Ready for Execution' || device.status === 'Execution Failed'}>
+                                                        <summary className="px-4 py-2 bg-gray-700 text-sm font-semibold text-gray-300 cursor-pointer hover:bg-gray-600 transition-colors flex justify-between items-center">
+                                                            <span>Script Selection & Execution</span>
+                                                            <span className="text-xs text-gray-400 group-open:hidden">Click to expand</span>
+                                                            <span className="text-xs text-gray-400 hidden group-open:inline">Click to collapse</span>
+                                                        </summary>
+                                                        <div className="p-3 flex flex-col gap-2">
+                                                            {(device.status === 'Pending File' || device.status === 'Execution Failed') && (
+                                                                <label className="w-full text-center px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-500 transition duration-200 cursor-pointer">
+                                                                    Select Script...
+                                                                    <input type="file" className="hidden" onChange={handleFileChange(device.id)} />
+                                                                </label>
+                                                            )}
+                                                            {device.status === 'Ready for Execution' && (
+                                                                <>
+                                                                    <p className="text-sm text-gray-300 truncate">File: <span className="font-bold text-gray-100">{device.scriptFile?.name}</span></p>
+                                                                    <button
+                                                                        onClick={() => onExecuteScript(device.id)}
+                                                                        className="w-full px-4 py-2 bg-yellow-500 text-black text-sm font-semibold rounded-lg hover:bg-yellow-400 transition duration-200 shadow-md"
+                                                                    >
+                                                                        Run Script
+                                                                    </button>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    </details>
                                                 )}
-                                                {device.status === 'Ready for Execution' && (
-                                                    <>
-                                                        <p className="text-sm text-gray-300 truncate">File: <span className="font-bold text-gray-100">{device.scriptFile?.name}</span></p>
-                                                        <button
-                                                            onClick={() => onExecuteScript(device.id)}
-                                                            className="w-full px-4 py-2 bg-yellow-500 text-black text-sm font-semibold rounded-lg hover:bg-yellow-400 transition duration-200 shadow-md"
-                                                        >
-                                                            Execute
-                                                        </button>
-                                                    </>
-                                                )}
-                                                {device.status === 'Executing Script' && (
-                                                    <p className="text-sm text-center text-[#39FF14] font-bold animate-pulse">Running script...</p>
-                                                )}
-                                                 {device.status === 'Execution Complete' && (
-                                                    <p className="text-sm text-center text-[#39FF14] font-bold">Deployment successful.</p>
-                                                )}
-                                                {device.status === 'Execution Failed' && (
-                                                    <p className="text-sm text-center text-red-400 font-bold">Deployment failed.</p>
+                                                {(device.status === 'Executing Script' || device.status === 'Execution Complete' || device.status === 'Execution Failed') && (
+                                                    <div className="mt-2 space-y-2">
+                                                        <div className="flex justify-between text-xs text-gray-400 mb-1">
+                                                            <span>{device.status === 'Executing Script' ? 'Running script...' : device.status}</span>
+                                                            <span>{device.scriptProgress || 0}%</span>
+                                                        </div>
+                                                        <div className="w-full bg-gray-800 rounded-full h-2 overflow-hidden">
+                                                            <div 
+                                                                className={`h-2 rounded-full transition-all duration-300 ${device.status === 'Execution Failed' ? 'bg-red-500' : 'bg-[#39FF14]'}`} 
+                                                                style={{ width: `${device.scriptProgress || 0}%` }}
+                                                            ></div>
+                                                        </div>
+                                                        {device.status === 'Execution Failed' && (
+                                                            <div className="text-red-400 text-xs font-bold mt-1">
+                                                                Error: {([...(device.scriptLogs || [])].reverse().find(log => log.includes('[ERROR]') && !log.includes('Execution failed.'))?.replace(/\[.*?\]\s*/, '')) || 'Script execution failed.'}
+                                                            </div>
+                                                        )}
+                                                        <div className="bg-black border border-gray-800 rounded p-2 font-mono text-xs text-gray-300 mt-2">
+                                                            {(device.scriptLogs || []).slice(-5).map((log, idx) => (
+                                                                <div key={idx} className={log.includes('[ERROR]') ? 'text-red-400' : log.includes('[SUCCESS]') ? 'text-[#39FF14]' : ''}>
+                                                                    {log}
+                                                                </div>
+                                                            ))}
+                                                            {(!device.scriptLogs || device.scriptLogs.length === 0) && (
+                                                                <div className="text-gray-600 italic">Waiting for output...</div>
+                                                            )}
+                                                        </div>
+                                                    </div>
                                                 )}
                                             </div>
                                         </div>
@@ -491,7 +530,8 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
                     style={{ left: contextMenu.x, top: contextMenu.y }}
                 >
                     <button
-                        className="w-full text-left px-3 py-2 text-sm text-gray-100 hover:bg-gray-800"
+                        className="w-full text-left px-3 py-2 text-sm text-gray-100 hover:bg-gray-800 disabled:text-gray-500 disabled:cursor-not-allowed"
+                        disabled={devices.find(d => d.id === contextMenu.deviceId)?.status === 'Execution Failed'}
                         onClick={() => {
                             onRemoteIn(contextMenu.deviceId);
                             setContextMenu(null);

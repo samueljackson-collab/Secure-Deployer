@@ -1,3 +1,0 @@
-# Icon files (.png, .ico, .icns) are generated during build.
-# Run: npx @tauri-apps/tauricon to generate from a source image.
-# Required icon sizes: 32x32.png, 128x128.png, 128x128@2x.png, icon.icns, icon.ico
