@@ -80,6 +80,19 @@ fn validate_host(host: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Validate a Windows file-system path for safe use as a PowerShell argument.
+/// Rejects any string that contains shell metacharacters. Mirrors the TypeScript
+/// validateWindowsPath() helper in utils/security.ts.
+fn validate_windows_path(path: &str) -> Result<(), String> {
+    const SHELL_METACHARACTERS: &[char] = &[
+        ';', '&', '|', '`', '$', '(', ')', '{', '}', '<', '>', '\'', '"', '\n', '\r',
+    ];
+    if let Some(ch) = path.chars().find(|c| SHELL_METACHARACTERS.contains(c)) {
+        return Err(format!("Path contains a disallowed character: {:?}", ch));
+    }
+    Ok(())
+}
+
 /// Validate a MAC address: only allow hex digits, colons, and hyphens.
 fn validate_mac(mac: &str) -> Result<(), String> {
     if mac.is_empty() || mac.len() > 17 {
@@ -103,6 +116,8 @@ pub async fn execute_powershell_remote(
     network_share: String,
 ) -> Result<String, String> {
     validate_host(&target_ip)?;
+    validate_windows_path(&usb_path)?;
+    validate_windows_path(&network_share)?;
 
     // All variable user inputs are passed via environment variables so they
     // never appear in the script body, command-line arguments, or process listings.

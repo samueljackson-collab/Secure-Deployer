@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Download, Terminal, Usb, Server, AlertTriangle, CheckCircle, Activity, ChevronRight, ChevronLeft, Play, Copy, RefreshCw, HardDrive, ShieldCheck, Gauge } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { RemoteCredentialModal } from './RemoteCredentialModal';
+import { validateWindowsPath } from '../utils/security';
+import type { Credentials } from '../types'; // used in startRemoteExecution signature
 
 export const PxeTaskSequence: React.FC = () => {
     const [currentStep, setCurrentStep] = useState(1);
@@ -44,6 +47,12 @@ export const PxeTaskSequence: React.FC = () => {
 
     // SCCM Server config
     const [sccmServer, setSccmServer] = useState<string>('');
+
+    // Network share validation error
+    const [networkShareError, setNetworkShareError] = useState<string | null>(null);
+
+    // Controls the credential-collection prompt shown before remote execution
+    const [showCredentialPrompt, setShowCredentialPrompt] = useState(false);
 
     // Tauri availability
     const isTauri = typeof window !== 'undefined' && !!(window as unknown as Record<string, unknown>).__TAURI__;
@@ -221,7 +230,10 @@ timeout /t 5
     };
 
     const handleCopySnippet = () => {
-        const snippet = `net use Z: "${networkShare}" /user:domain\\user password\nZ:\\AutoTag.bat`;
+        const snippet =
+            `$cred = Get-Credential\n` +
+            `net use Z: "${networkShare}" /user:$($cred.UserName) $($cred.GetNetworkCredential().Password)\n` +
+            `Z:\\AutoTag.bat`;
         navigator.clipboard.writeText(snippet);
     };
 
@@ -295,7 +307,7 @@ timeout /t 5
         }, 1000);
     };
 
-    const startRemoteExecution = async () => {
+    const startRemoteExecution = async (creds: Credentials) => {
         if (!remoteIp) return;
         setRemoteStatus('connecting');
         setRemoteLogs([]);
@@ -314,8 +326,8 @@ timeout /t 5
                 const usbPath = selectedUsbPath || 'D:\\';
                 const result = await invoke<string>('execute_powershell_remote', {
                     targetIp: remoteIp,
-                    username: 'domain\\administrator',
-                    password: '',  // credentials should be passed from the credential modal
+                    username: creds.username,
+                    password: creds.password,
                     usbPath,
                     networkShare,
                 });
@@ -495,22 +507,32 @@ timeout /t 5
                                             Network Share Path
                                         </label>
                                         <div className="flex gap-2">
-                                            <input 
-                                                type="text" 
+                                            <input
+                                                type="text"
                                                 value={networkShare}
-                                                onChange={(e) => setNetworkShare(e.target.value)}
-                                                className="flex-grow bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                                onChange={(e) => {
+                                                    setNetworkShare(e.target.value);
+                                                    const result = validateWindowsPath(e.target.value);
+                                                    setNetworkShareError(result.valid ? null : (result.error ?? null));
+                                                }}
+                                                className={`flex-grow bg-gray-900 border rounded px-3 py-2 text-white focus:ring-2 focus:outline-none ${networkShareError ? 'border-red-500 focus:ring-red-500' : 'border-gray-700 focus:ring-blue-500'}`}
                                                 placeholder="\\server\share\AutoTag"
                                             />
-                                            <button 
+                                            <button
                                                 onClick={validateNetworkPath}
-                                                disabled={isValidating}
+                                                disabled={isValidating || !!networkShareError}
                                                 className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-500 disabled:bg-gray-700 disabled:cursor-not-allowed flex items-center gap-2"
                                             >
                                                 {isValidating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
                                                 Validate Access
                                             </button>
                                         </div>
+                                        {networkShareError && (
+                                            <p className="mt-1 text-xs text-red-400 flex items-center gap-1">
+                                                <AlertTriangle size={12} />
+                                                {networkShareError}
+                                            </p>
+                                        )}
                                     </div>
 
                                     {/* Validation Results */}
@@ -743,8 +765,8 @@ timeout /t 5
                                     ) : (
                                         <div className="space-y-2">
                                             <p className="text-sm text-gray-300">Add a &quot;Run Command Line&quot; step to your Task Sequence:</p>
-                                            <div className="bg-black p-3 rounded border border-gray-800 font-mono text-xs text-green-400 overflow-x-auto">
-                                                cmd.exe /c net use Z: &quot;{networkShare}&quot; /user:domain\user password && Z:\AutoTag.bat
+                                            <div className="bg-black p-3 rounded border border-gray-800 font-mono text-xs text-green-400 overflow-x-auto whitespace-pre-line">
+                                                {`$cred = Get-Credential\nnet use Z: "${networkShare}" /user:$($cred.UserName) $($cred.GetNetworkCredential().Password)\nZ:\\AutoTag.bat`}
                                             </div>
                                             <p className="text-xs text-yellow-500 flex items-center gap-1 mt-2">
                                                 <AlertTriangle size={12} />
@@ -789,8 +811,8 @@ timeout /t 5
                                         <div className="mt-4">
                                             <label className="block text-sm font-medium text-gray-400 mb-2">Integration Code Snippet</label>
                                             <div className="flex gap-2">
-                                                <code className="flex-grow bg-black p-3 rounded border border-gray-700 font-mono text-xs text-gray-300 overflow-x-auto">
-                                                    net use Z: &quot;{networkShare}&quot; /user:domain\user password && Z:\AutoTag.bat
+                                                <code className="flex-grow bg-black p-3 rounded border border-gray-700 font-mono text-xs text-gray-300 overflow-x-auto whitespace-pre-line">
+                                                    {`$cred = Get-Credential\nnet use Z: "${networkShare}" /user:$($cred.UserName) $($cred.GetNetworkCredential().Password)\nZ:\\AutoTag.bat`}
                                                 </code>
                                                 <button 
                                                     onClick={handleCopySnippet}
@@ -897,6 +919,17 @@ timeout /t 5
                 </div>
             </div>
 
+            {/* Credential prompt — shown before remote execution starts */}
+            <RemoteCredentialModal
+                isOpen={showCredentialPrompt}
+                deviceHostname={remoteIp || 'target device'}
+                onClose={() => setShowCredentialPrompt(false)}
+                onConfirm={(creds) => {
+                    setShowCredentialPrompt(false);
+                    startRemoteExecution(creds);
+                }}
+            />
+
             {/* Remote Execution Modal */}
             {showRemoteModal && (
                 <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
@@ -922,7 +955,7 @@ timeout /t 5
                                     className="flex-grow bg-gray-800 border border-gray-700 rounded px-4 py-2 text-white focus:ring-2 focus:ring-[#39FF14] focus:outline-none"
                                 />
                                 <button
-                                    onClick={startRemoteExecution}
+                                    onClick={() => setShowCredentialPrompt(true)}
                                     disabled={remoteStatus === 'running' || !remoteIp}
                                     className="px-6 py-2 bg-[#39FF14] text-black font-bold rounded hover:bg-[#32e012] disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
