@@ -304,9 +304,9 @@ export const executeScript = async (
 export const buildRemoteDesktopFile = (device: Device, credentials?: Credentials): string => {
     const sanitizeRdpAddress = (value: string): string => value.replace(/[\x00-\x1F\x7F]/g, '').trim();
     const isValidRdpHost = (value: string): boolean => {
-        const ipv4Pattern = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
-        const hostnamePattern = /^(?=.{1,253}$)(?!-)([A-Za-z0-9-]{1,63}\.)*[A-Za-z0-9-]{1,63}$/;
-        const bracketedIpv6Pattern = /^\[[A-Fa-f0-9:]+\]$/;
+        const ipv4Pattern = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}(:\d+)?$/;
+        const hostnamePattern = /^(?=.{1,253}$)(?!-)([A-Za-z0-9-]{1,63}\.)*[A-Za-z0-9-]{1,63}(:\d+)?$/;
+        const bracketedIpv6Pattern = /^\[[A-Fa-f0-9:]+\](:\d+)?$/;
         const ipv6Pattern = /^[A-Fa-f0-9:]+$/;
         return ipv4Pattern.test(value) || hostnamePattern.test(value) || bracketedIpv6Pattern.test(value) || ipv6Pattern.test(value);
     };
