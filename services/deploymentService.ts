@@ -302,7 +302,18 @@ export const executeScript = async (
 };
 
 export const buildRemoteDesktopFile = (device: Device, credentials?: Credentials): string => {
-    const address = device.ipAddress || device.hostname;
+    const sanitizeRdpAddress = (value: string): string => value.replace(/[\x00-\x1F\x7F]/g, '').trim();
+    const isValidRdpHost = (value: string): boolean => {
+        const ipv4Pattern = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
+        const hostnamePattern = /^(?=.{1,253}$)(?!-)([A-Za-z0-9-]{1,63}\.)*[A-Za-z0-9-]{1,63}$/;
+        const bracketedIpv6Pattern = /^\[[A-Fa-f0-9:]+\]$/;
+        const ipv6Pattern = /^[A-Fa-f0-9:]+$/;
+        return ipv4Pattern.test(value) || hostnamePattern.test(value) || bracketedIpv6Pattern.test(value) || ipv6Pattern.test(value);
+    };
+
+    const rawAddress = device.ipAddress || device.hostname || '';
+    const sanitizedAddress = sanitizeRdpAddress(rawAddress);
+    const address = isValidRdpHost(sanitizedAddress) ? sanitizedAddress : 'localhost';
     const lines = [
         'screen mode id:i:2',
         'use multimon:i:0',
