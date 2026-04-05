@@ -66,7 +66,7 @@ export const ScriptManager: React.FC<ScriptManagerProps> = ({
     };
 
     const handleDelete = () => {
-        if (!editingId) return;
+        if (!editingId || !window.confirm('Are you sure you want to delete this script?')) return;
         onDeleteScript(editingId);
         setEditingId(null);
         setDraftName('');
