@@ -5,6 +5,9 @@
 *.p12
 *.pfx
 *.cer
+*.crt
+*.csr
+*.der
 
 # Logs
 logs

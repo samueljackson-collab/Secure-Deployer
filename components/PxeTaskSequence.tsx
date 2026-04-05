@@ -58,6 +58,14 @@ export const PxeTaskSequence: React.FC = () => {
         generateScripts();
     }, [networkShare]);
 
+    // Validate the initial networkShare value on mount so shareError is
+    // correctly populated if the component is ever pre-filled with an invalid path.
+    useEffect(() => {
+        const result = validateWindowsPath(networkShare);
+        setShareError(result.valid ? '' : (result.error ?? ''));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     useEffect(() => {
         if (remoteLogEndRef.current) {
             remoteLogEndRef.current.scrollIntoView({ behavior: 'smooth' });

@@ -74,8 +74,14 @@ export function validateUsername(username: string): { valid: boolean; error?: st
 // ---------------------------------------------------------------------------
 
 function base64UrlEncode(bytes: Uint8Array): string {
-    // btoa expects a binary string; spread the byte array to get char codes.
-    return btoa(String.fromCharCode(...Array.from(bytes)))
+    // Build the binary string with a loop rather than spread so this function
+    // remains safe for arbitrarily large buffers (spread overflows the call
+    // stack once the array exceeds ~65 k elements).
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary)
         .replace(/\+/g, '-')
         .replace(/\//g, '_')
         .replace(/=/g, '');

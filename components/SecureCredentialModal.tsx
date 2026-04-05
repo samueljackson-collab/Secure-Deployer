@@ -36,6 +36,11 @@ export const SecureCredentialModal: React.FC<SecureCredentialModalProps> = ({ is
         onClose();
     };
 
+    const handleCredentialsChange = (updated: Credentials) => {
+        setCredentials(updated);
+        if (usernameError) setUsernameError('');
+    };
+
     const isFormValid = credentials.username.trim() !== '' && credentials.password.trim() !== '';
 
     return (
@@ -51,7 +56,7 @@ export const SecureCredentialModal: React.FC<SecureCredentialModalProps> = ({ is
                     <p className="text-sm text-gray-400 font-bold mb-4">
                         Please enter your single-use administrative credentials to authorize this deployment session. These credentials are not stored and are used only for this operation.
                     </p>
-                    <CredentialsForm credentials={credentials} setCredentials={setCredentials} />
+                    <CredentialsForm credentials={credentials} setCredentials={handleCredentialsChange} />
                     {usernameError && (
                         <p className="mt-2 text-xs text-red-400 font-semibold" role="alert">
                             {usernameError}
