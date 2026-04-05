@@ -1,6 +1,6 @@
 
-import React, { createContext, useReducer, useContext, useEffect, useCallback, useRef } from 'react';
-import type { AppState, AppAction, AppDispatch, Device, LogEntry, ImagingDevice, DeploymentOperationType, DeploymentBatchSummary } from '../src/types';
+import React, { createContext, useReducer, useContext, useEffect, useCallback } from 'react';
+import type { AppState, AppAction, AppDispatch, Device, LogEntry, ImagingDevice, DeploymentOperationType, DeploymentBatchSummary, SavedScript } from '../src/types';
 import * as api from '../services/deploymentService';
 import Papa from 'papaparse';
 
@@ -15,6 +15,7 @@ const initialState: AppState = {
             maxRetries: 3,
             retryDelay: 2,
             autoRebootEnabled: false,
+            activeScriptId: null,
         },
         isCancelled: false,
         batchHistory: [],
