@@ -232,7 +232,7 @@ timeout /t 5
     const handleCopySnippet = () => {
         const snippet =
             `$cred = Get-Credential\n` +
-            `net use Z: "${networkShare}" /user:$($cred.UserName) $($cred.GetNetworkCredential().Password)\n` +
+            `New-PSDrive -Name Z -PSProvider FileSystem -Root "${networkShare}" -Credential $cred -ErrorAction Stop\n` +
             `Z:\\AutoTag.bat`;
         navigator.clipboard.writeText(snippet);
     };
