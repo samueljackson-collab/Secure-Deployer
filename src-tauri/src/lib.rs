@@ -85,7 +85,7 @@ fn validate_host(host: &str) -> Result<(), String> {
 /// validateWindowsPath() helper in utils/security.ts.
 fn validate_windows_path(path: &str) -> Result<(), String> {
     const SHELL_METACHARACTERS: &[char] = &[
-        ';', '&', '|', '`', '$', '(', ')', '{', '}', '<', '>', '\'', '"', '\n', '\r',
+        ';', '&', '|', '`', '$', '(', ')', '{', '}', '<', '>', '\'', '"', '\n', '\r', '[', ']', '*', '?',
     ];
     if let Some(ch) = path.chars().find(|c| SHELL_METACHARACTERS.contains(c)) {
         return Err(format!("Path contains a disallowed character: {:?}", ch));
