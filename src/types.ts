@@ -83,6 +83,12 @@ export interface DeploymentTemplate {
   scriptContent?: string;
 }
 
+export interface SavedScript {
+  id: string;
+  name: string;
+  content: string;
+}
+
 export interface DeploymentBatchSummary {
   id: number;
   operation: DeploymentOperationType;
@@ -179,6 +185,7 @@ export interface AppState {
             maxRetries: number;
             retryDelay: number;
             autoRebootEnabled: boolean;
+            activeScriptId: string | null;
         };
         isCancelled: boolean;
         batchHistory: DeploymentBatchSummary[];
