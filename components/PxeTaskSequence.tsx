@@ -60,10 +60,10 @@ export const PxeTaskSequence: React.FC = () => {
 
     // Validate the initial networkShare value on mount so shareError is
     // correctly populated if the component is ever pre-filled with an invalid path.
+    // Empty dep array is intentional: this runs once on mount only.
     useEffect(() => {
         const result = validateWindowsPath(networkShare);
         setShareError(result.valid ? '' : (result.error ?? ''));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     useEffect(() => {

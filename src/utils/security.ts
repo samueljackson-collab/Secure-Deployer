@@ -143,6 +143,5 @@ export function useSessionTimeout(timeoutMs: number, onTimeout: () => void): voi
     // onTimeout is intentionally excluded from deps to avoid restarting the
     // timer if the parent component re-renders with a new callback reference.
     // Callers should memoize the callback with useCallback if needed.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [timeoutMs]);
 }

@@ -36,8 +36,8 @@ export const SecureCredentialModal: React.FC<SecureCredentialModalProps> = ({ is
         onClose();
     };
 
-    const handleCredentialsChange = (updated: Credentials) => {
-        setCredentials(updated);
+    const handleCredentialsChange: React.Dispatch<React.SetStateAction<Credentials>> = (value) => {
+        setCredentials(value);
         if (usernameError) setUsernameError('');
     };
 
