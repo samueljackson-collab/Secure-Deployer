@@ -24,19 +24,22 @@ const initialState: AppState = {
                 id: 'template-1',
                 name: 'Standard Office Deployment',
                 description: 'Default settings for standard office workstations. 3 retries, 2s delay, no auto-reboot.',
-                settings: { maxRetries: 3, retryDelay: 2, autoRebootEnabled: false }
+                settings: { maxRetries: 3, retryDelay: 2, autoRebootEnabled: false },
+                packages: []
             },
             {
                 id: 'template-2',
                 name: 'Kiosk Mode Setup',
                 description: 'Aggressive retry settings with auto-reboot enabled for unattended kiosks.',
-                settings: { maxRetries: 10, retryDelay: 5, autoRebootEnabled: true }
+                settings: { maxRetries: 10, retryDelay: 5, autoRebootEnabled: true },
+                packages: []
             },
             {
                 id: 'template-3',
                 name: 'High-Security Workstation',
                 description: 'Single attempt deployment, no auto-reboot, requires manual verification.',
-                settings: { maxRetries: 0, retryDelay: 0, autoRebootEnabled: false }
+                settings: { maxRetries: 0, retryDelay: 0, autoRebootEnabled: false },
+                packages: []
             }
         ]
     },
@@ -486,7 +489,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
              case 'BULK_CANCEL': {
                 addLog(`Cancelling tasks for ${runner.selectedDeviceIds.size} devices...`, 'WARNING');
                 const cancellable: (Device['status'])[] = ['Connecting', 'Retrying...', 'Updating', 'Waking Up', 'Checking Info', 'Checking BIOS', 'Checking DCU', 'Checking Windows', 'Updating BIOS', 'Updating DCU', 'Updating Windows', 'Executing Script'];
-                const newDevices = runner.devices.map(d => runner.selectedDeviceIds.has(d.id) && cancellable.includes(d.status) ? { ...d, status: 'Cancelled' } : d);
+                const newDevices = runner.devices.map(d => runner.selectedDeviceIds.has(d.id) && cancellable.includes(d.status) ? { ...d, status: 'Cancelled' as const } : d);
                 dispatch({ type: 'SET_DEVICES', payload: newDevices });
                 dispatch({ type: 'CLEAR_SELECTIONS' });
                 break;
@@ -494,7 +497,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
             case 'WAKE_ON_LAN': {
                 if (action.payload.size === 0) break;
-                const newDevices = runner.devices.map(d => action.payload.has(d.id) ? { ...d, status: 'Waking Up' } : d);
+                const newDevices = runner.devices.map(d => action.payload.has(d.id) ? { ...d, status: 'Waking Up' as const } : d);
                 dispatch({ type: 'SET_DEVICES', payload: newDevices });
                 addLog(`Sent Wake-on-LAN to ${action.payload.size} device(s).`, 'INFO');
                 dispatch({ type: 'CLEAR_SELECTIONS' });

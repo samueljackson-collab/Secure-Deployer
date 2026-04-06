@@ -1,8 +1,7 @@
 
 
 import { sleep, normalizeMacAddress, detectDeviceType } from '../utils/helpers';
-// FIX: Import DeploymentStatus to correctly type the device state.
-import type { Device, ImagingDevice, DeploymentRun, ChecklistItem, ComplianceResult } from '../types';
+import type { Device, ImagingDevice, DeploymentRun, ChecklistItem, ComplianceResult, Credentials, DeploymentOperationType } from '../types';
 import { TARGET_BIOS_VERSION, TARGET_DCU_VERSION, TARGET_WIN_VERSION } from '../App';
 import { ParseResult } from 'papaparse';
 
@@ -185,8 +184,6 @@ export const updateDevice = async (
     onProgress: (device: Device) => void,
     isCancelled: () => boolean
 ): Promise<void> => {
-    // FIX: Changed `as const` to `as DeploymentStatus` to widen the type of the status property,
-    // allowing it to be updated to other valid deployment statuses. This resolves multiple type errors.
     let currentDeviceState: Device = { ...device, status: 'Updating' };
     onProgress(currentDeviceState);
     

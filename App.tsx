@@ -22,11 +22,9 @@ import { PassedComplianceDetailsModal } from './components/PassedComplianceDetai
 import { RescanConfirmationModal } from './components/RescanConfirmationModal';
 import { RemoteCredentialModal } from './components/RemoteCredentialModal';
 import { PackageManager } from './components/PackageManager';
-// FIX: Import DeviceFormFactor type
 import type { Credentials } from './types';
 import { AppProvider, useAppContext } from './contexts/AppContext';
 
-// FIX: Exported constants to be used across the application for compliance checks.
 export const TARGET_BIOS_VERSION = 'A24';
 export const TARGET_DCU_VERSION = '5.1.0';
 export const TARGET_WIN_VERSION = '23H2';
