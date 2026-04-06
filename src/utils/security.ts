@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 
 // ---------------------------------------------------------------------------
 // Path validation — mirrors the Rust validate_windows_path pattern used in
