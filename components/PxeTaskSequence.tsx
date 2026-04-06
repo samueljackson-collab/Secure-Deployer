@@ -5,7 +5,10 @@ import { validateWindowsPath } from '../src/utils/security';
 
 export const PxeTaskSequence: React.FC = () => {
     const [currentStep, setCurrentStep] = useState(1);
+    // networkShare holds the last *valid* path used by script generation and remote execution.
+    // rawNetworkShare mirrors what is currently typed in the input field and may be invalid.
     const [networkShare, setNetworkShare] = useState<string>('\\\\server\\share\\AutoTag');
+    const [rawNetworkShare, setRawNetworkShare] = useState<string>('\\\\server\\share\\AutoTag');
     const [shareError, setShareError] = useState<string>('');
     const [scriptContent, setScriptContent] = useState<string>('');
     const [activeTab, setActiveTab] = useState<'bat' | 'ps1'>('bat');
@@ -58,11 +61,11 @@ export const PxeTaskSequence: React.FC = () => {
         generateScripts();
     }, [networkShare]);
 
-    // Validate the initial networkShare value on mount so shareError is
+    // Validate the initial raw input value on mount so shareError is
     // correctly populated if the component is ever pre-filled with an invalid path.
     // Empty dep array is intentional: this runs once on mount only.
     useEffect(() => {
-        const result = validateWindowsPath(networkShare);
+        const result = validateWindowsPath(rawNetworkShare);
         setShareError(result.valid ? '' : (result.error ?? ''));
     }, []);
 
@@ -283,9 +286,11 @@ timeout /t 5
         setIsValidating(true);
         setValidationResults({ path: null, permissions: null, diskSpace: null, writeSpeed: null });
 
-        // Simulate validation steps
+        // Simulate validation steps — delegates to the same validator used for
+        // live input checking so Path Format result stays consistent with the
+        // inline error state.
         setTimeout(() => {
-            const isPathValid = /^\\\\[a-zA-Z0-9-._]+\\[a-zA-Z0-9-._\\]+$/.test(networkShare);
+            const isPathValid = validateWindowsPath(networkShare).valid;
             setValidationResults(prev => ({ ...prev, path: isPathValid }));
 
             if (isPathValid) {
@@ -507,13 +512,19 @@ timeout /t 5
                                         <div className="flex gap-2">
                                             <input
                                                 type="text"
-                                                value={networkShare}
+                                                value={rawNetworkShare}
                                                 onChange={(e) => {
                                                     const val = e.target.value;
-                                                    setNetworkShare(val);
+                                                    setRawNetworkShare(val);
                                                     const result = validateWindowsPath(val);
+                                                    if (result.valid) {
+                                                        // Only promote to execution state when the path is valid.
+                                                        setNetworkShare(val);
+                                                    }
                                                     setShareError(result.valid ? '' : (result.error ?? ''));
                                                 }}
+                                                aria-invalid={!!shareError}
+                                                aria-describedby={shareError ? 'share-path-error' : undefined}
                                                 className={`flex-grow bg-gray-900 border rounded px-3 py-2 text-white focus:ring-2 focus:outline-none ${
                                                     shareError
                                                         ? 'border-red-500 focus:ring-red-500'
@@ -531,7 +542,7 @@ timeout /t 5
                                             </button>
                                         </div>
                                         {shareError && (
-                                            <p className="mt-1 text-xs text-red-400 font-semibold flex items-center gap-1" role="alert">
+                                            <p id="share-path-error" className="mt-1 text-xs text-red-400 font-semibold flex items-center gap-1" role="alert">
                                                 <AlertTriangle className="w-3 h-3 shrink-0" />
                                                 {shareError}
                                             </p>

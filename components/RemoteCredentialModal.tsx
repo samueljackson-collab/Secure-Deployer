@@ -35,7 +35,7 @@ export const RemoteCredentialModal: React.FC<RemoteCredentialModalProps> = ({ is
         onClose();
     };
 
-    const handleUsernameChange: React.Dispatch<React.SetStateAction<Credentials>> = (value) => {
+    const handleCredentialsChange: React.Dispatch<React.SetStateAction<Credentials>> = (value) => {
         setCredentials(value);
         // Clear the error as soon as the user edits the field.
         if (usernameError) setUsernameError('');
@@ -76,7 +76,7 @@ export const RemoteCredentialModal: React.FC<RemoteCredentialModalProps> = ({ is
                     </div>
 
                     <div className="space-y-6">
-                        <CredentialsForm credentials={credentials} setCredentials={handleUsernameChange} />
+                        <CredentialsForm credentials={credentials} setCredentials={handleCredentialsChange} />
                         {usernameError && (
                             <p className="text-xs text-red-400 font-semibold -mt-2" role="alert">
                                 {usernameError}
