@@ -302,7 +302,10 @@ export const executeScript = async (
 };
 
 export const buildRemoteDesktopFile = (device: Device, credentials?: Credentials): string => {
-    const address = device.ipAddress || device.hostname;
+    const rawAddress = device.ipAddress || device.hostname || '';
+    const sanitized = rawAddress.replace(/[\x00-\x1F\x7F]/g, '').trim();
+    const isValid = /^[a-zA-Z0-9.\-_[\]:]+$/.test(sanitized) && sanitized.length > 0;
+    const address = isValid ? sanitized : 'localhost';
     const lines = [
         'screen mode id:i:2',
         'use multimon:i:0',
