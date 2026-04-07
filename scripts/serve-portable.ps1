@@ -1,66 +1,79 @@
+#Requires -Version 5.1
 <#
 .SYNOPSIS
-    Secure Deployment Runner - Portable Server
-    Serves the built app using only PowerShell (no Python or Node required).
-
-.USAGE
-    powershell -ExecutionPolicy Bypass -File scripts\serve-portable.ps1
-    powershell -ExecutionPolicy Bypass -File scripts\serve-portable.ps1 -Port 8080
-
+    Secure Deployment Runner — PowerShell HTTP server (USB portable)
 .DESCRIPTION
-    Starts a lightweight HTTP server using .NET HttpListener.
-    Requires the dist/ folder to exist (run 'npm run build' first).
+    Serves the built dist/ folder using System.Net.HttpListener.
+    Falls back when Python is not available. Works on Windows 10/11
+    with no additional software installed.
+.PARAMETER Port
+    TCP port to listen on. Default: 3000
+.PARAMETER DistPath
+    Absolute path to the dist/ folder to serve. Default: auto-detected
+    from script location (../dist relative to scripts/).
+.EXAMPLE
+    .\serve-portable.ps1
+    .\serve-portable.ps1 -Port 8080
+    .\serve-portable.ps1 -Port 3000 -DistPath "D:\dist"
 #>
+
 param(
-    [int]$Port = 3000
+    [int]$Port = 3000,
+    [string]$DistPath = ""
 )
 
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$DistPath  = Join-Path $ScriptDir "..\dist"
-$DistPath  = [System.IO.Path]::GetFullPath($DistPath)
+$ErrorActionPreference = 'Stop'
 
-Write-Host "============================================================" -ForegroundColor Cyan
-Write-Host "  Secure Deployment Runner - Portable Mode" -ForegroundColor Cyan
-Write-Host "============================================================" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "  Serving from: $DistPath" -ForegroundColor White
-Write-Host "  Access at:    http://localhost:$Port" -ForegroundColor Green
-Write-Host ""
-Write-Host "  Press Ctrl+C to stop the server." -ForegroundColor Yellow
-Write-Host "============================================================" -ForegroundColor Cyan
-Write-Host ""
+# Resolve dist path
+if ([string]::IsNullOrEmpty($DistPath)) {
+    $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+    $DistPath  = Join-Path $ScriptDir "..\dist"
+    $DistPath  = (Resolve-Path $DistPath -ErrorAction SilentlyContinue)?.Path
+}
 
-if (-not (Test-Path (Join-Path $DistPath "index.html"))) {
-    Write-Host "[ERROR] dist\index.html not found." -ForegroundColor Red
-    Write-Host "        Run 'npm run build' first." -ForegroundColor Red
+if (-not $DistPath -or -not (Test-Path $DistPath)) {
+    Write-Host "[ERROR] dist/ folder not found at: $DistPath" -ForegroundColor Red
+    Write-Host "        Run 'npm run build' first to generate dist/." -ForegroundColor Yellow
     exit 1
 }
 
-# MIME type map
-$MimeTypes = @{
-    '.html'  = 'text/html; charset=utf-8'
-    '.js'    = 'application/javascript'
-    '.mjs'   = 'application/javascript'
-    '.css'   = 'text/css'
-    '.svg'   = 'image/svg+xml'
-    '.png'   = 'image/png'
-    '.ico'   = 'image/x-icon'
-    '.json'  = 'application/json'
-    '.woff'  = 'font/woff'
-    '.woff2' = 'font/woff2'
-    '.map'   = 'application/json'
-    '.txt'   = 'text/plain'
-}
+$BaseUrl = "http://localhost:$Port/"
+
+Write-Host ""
+Write-Host "============================================================" -ForegroundColor Cyan
+Write-Host "  Secure Deployment Runner - PowerShell HTTP Server" -ForegroundColor Cyan
+Write-Host "============================================================" -ForegroundColor Cyan
+Write-Host "  Serving : $DistPath"
+Write-Host "  URL     : $BaseUrl"
+Write-Host "  Stop    : Press Ctrl+C"
+Write-Host "============================================================" -ForegroundColor Cyan
+Write-Host ""
 
 # Open browser
-Start-Process "http://localhost:$Port" -ErrorAction SilentlyContinue
+Start-Process $BaseUrl
 
-# Start HTTP listener
-$Listener = [System.Net.HttpListener]::new()
-$Listener.Prefixes.Add("http://localhost:$Port/")
+# MIME type map
+$MimeTypes = @{
+    '.html' = 'text/html; charset=utf-8'
+    '.css'  = 'text/css'
+    '.js'   = 'application/javascript'
+    '.mjs'  = 'application/javascript'
+    '.json' = 'application/json'
+    '.svg'  = 'image/svg+xml'
+    '.png'  = 'image/png'
+    '.jpg'  = 'image/jpeg'
+    '.jpeg' = 'image/jpeg'
+    '.ico'  = 'image/x-icon'
+    '.woff' = 'font/woff'
+    '.woff2'= 'font/woff2'
+    '.webmanifest' = 'application/manifest+json'
+}
+
+$Listener = New-Object System.Net.HttpListener
+$Listener.Prefixes.Add($BaseUrl)
 $Listener.Start()
 
-Write-Host "[OK] Server started." -ForegroundColor Green
+Write-Host "[INFO] Listening on $BaseUrl" -ForegroundColor Green
 
 try {
     while ($Listener.IsListening) {
@@ -68,25 +81,31 @@ try {
         $Request  = $Context.Request
         $Response = $Context.Response
 
-        $LocalPath = $Request.Url.LocalPath.TrimStart('/')
-        if (-not $LocalPath) { $LocalPath = 'index.html' }
+        $RawPath = $Request.Url.LocalPath -replace '/', [System.IO.Path]::DirectorySeparatorChar
+        $FilePath = Join-Path $DistPath $RawPath.TrimStart([System.IO.Path]::DirectorySeparatorChar)
 
-        $FilePath = Join-Path $DistPath $LocalPath
-
-        # SPA fallback — serve index.html for unknown routes
-        if (-not (Test-Path $FilePath -PathType Leaf)) {
+        # Default to index.html for SPA routing
+        if ((Test-Path $FilePath -PathType Container) -or -not (Test-Path $FilePath)) {
             $FilePath = Join-Path $DistPath 'index.html'
         }
 
-        $Bytes = [System.IO.File]::ReadAllBytes($FilePath)
-        $Ext   = [System.IO.Path]::GetExtension($FilePath).ToLower()
-        $Mime  = if ($MimeTypes.ContainsKey($Ext)) { $MimeTypes[$Ext] } else { 'application/octet-stream' }
+        if (Test-Path $FilePath) {
+            $Ext         = [System.IO.Path]::GetExtension($FilePath).ToLower()
+            $ContentType = if ($MimeTypes.ContainsKey($Ext)) { $MimeTypes[$Ext] } else { 'application/octet-stream' }
+            $Content     = [System.IO.File]::ReadAllBytes($FilePath)
 
-        $Response.ContentType        = $Mime
-        $Response.ContentLength64    = $Bytes.Length
-        $Response.Headers['Cache-Control'] = 'no-cache'
-        $Response.OutputStream.Write($Bytes, 0, $Bytes.Length)
-        $Response.Close()
+            $Response.ContentType   = $ContentType
+            $Response.ContentLength64 = $Content.Length
+            $Response.StatusCode    = 200
+            $Response.OutputStream.Write($Content, 0, $Content.Length)
+        } else {
+            $Response.StatusCode = 404
+            $NotFound = [System.Text.Encoding]::UTF8.GetBytes("404 Not Found")
+            $Response.ContentLength64 = $NotFound.Length
+            $Response.OutputStream.Write($NotFound, 0, $NotFound.Length)
+        }
+
+        $Response.OutputStream.Close()
     }
 } finally {
     $Listener.Stop()

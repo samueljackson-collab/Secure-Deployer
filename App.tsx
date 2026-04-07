@@ -16,12 +16,13 @@ import { PxeTaskSequence } from './components/PxeTaskSequence';
 import { RemoteDesktop } from './components/RemoteDesktop';
 import { AnalyticsTab } from './components/AnalyticsTab';
 import { DeploymentTemplates } from './components/DeploymentTemplates';
+import { ScriptManager } from './components/ScriptManager';
 import { ComplianceDetailsModal } from './components/ComplianceDetailsModal';
 import { AllComplianceDetailsModal } from './components/AllComplianceDetailsModal';
 import { PassedComplianceDetailsModal } from './components/PassedComplianceDetailsModal';
 import { RescanConfirmationModal } from './components/RescanConfirmationModal';
 import { RemoteCredentialModal } from './components/RemoteCredentialModal';
-import { SystemInfoModal } from './components/SystemInfoModal';
+import { PackageManager } from './components/PackageManager';
 import type { Credentials } from './types';
 import { AppProvider, useAppContext } from './contexts/AppContext';
 
@@ -96,9 +97,9 @@ const AppContent: React.FC = () => {
                                         <div className="space-y-3 pt-2">
                                              <div className="flex items-center justify-between">
                                                 <label htmlFor="maxRetries" className="text-sm text-gray-300 font-bold">Max Retries</label>
-                                                <input 
-                                                    type="number" 
-                                                    id="maxRetries" 
+                                                <input
+                                                    type="number"
+                                                    id="maxRetries"
                                                     value={runner.settings.maxRetries}
                                                     onChange={(e) => dispatch({ type: 'SET_SETTINGS', payload: { maxRetries: Math.max(1, parseInt(e.target.value, 10)) } })}
                                                     className="w-20 bg-gray-800 border border-gray-700 rounded-md px-2 py-1 text-sm text-center"
@@ -106,8 +107,8 @@ const AppContent: React.FC = () => {
                                             </div>
                                              <div className="flex items-center justify-between">
                                                 <label htmlFor="retryDelay" className="text-sm text-gray-300 font-bold">Retry Delay (sec)</label>
-                                                <input 
-                                                    type="number" 
+                                                <input
+                                                    type="number"
                                                     id="retryDelay"
                                                     value={runner.settings.retryDelay}
                                                     onChange={(e) => dispatch({ type: 'SET_SETTINGS', payload: { retryDelay: Math.max(1, parseInt(e.target.value, 10)) } })}
@@ -128,8 +129,19 @@ const AppContent: React.FC = () => {
                                             </div>
                                         </div>
                                     </StepCard>
+                                    <StepCard step="3" title="Deployment Scripts" description="Add new scripts or edit existing ones for deployment.">
+                                        <ScriptManager
+                                            scripts={runner.scripts}
+                                            activeScriptId={runner.settings.activeScriptId}
+                                            onAddScript={(script) => dispatch({ type: 'ADD_SCRIPT', payload: script })}
+                                            onUpdateScript={(script) => dispatch({ type: 'UPDATE_SCRIPT', payload: script })}
+                                            onDeleteScript={(id) => dispatch({ type: 'DELETE_SCRIPT', payload: id })}
+                                            onSetActiveScript={(id) => dispatch({ type: 'SET_ACTIVE_SCRIPT', payload: id })}
+                                        />
+                                    </StepCard>
                                 </div>
                             </div>
+                            <PackageManager />
                              <DeploymentHistory history={runner.history} />
                         </div>
                         <div className="lg:col-span-2 flex flex-col gap-8">
@@ -220,7 +232,6 @@ const AppContent: React.FC = () => {
                 onConfirm={(credentials: Credentials) => dispatch({ type: 'REMOTE_IN_WITH_CREDENTIALS', payload: credentials })}
                 deviceHostname={runner.devices.find(d => d.id === ui.remoteTargetDeviceId)?.hostname || ''}
             />
-            {ui.isSystemInfoModalOpen && <SystemInfoModal />}
         </div>
     );
 };

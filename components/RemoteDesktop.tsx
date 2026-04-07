@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import type { Device } from '../types';
 import { DeviceIcon } from './DeviceIcon';
-import { Search, Monitor, ArrowRight, Shield } from 'lucide-react';
+import { Search, Monitor, ArrowRight, Shield, FileUp, X, FileText } from 'lucide-react';
+import Papa from 'papaparse';
 
 interface RemoteDesktopProps {
     devices: Device[];
@@ -10,11 +11,55 @@ interface RemoteDesktopProps {
 
 export const RemoteDesktop: React.FC<RemoteDesktopProps> = ({ devices, onRemoteIn }) => {
     const [searchTerm, setSearchTerm] = useState('');
+    const [csvTargets, setCsvTargets] = useState<string[]>([]);
+    const [csvFileName, setCsvFileName] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const filteredDevices = devices.filter(device => 
-        device.hostname.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (device.ipAddress && device.ipAddress.includes(searchTerm))
-    );
+    const handleCsvUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setCsvFileName(file.name);
+        Papa.parse(file, {
+            header: true,
+            skipEmptyLines: true,
+            complete: (results) => {
+                const targets: string[] = [];
+                results.data.forEach((row: Record<string, string>) => {
+                    // Look for common column names for hostnames or IPs
+                    const value = row.hostname || row.host || row.ip || row.address || row.IP || row.Hostname;
+                    if (value) {
+                        targets.push(String(value).toLowerCase().trim());
+                    } else {
+                        // If no header match, take the first column value
+                        const firstKey = Object.keys(row)[0];
+                        if (firstKey && row[firstKey]) {
+                            targets.push(String(row[firstKey]).toLowerCase().trim());
+                        }
+                    }
+                });
+                setCsvTargets(targets);
+            }
+        });
+    };
+
+    const clearCsvFilter = () => {
+        setCsvTargets([]);
+        setCsvFileName(null);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    const filteredDevices = devices.filter(device => {
+        const matchesSearch = 
+            device.hostname.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (device.ipAddress && device.ipAddress.includes(searchTerm));
+        
+        const matchesCsv = csvTargets.length === 0 || 
+            csvTargets.includes(device.hostname.toLowerCase()) || 
+            (device.ipAddress && csvTargets.includes(device.ipAddress.toLowerCase()));
+
+        return matchesSearch && matchesCsv;
+    });
 
     return (
         <div className="flex flex-col h-full bg-gray-950 rounded-xl border border-gray-800 overflow-hidden shadow-2xl">
@@ -30,23 +75,55 @@ export const RemoteDesktop: React.FC<RemoteDesktopProps> = ({ devices, onRemoteI
                             Securely connect to managed devices using RDP over SSL.
                         </p>
                     </div>
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-cyan-500/10 border border-cyan-500/20 rounded-full">
-                        <Shield className="w-4 h-4 text-cyan-400" />
-                        <span className="text-xs font-semibold text-cyan-400 uppercase tracking-wider">End-to-End Encrypted</span>
+                    <div className="flex items-center gap-3">
+                        {csvFileName && (
+                            <div className="flex items-center gap-2 px-3 py-1.5 bg-cyan-500/10 border border-cyan-500/20 rounded-lg">
+                                <FileText className="w-4 h-4 text-cyan-400" />
+                                <span className="text-xs font-medium text-cyan-300 truncate max-w-[150px]">{csvFileName}</span>
+                                <button 
+                                    onClick={clearCsvFilter}
+                                    className="p-0.5 hover:bg-cyan-500/20 rounded-full transition-colors"
+                                >
+                                    <X className="w-3 h-3 text-cyan-400" />
+                                </button>
+                            </div>
+                        )}
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-cyan-500/10 border border-cyan-500/20 rounded-full">
+                            <Shield className="w-4 h-4 text-cyan-400" />
+                            <span className="text-xs font-semibold text-cyan-400 uppercase tracking-wider">End-to-End Encrypted</span>
+                        </div>
                     </div>
                 </div>
 
-                <div className="mt-6 relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <Search className="h-5 w-5 text-gray-500" />
+                <div className="mt-6 flex flex-col sm:flex-row gap-3">
+                    <div className="relative flex-grow">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <Search className="h-5 w-5 text-gray-500" />
+                        </div>
+                        <input 
+                            type="text"
+                            placeholder="Search by hostname or IP address..."
+                            className="w-full bg-black/40 border border-gray-700 rounded-xl pl-10 pr-4 py-3 text-sm text-gray-200 placeholder-gray-500 focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all outline-none"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
                     </div>
-                    <input 
-                        type="text"
-                        placeholder="Search by hostname or IP address..."
-                        className="w-full bg-black/40 border border-gray-700 rounded-xl pl-10 pr-4 py-3 text-sm text-gray-200 placeholder-gray-500 focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all outline-none"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
+                    <div className="flex-shrink-0">
+                        <input 
+                            type="file" 
+                            accept=".csv" 
+                            className="hidden" 
+                            ref={fileInputRef}
+                            onChange={handleCsvUpload}
+                        />
+                        <button 
+                            onClick={() => fileInputRef.current?.click()}
+                            className="h-full flex items-center gap-2 px-6 py-3 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-xl text-sm font-bold text-gray-200 transition-all active:scale-95"
+                        >
+                            <FileUp className="w-4 h-4 text-cyan-400" />
+                            Bulk Search (CSV)
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -96,6 +173,15 @@ export const RemoteDesktop: React.FC<RemoteDesktopProps> = ({ devices, onRemoteI
                         <Monitor className="w-12 h-12 mb-4 opacity-20" />
                         <p className="text-lg font-medium">No devices found matching your search</p>
                         <p className="text-sm">Try adjusting your filters or search term</p>
+                        {csvTargets.length > 0 && (
+                            <button 
+                                onClick={clearCsvFilter}
+                                className="mt-4 text-cyan-400 hover:text-cyan-300 text-sm font-bold flex items-center gap-1"
+                            >
+                                <X className="w-4 h-4" />
+                                Clear CSV Filter
+                            </button>
+                        )}
                     </div>
                 )}
             </div>

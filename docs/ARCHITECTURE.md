@@ -1,376 +1,272 @@
 # Secure Deployment Runner — Technical Architecture
 
-> This document outlines the technical architecture of the Secure Deployment Runner. It details the hybrid execution model, global state management, service layer abstraction, the Rust/PowerShell IPC bridge, and the strictly enforced device state machine.
+> **Audience:** Platform engineers and contributors.
+> **Purpose:** Deep-dive reference for the state machine, service layer, data flow, type contracts, and component dependencies.
 
 ---
 
-## Table of Contents
+## High-Level Architecture
 
-1. [High-Level System Context](#1-high-level-system-context)
-2. [Frontend Architecture and Global State](#2-frontend-architecture-and-global-state)
-3. [The Service Layer](#3-the-service-layer-deploymentservicets)
-4. [Native Backend Bridge (Tauri + Rust)](#4-native-backend-bridge-tauri--rust)
-5. [Strict Device State Machine](#5-strict-device-state-machine)
-6. [Core Data Models](#6-core-data-models-srctypests)
-
----
-
-## 1. High-Level System Context
-
-The Secure Deployment Runner is built as a **hybrid-environment React application**. To support highly restrictive corporate environments, offline air-gapped labs, and fully integrated SCCM administrator workstations, the application relies on a strict interface boundary between UI components and the execution layer.
-
-### 1.1 Execution Environments
-
-```mermaid
-flowchart TD
-    UI[React UI / Components] --> Store[AppContext / Reducer]
-    Store --> Service[services/deploymentService.ts]
-    
-    Service -- "window.__TAURI__ undefined" --> Mock[Browser / PWA Mode\nSimulated API & Delays]
-    Service -- "window.__TAURI__ undefined" --> Port[Portable USB Mode\nServed via Python/PS1 HTTP]
-    Service -- "window.__TAURI__ present" --> Tauri[Tauri IPC Bridge]
-    
-    Tauri --> Rust[Rust Backend src-tauri/src/lib.rs]
-    Rust --> PS[PowerShell / OS Native APIs]
-    PS --> SCCM[(SCCM Site Server)]
-    PS --> WinRM[Target Endpoints via WinRM]
+```
+┌─────────────────────────────────────────────────────────┐
+│                  React UI (Browser / PWA)               │
+│                                                         │
+│  ┌──────────────┐   ┌─────────────────────────────────┐ │
+│  │  App.tsx     │   │  Component Tree                 │ │
+│  │  (tab router)│   │  ImageMonitor · ImageRack       │ │
+│  └──────┬───────┘   │  DeviceStatusTable · BulkActions│ │
+│         │           │  LogViewer · DeploymentHistory  │ │
+│         ▼           │  RemoteDesktop · Modals         │ │
+│  ┌──────────────┐   └──────────────────┬──────────────┘ │
+│  │  AppContext  │◄─────────────────────┘                │
+│  │  useReducer  │   (dispatch actions)                   │
+│  └──────┬───────┘                                       │
+│         │  (calls service functions)                     │
+│         ▼                                               │
+│  ┌──────────────┐                                       │
+│  │ Deployment   │   Mock service layer.                 │
+│  │ Service      │   Production: replace with API        │
+│  │              │   adapter targeting real backend.     │
+│  └──────────────┘                                       │
+└─────────────────────────────────────────────────────────┘
 ```
 
-### 1.2 Environment Capability Matrix
+---
 
-| Feature | Browser / PWA | Portable USB (Localhost) | Native Desktop (Tauri) |
-|---|---|---|---|
-| Execution Context | Browser Sandbox | Browser Sandbox | OS Native Window |
-| Backend Integration | Simulated (Math.random()) | Simulated (Math.random()) | Real PowerShell/Rust |
-| SCCM Boot Image Query | Simulated Data | Simulated Data | Get-CMBootImage |
-| Remote Script Exec (WinRM) | Simulated Outcomes | Simulated Outcomes | Native WinRM Session |
-| Hardware USB Detection | Hardcoded mock drives | Hardcoded mock drives | OS Drive Enumeration |
-| Offline Support | Yes (Service Workers) | Yes (Local files) | Yes (Compiled Binary) |
+## State Machine
+
+All application state is owned by `contexts/AppContext.tsx` via a single `useReducer`. State is never mutated outside the reducer.
+
+### Device Lifecycle (Deployment Runner)
+
+```
+Pending
+  └─► Pending Validation
+        └─► Waking Up
+              └─► Connecting
+                    ├─► Retrying... (on connection failure, until max retries)
+                    └─► Checking Info
+                          └─► Checking BIOS
+                                └─► Checking DCU
+                                      └─► Checking Windows
+                                            ├─► Success          (all checks pass)
+                                            ├─► Scan Complete    (one or more checks failed)
+                                            └─► Offline          (retries exhausted)
+
+Scan Complete
+  └─► Updating
+        ├─► Updating BIOS
+        ├─► Updating DCU
+        └─► Updating Windows
+              └─► Update Complete (Reboot Pending)
+                    └─► Rebooting...
+                          ├─► Success
+                          └─► Failed
+
+Pending File
+  └─► Ready for Execution
+        └─► Executing Script
+              ├─► Execution Complete
+              └─► Execution Failed
+```
+
+### Imaging Device Lifecycle (Image Monitor)
+
+```
+Imaging (0–100% progress)
+  └─► Checking Compliance
+        └─► Completed ✅ or Completed with flags ⚠️
+              └─► [Transfer Selected] → Device appears in Deployment Runner as Pending
+```
 
 ---
 
-## 2. Frontend Architecture and Global State
+## Action Type Reference
 
-The frontend is built with React 19.2.x and TypeScript 5.8.x. A global `useReducer` pattern injected via React Context manages the entire application state without external dependencies like Redux.
+All reducer actions are defined in `contexts/AppContext.tsx`. Key actions:
 
-### 2.1 Context Hierarchy
-
-```mermaid
-1.2 Environment Capability MatrixFeatureBrowser / PWAPortable USB (Localhost)Native Desktop (Tauri)Execution ContextBrowser SandboxBrowser SandboxOS Native WindowBackend Integration❌ Simulated (Math.random())❌ Simulated (Math.random())✅ Real PowerShell/RustSCCM Boot Image Query❌ Simulated Data❌ Simulated Data✅ Get-CMBootImageRemote Script Exec (WinRM)❌ Simulated Outcomes❌ Simulated Outcomes✅ Native WinRM SessionHardware USB Detection❌ Hardcoded mock drives❌ Hardcoded mock drives✅ OS Drive EnumerationOffline Support✅ Yes (Service Workers)✅ Yes (Local files)✅ Yes (Compiled Binary)⚛️ 2. Frontend Architecture & Global StateThe frontend is built with React 19.2.x and TypeScript 5.8.x. We utilize a global useReducer pattern injected via React Context to manage the entire application state without external dependencies like Redux.2.1 Context HierarchyCode snippetclassDiagram
-    class AppContext {
-        +Device[] devices
-        +ImagingDevice[] imagingDevices
-        +LogEntry[] logs
-        +Config config
-        +dispatch(Action)
-    }
-    class ViewComponents {
-        <<UI>>
-        DeploymentRunner
-        ImageMonitor
-        Trends
-    }
-    class ActionComponents {
-        <<UI>>
-        BulkActions
-        DeviceStatusTable
-    }
-    AppContext <|-- ViewComponents : Consumes State
-    AppContext <|-- ActionComponents : Dispatches 
-
-⚛️ 2. Frontend Architecture & Global State
-The frontend is built with React 19.2.x and TypeScript 5.8.x. We utilize a global useReducer pattern injected via React Context to manage the entire application state without external dependencies like Redux.
-
-2.1 Context Hierarchy
-Code snippet
-classDiagram
-    class AppContext {
-        +Device[] devices
-        +ImagingDevice[] imagingDevices
-        +LogEntry[] logs
-        +Config config
-        +dispatch(Action)
-    }
-    class ViewComponents {
-        <<UI>>
-        DeploymentRunner
-        ImageMonitor
-        Trends
-    }
-    class ActionComponents {
-        <<UI>>
-        BulkActions
-        DeviceStatusTable
-    }
-    AppContext <|-- ViewComponents : Consumes State
-    AppContext <|-- ActionComponents : Dispatches Actions
-```
-
-### 2.2 Core State Mutations (Reducer Actions)
-
-UI components strictly dispatch typed actions. Direct mutation of the `devices` array is prohibited.
-
-| Action Type | Payload Structure | State Mutation Behavior |
+| Action | Payload | Effect |
 |---|---|---|
-| `ADD_DEVICES` | `Device[]` | Appends normalized, deduplicated devices to the main fleet array. |
-| `UPDATE_DEVICE_STATUS` | `{ id: string, status: DeviceStatus }` | Modifies the status enum for a specific device. Used heavily by the service layer. |
-| `UPDATE_COMPLIANCE` | `{ id: string, results: ComplianceResult }` | Merges new compliance scan data into a device's record. |
-| `TRANSFER_TO_RUNNER` | `string[]` (MAC Addresses) | Removes devices from `imagingDevices` and initializes them in `devices`. |
-| `APPEND_LOG` | `LogEntry` | Pushes a timestamped string and severity to the log array for the LogViewer. |
+| `ADD_DEVICES` | `Device[]` | Appends devices to runner queue |
+| `UPDATE_DEVICE` | `Device` | Replaces device by `id` in runner queue |
+| `REMOVE_DEVICE` | `number` (id) | Removes device from runner queue |
+| `START_DEPLOYMENT_CONFIRMED` | `{ credentials }` | Sets credentials, triggers scan via `runDeploymentFlow` |
+| `DEPLOYMENT_FINISHED` | — | Clears running flag, resets credentials |
+| `CANCEL_DEPLOYMENT` | — | Sets cancellation flag; scan loop checks this each iteration |
+| `ARCHIVE_RUN` | `DeploymentRun` | Prepends run to history (max 10); evicts oldest |
+| `ADD_LOG` | `LogEntry` | Appends entry to log stream |
+| `ADD_IMAGING_DEVICE` | `ImagingDevice` | Adds device to monitor queue |
+| `UPDATE_IMAGING_DEVICE` | `ImagingDevice` | Updates device in monitor queue |
+| `REMOVE_IMAGING_DEVICE` | `string` (id) | Removes device from monitor queue |
+| `TRANSFER_IMAGING_DEVICES_TO_RUNNER` | `string[]` (ids) | Converts imaging devices to runner devices via `transformImagingToRunnerDevices` |
+| `BULK_UPDATE` | `{ deviceIds, ... }` | Runs `updateDevice` for each selected device |
+| `BULK_EXECUTE` | `{ deviceIds, file }` | Runs `executeScript` for each selected device |
+| `RESCAN_ALL_DEVICES_CONFIRMED` | — | Re-runs `validateDevices` on all devices |
 
 ---
 
-## 3. The Service Layer (`deploymentService.ts`)
+## Service Layer Contract
 
-The service layer acts as the application's API boundary. It intercepts all major user intents (e.g., "Scan all devices") and handles the asynchronous orchestration.
+All functions in `services/deploymentService.ts` are designed to match the shape a real backend would expose. To integrate a real backend, replace each function body with an API call while keeping the signature identical.
 
-### 3.1 Orchestration Sequence: `validateDevice`
+### Function Reference
 
-This sequence illustrates how the UI initiates a scan and how the service layer handles the underlying logic, bridging out to Tauri if available.
+| Function | Signature | Simulates |
+|---|---|---|
+| `parseDevicesFromCsv` | `(csvText: string) → { devices: Device[], errors: string[] }` | CSV parsing with row-level validation |
+| `runDeploymentFlow` | `(devices, settings, dispatch, isCancelled) → Promise<void>` | Full sequential scan run |
+| `validateDevice` | `(device, settings, onProgress, isCancelled) → Promise<Device>` | Per-device WoL → connect → validate |
+| `validateDevices` | `(devices, settings, onProgress, isCancelled) → Promise<void>` | Re-validation sweep |
+| `updateDevice` | `(device, settings, onProgress, isCancelled) → Promise<void>` | BIOS → DCU → Windows update |
+| `executeScript` | `(device, file, onProgress) → Promise<Device>` | Post-image script execution |
+| `performDeploymentOperation` | `(device, type, file, onProgress) → Promise<Device>` | Run / Install / Delete file op |
+| `runComplianceChecks` | `(device: ImagingDevice) → Promise<ComplianceResult>` | BitLocker, Citrix, LAPS, SCCM checks |
+| `transformImagingToRunnerDevices` | `(devices: ImagingDevice[]) → Device[]` | Monitor → Runner conversion |
+| `generateRunArchive` | `(devices, startTime, endTime) → DeploymentRun` | End-of-run summary aggregation |
+| `buildRemoteDesktopFile` | `(device, credentials?) → string` | RDP file string builder |
 
-```mermaid
-2.2 Core State Mutations (Reducer Actions)UI components strictly dispatch typed actions. Direct mutation of the devices array is prohibited.Action TypePayload StructureState Mutation BehaviorADD_DEVICESDevice[]Appends normalized, deduplicated devices to the main fleet array.UPDATE_DEVICE_STATUS{ id: string, status: DeviceStatus }Modifies the status enum for a specific device. Used heavily by the service layer.UPDATE_COMPLIANCE{ id: string, results: ComplianceResult }Merges new compliance scan data into a device's record.TRANSFER_TO_RUNNERstring[] (MAC Addresses)Removes devices from imagingDevices and initializes them in devices.APPEND_LOGLogEntryPushes a timestamped string + severity to the log array for the LogViewer.🔌 3. The Service Layer (deploymentService.ts)The service layer acts as the application's API boundary. It intercepts all major user intents (e.g., "Scan all devices") and handles the asynchronous orchestration.3.1 Orchestration Sequence: validateDeviceThis sequence illustrates how the UI initiates a scan and how the service layer handles the underlying logic, bridging out to Tauri if available.Code snippetsequenceDiagram
-    participant UI as React UI (BulkActions)
-    participant Ctx as AppContext (Reducer)
-    participant Svc as deploymentService.ts
-    participant Native as Tauri / Mock Backend
-    
-    UI->>Svc: validateDevices([DeviceA, DeviceB])
-    loop For Each Device
-        Svc->>Ctx: dispatch(UPDATE_STATUS, "Scanning")
-        Svc->>Native: invoke("run_compliance_scan", { target: MAC })
-        alt is Tauri (Native)
-            Native-->>Svc: Real WMI/PowerShell results JSON
-        else is PWA/Browser
-            Native-->>Svc: Simulated response after delay()
-        end
-        Svc->>Ctx: dispatch(UPDATE_COMPLIANCE, results)
-        Svc->>Ctx: dispatch(UPDATE_STATUS, "Scan Complete")
-    end
+### Mock Behavior Parameters
 
-🔌 3. The Service Layer (deploymentService.ts)
-The service layer acts as the application's API boundary. It intercepts all major user intents (e.g., "Scan all devices") and handles the asynchronous orchestration.
-
-3.1 Orchestration Sequence: validateDevice
-This sequence illustrates how the UI initiates a scan and how the service layer handles the underlying logic, bridging out to Tauri if available.
-
-Code snippet
-sequenceDiagram
-    participant UI as React UI (BulkActions)
-    participant Ctx as AppContext (Reducer)
-    participant Svc as deploymentService.ts
-    participant Native as Tauri / Mock Backend
-
-    
-    UI->>Svc: validateDevices([DeviceA, DeviceB])
-    loop For Each Device
-        Svc->>Ctx: dispatch(UPDATE_STATUS, "Scanning")
-        Svc->>Native: invoke("run_compliance_scan", { target: MAC })
-        alt is Tauri (Native)
-            Native-->>Svc: Real WMI/PowerShell results JSON
-        else is PWA/Browser
-            Native-->>Svc: Simulated response after delay()
-        end
-        Svc->>Ctx: dispatch(UPDATE_COMPLIANCE, results)
-        Svc->>Ctx: dispatch(UPDATE_STATUS, "Scan Complete")
-    end
-```
+- **Offline probability:** ~15% per device on connection attempt (simulates network instability)
+- **Update failure rate:** ~15% per update step (simulates firmware/OS update failures)
+- **Script execution failure rate:** ~10% (simulates script errors)
+- **Delays:** `sleep()` calls simulate real-world network and operation latency
 
 ---
 
-## 4. Native Backend Bridge (Tauri + Rust)
+## Type Contract Reference
 
-When built via `npm run tauri:build`, the application sheds its mock layer. The Rust backend acts as a highly performant, memory-safe wrapper around Windows native APIs and `powershell.exe`.
+All types are defined in `src/types.ts` and re-exported via the root `types.ts` barrel.
 
-🦀 4. Native Backend Bridge (Tauri + Rust)
-    When built via npm run tauri:build, the application sheds its mock layer. The Rust backend acts as a highly performant, memory-safe wrapper around Windows native APIs and powershell.exe.4.1 IPC (Inter-Process Communication) Payload FlowAll communication between the React frontend and Rust backend occurs over the Tauri IPC channel using serialized JSON.Example Request from deploymentService.ts:
-
-### 4.1 IPC (Inter-Process Communication) Payload Flow
-
-All communication between the React frontend and Rust backend occurs over the Tauri IPC channel using serialized JSON.
-
-**Example Request from `deploymentService.ts`:**
-
-```javascript
-const response = await invoke('execute_remote_script', {
-    ipAddress: device.ip,
-    scriptContent: payload
-});
-```
-
-**Rust Handler (`lib.rs`):**
-
-- Receives the payload and deserializes `ipAddress` and `scriptContent`
-- Spawns a hidden OS process using `std::process::Command`
-- Invokes PowerShell WinRM to execute the block on the remote IP
-- Captures `stdout` and `stderr`
-- Serializes the result back into a JSON struct (`{ success: bool, output: String }`) and returns it to the frontend
-
-### 4.2 Handling Secure Credentials
-
-To ensure security, administrative credentials entered in the UI are never stored in `localStorage`, Context, or Rust memory state. They are passed as transient byte arrays within the IPC payload directly into the `PSCredential` invocation pipeline, existing only for the duration of the script execution.
-
----
-
-## 5. Strict Device State Machine
-
-Devices undergo a strictly governed lifecycle. The application logic heavily depends on devices existing in the correct status to enable or disable bulk action buttons.
-
-### 5.1 Lifecycle Flow Diagram
-
-```mermaid
-```javascript
-const response = await invoke('execute_remote_script', {  
-    ipAddress: device.ip, 
-    scriptContent: payload 
-});
-
-Rust Handler (lib.rs):Receives the payload and deserializes ipAddress and scriptContent.Spawns a hidden OS process using std::process::Command.Invokes PowerShell WinRM to execute the block on the remote IP.Captures stdout and stderr.Serializes the result back into a JSON struct ({ success: bool, output: String }) and returns it to the frontend.4.2 Handling Secure CredentialsTo ensure security, administrative credentials entered in the UI are never stored in LocalStorage, Context, or Rust memory state. They are passed as transient byte arrays within the IPC payload directly into the PSCredential invocation pipeline, existing only for the duration of the script execution.🔄 5. Strict Device State MachineDevices undergo a strictly governed lifecycle. The application logic heavily depends on devices existing in the correct status to enable or disable bulk action buttons.5.1 Lifecycle Flow DiagramCode snippetstateDiagram-v2
-    [*] --> Imaging : Added via AutoTag
-    Imaging --> Ready : User Transfers to Runner
-    [*] --> Ready : Uploaded via CSV
-    
-    Ready --> Scanning : User clicks "Start Scan"
-    Scanning --> ScanComplete : Validated (Needs Updates)
-    Scanning --> Success : Validated (100% Compliant)
-    Scanning --> Offline : Unreachable (Retries Exhausted)
-    
-    ScanComplete --> Updating : User triggers Updates
-    Updating --> Rebooting : Required post-update
-    Rebooting --> Scanning : Auto-rescan trigger
-    
-    Updating --> Failed : Execution Error
-    Offline --> Scanning : User triggers manual Retry
-    Failed --> Scanning : User triggers manual Retry
-    
-    Success --> [*]
-
-4.2 Handling Secure Credentials
-To ensure security, administrative credentials entered in the UI are never stored in LocalStorage, Context, or Rust memory state. They are passed as transient byte arrays within the IPC payload directly into the PSCredential invocation pipeline, existing only for the duration of the script execution.
-
-🔄 5. Strict Device State Machine
-Devices undergo a strictly governed lifecycle. The application logic heavily depends on devices existing in the correct status to enable or disable bulk action buttons.
-
-5.1 Lifecycle Flow Diagram
-Code snippet
-stateDiagram-v2
-    [*] --> Imaging : Added via AutoTag
-    Imaging --> Ready : User Transfers to Runner
-    [*] --> Ready : Uploaded via CSV
-
-    Ready --> Scanning : User clicks Start Scan
-    Scanning --> ScanComplete : Validated, Needs Updates
-    Scanning --> Success : Validated, 100% Compliant
-    Scanning --> Offline : Unreachable, Retries Exhausted
-
-    ScanComplete --> Updating : User triggers Updates
-    Updating --> Rebooting : Required post-update
-    Rebooting --> Scanning : Auto-rescan trigger
-
-    Updating --> Failed : Execution Error
-    Offline --> Scanning : User triggers manual Retry
-    Failed --> Scanning : User triggers manual Retry
-
-    Success --> [*]
-```
-
-### 5.2 Terminal States and KPI Impact
-
-| State | Terminal? | KPI Category | Next Valid Operator Action |
-|---|---|---|---|
-| Success | Yes | Increases Compliance Rate | Export to Run Archive |
-| Offline | No | Increases Offline Rate | Check physical network, manually retry scan |
-| Failed | No | Increases Failure Rate | Review logs, retry update, or pull for manual triage |
-| Scan Complete | No | Actionable Queue | Trigger BIOS/Windows/Software updates |
-
----
-
-## 6. Core Data Models (`src/types.ts`)
-
-The application revolves around two heavily typed core interfaces. Aligning the simulated mock data and the Rust backend's JSON serialization to these interfaces is critical.
-
-### 6.1 Device Interface
+### Core Types
 
 ```typescript
-    
-    Ready --> Scanning : User clicks "Start Scan"
-    Scanning --> ScanComplete : Validated (Needs Updates)
-    Scanning --> Success : Validated (100% Compliant)
-    Scanning --> Offline : Unreachable (Retries Exhausted)
-    
-    ScanComplete --> Updating : User triggers Updates
-    Updating --> Rebooting : Required post-update
-    Rebooting --> Scanning : Auto-rescan trigger
-    
-    Updating --> Failed : Execution Error
-    Offline --> Scanning : User triggers manual Retry
-    Failed --> Scanning : User triggers manual Retry
-    
-    Success --> [*]
-
-5.2 Terminal States and KPI ImpactStateTerminal?KPI CategoryNext Valid Operator ActionSuccess✅ YesIncreases Compliance RateExport to Run ArchiveOffline❌ NoIncreases Offline RateCheck physical network, manually retry scanFailed❌ NoIncreases Failure RateReview logs, retry update, or pull for manual triageScan Complete❌ NoActionable QueueTrigger BIOS/Windows/Software updates💾 6. Core Data Models (src/types.ts)The application revolves around two heavily typed core interfaces. Aligning the simulated mock data and the Rust backend's JSON serialization to these interfaces is critical.6.1 Device InterfaceTypeScriptinterface Device {
-  id: string;              // UUID
-  hostname: string;        // e.g., LPT-FIN-091
-  macAddress: string;      // Normalized to 00:00:00:00:00:00
-  ipAddress?: string;      // Populated post-scan
-  status: DeviceStatus;    // Enum matching state machine
-  compliance: ComplianceResult | null;
-  lastUpdated: number;     // Unix epoch
-}
-
-💾 6. Core Data Models (src/types.ts)
-The application revolves around two heavily typed core interfaces. Aligning the simulated mock data and the Rust backend's JSON serialization to these interfaces is critical.
-6.1 Device Interface
-TypeScript
+// Device record in the Deployment Runner queue
 interface Device {
-  id: string;              // UUID
-  hostname: string;        // e.g., LPT-FIN-091
-  macAddress: string;      // Normalized to 00:00:00:00:00:00
-  ipAddress?: string;      // Populated post-scan
-  status: DeviceStatus;    // Enum matching state machine
-  compliance: ComplianceResult | null;
-  lastUpdated: number;     // Unix epoch
+    id: number;
+    hostname: string;
+    mac: string;
+    status: DeploymentStatus;
+    deviceType: DeviceFormFactor;
+    biosVersion?: string;
+    dcuVersion?: string;
+    winVersion?: string;
+    encryptionStatus?: 'Enabled' | 'Disabled' | 'Unknown';
+    crowdstrikeStatus?: 'Running' | 'Not Found' | 'Unknown';
+    sccmStatus?: 'Healthy' | 'Unhealthy' | 'Unknown';
+    // ... (see src/types.ts for full definition)
 }
-```
 
-### 6.2 ComplianceResult Interface
-
-```typescript
-interface ComplianceResult {
-
-6.2 ComplianceResult InterfaceTypeScriptinterface ComplianceResult {
-  biosVersion: string;
-  osBuild: string;
-  bitlockerEnabled: boolean;
-  crowdstrikeRunning: boolean;
-  sccmAgentActive: boolean;
-  overallPassed: boolean;  // Computed boolean indicating "Success" readiness
-}
-```
-
-### 6.3 ImagingDevice Interface
-
-`ImagingDevice` is the Image Monitor's representation of a device before it is transferred to the Deployment Runner. Key fields beyond `Device`:
-
-```typescript
+// Imaging device in the Image Monitor queue
 interface ImagingDevice {
-  id: string;
-  hostname: string;
-  macAddress: string;
-  ipAddress: string;
-  serialNumber: string;
-  model: string;
-  assetTag?: string;
-  rackSlot: string;
-  techName: string;
-  progress: number;           // 0–100 imaging progress percentage
-  status: ImagingStatus;      // 'Imaging' | 'CheckingCompliance' | 'Completed' | 'CompletedWithFlags'
-  complianceResults?: ImagingComplianceResult;
+    id: string;
+    hostname: string;
+    mac: string;
+    rackSlot: number;
+    techName: string;
+    model: string;
+    serialNumber: string;
+    ipAddress: string;
+    imagingStatus: ImagingStatus;
+    progress: number;
+    complianceResult?: ComplianceResult;
+}
+
+// Archived run summary
+interface DeploymentRun {
+    id: string;
+    startTime: string;
+    endTime: string;
+    totalDevices: number;
+    successCount: number;
+    failedCount: number;
+    offlineCount: number;
+    devices: Device[];
+}
+
+// Session credentials (never persisted)
+interface Credentials {
+    username: string;
+    password: string;
 }
 ```
 
-`transformImagingToRunnerDevices()` in `services/deploymentService.ts` maps `ImagingDevice[]` to `Device[]` at transfer time, copying identity fields and propagating compliance flag status.
+### Compliance Target Versions
+
+Defined in `App.tsx` (exported) and mirrored in `src/constants.ts`:
+
+```typescript
+export const TARGET_BIOS_VERSION = 'A24';
+export const TARGET_DCU_VERSION  = '5.1.0';
+export const TARGET_WIN_VERSION  = '23H2';
+```
 
 ---
 
-*Document owner: Platform engineer / repo maintainer. Update with each service contract or state machine change. See `README.md` for full documentation index.*
+## Component Dependency Map
+
+```
+App.tsx
+├── components/Header.tsx
+├── components/ImageMonitor.tsx
+│   ├── components/ImageRack.tsx
+│   │   └── components/ComplianceDetailsModal.tsx
+│   └── components/ImageTrends.tsx
+├── components/DeviceStatusTable.tsx
+│   ├── components/DeviceIcon.tsx
+│   ├── components/DeviceContextMenu.tsx
+│   └── components/SystemInfoModal.tsx
+├── components/BulkActions.tsx
+├── components/LogViewer.tsx
+├── components/DeploymentProgress.tsx
+├── components/DeploymentHistory.tsx
+│   └── components/DeploymentAnalytics.tsx
+├── components/ImagingScriptViewer.tsx
+│   └── services/powershellScript.ts  (AUTOTAG_WINPE_SCRIPT constant)
+├── components/PxeTaskSequence.tsx
+├── components/RemoteDesktop.tsx
+│   └── components/RemoteCredentialModal.tsx
+├── components/AnalyticsTab.tsx
+├── components/DeploymentTemplates.tsx
+├── components/PackageManager.tsx
+├── components/StepCard.tsx
+├── components/BuildOutput.tsx
+├── components/SecureCredentialModal.tsx
+│   └── components/CredentialsForm.tsx
+├── components/AllComplianceDetailsModal.tsx
+├── components/PassedComplianceDetailsModal.tsx
+└── components/RescanConfirmationModal.tsx
+
+Shared:
+├── contexts/AppContext.tsx  (global state — all components read/dispatch via useAppContext)
+├── services/deploymentService.ts  (called by AppContext action handlers)
+├── utils/helpers.ts  (normalizeMacAddress, detectDeviceType, sleep)
+├── utils/security.ts  (validateWindowsPath, generatePKCEPair, generateState)
+├── hooks/useLocalStorage.ts  (persists runner settings between sessions)
+└── types.ts → src/types.ts  (all TypeScript interfaces)
+```
+
+---
+
+## Backend Integration Path
+
+To replace the mock service with a real API:
+
+1. Create `services/apiClient.ts` with your HTTP client setup (fetch, axios, etc.).
+2. For each function in `services/deploymentService.ts`, create a matching function in an `services/apiDeploymentService.ts` that calls your backend.
+3. In `contexts/AppContext.tsx`, replace the import:
+   ```typescript
+   // Before:
+   import * as api from '../services/deploymentService';
+   // After:
+   import * as api from '../services/apiDeploymentService';
+   ```
+4. The rest of the app requires no changes — all components interact only with `AppContext`, not the service layer directly.
+
+---
+
+## Related Documents
+
+- [End-to-End Process SOP](./PROCESS.md)
+- [Capacity & Scalability Guide](./CAPACITY.md)
+- [Automation Tiers & PXE Guide](./AUTOMATION.md)

@@ -1,3 +1,4 @@
-// Re-export all types from src/types so that components importing '../types'
-// and root-level files importing './types' both resolve correctly.
+// Root-level re-export barrel.
+// All components import from '../types' and App.tsx imports from './types'.
+// Both resolve here. The canonical source is src/types.ts.
 export * from './src/types';

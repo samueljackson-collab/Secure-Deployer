@@ -1,7 +1,7 @@
 
 
 import { sleep, normalizeMacAddress, detectDeviceType } from '../utils/helpers';
-import type { Device, ImagingDevice, DeploymentRun, ChecklistItem, ComplianceResult, DeploymentStatus, Credentials, DeploymentOperationType } from '../types';
+import type { Device, ImagingDevice, DeploymentRun, ChecklistItem, ComplianceResult, Credentials, DeploymentOperationType } from '../types';
 import { TARGET_BIOS_VERSION, TARGET_DCU_VERSION, TARGET_WIN_VERSION } from '../App';
 import { ParseResult } from 'papaparse';
 
@@ -184,7 +184,7 @@ export const updateDevice = async (
     onProgress: (device: Device) => void,
     isCancelled: () => boolean
 ): Promise<void> => {
-    let currentDeviceState: Device = { ...device, status: 'Updating' as DeploymentStatus };
+    let currentDeviceState: Device = { ...device, status: 'Updating' };
     onProgress(currentDeviceState);
     
     let needsReboot = false;
@@ -238,14 +238,39 @@ export const rebootDevice = async (): Promise<void> => {
     await sleep(8000 + Math.random() * 4000);
 };
 
-export const executeScript = async (device?: Device): Promise<{ success: boolean; output: string; error?: string; troubleshooting?: string }> => {
-    await sleep(3000 + Math.random() * 4000);
+export const executeScript = async (
+    device?: Device,
+    onProgress?: (progress: number, log: string) => void
+): Promise<{ success: boolean; output: string; error?: string; troubleshooting?: string }> => {
     const isSuccess = Math.random() > 0.3;
-    
+    let fullOutput = "";
+
+    const steps = [
+        { msg: `[INFO] Connecting to ${device?.hostname || 'target'}...`, delay: 1000 },
+        { msg: "[INFO] Authenticated successfully.", delay: 800 },
+        { msg: "[INFO] Transferring script payload...", delay: 1500 },
+        { msg: "[INFO] Executing script...", delay: 2000 },
+    ];
+
+    if (isSuccess) {
+        steps.push({ msg: "[SUCCESS] Script completed with exit code 0.", delay: 500 });
+    } else {
+        steps.push({ msg: "[ERROR] Execution failed.", delay: 800 });
+    }
+
+    for (let i = 0; i < steps.length; i++) {
+        const step = steps[i];
+        await sleep(step.delay);
+        fullOutput += step.msg + "\n";
+        if (onProgress) {
+            onProgress(Math.round(((i + 1) / steps.length) * 100), step.msg);
+        }
+    }
+
     if (isSuccess) {
         return {
             success: true,
-            output: `[INFO] Connecting to ${device?.hostname || 'target'}...\n[INFO] Authenticated successfully.\n[INFO] Executing script...\n[SUCCESS] Script completed with exit code 0.`
+            output: fullOutput.trim()
         };
     } else {
         const errors = [
@@ -266,7 +291,7 @@ export const executeScript = async (device?: Device): Promise<{ success: boolean
         
         return {
             success: false,
-            output: `[INFO] Connecting to ${device?.hostname || 'target'}...\n[ERROR] Execution failed.`,
+            output: fullOutput.trim(),
             error: randomError.err,
             troubleshooting: randomError.ts
         };
@@ -274,7 +299,18 @@ export const executeScript = async (device?: Device): Promise<{ success: boolean
 };
 
 export const buildRemoteDesktopFile = (device: Device, credentials?: Credentials): string => {
-    const address = device.ipAddress || device.hostname;
+    const sanitizeRdpAddress = (value: string): string => value.replace(/[\x00-\x1F\x7F]/g, '').trim();
+    const isValidRdpHost = (value: string): boolean => {
+        const ipv4Pattern = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}(:\d+)?$/;
+        const hostnamePattern = /^(?=.{1,253}$)(?!-)([A-Za-z0-9-]{1,63}\.)*[A-Za-z0-9-]{1,63}(:\d+)?$/;
+        const bracketedIpv6Pattern = /^\[[A-Fa-f0-9:]+\](:\d+)?$/;
+        const ipv6Pattern = /^[A-Fa-f0-9:]+$/;
+        return ipv4Pattern.test(value) || hostnamePattern.test(value) || bracketedIpv6Pattern.test(value) || ipv6Pattern.test(value);
+    };
+
+    const rawAddress = device.ipAddress || device.hostname || '';
+    const sanitizedAddress = sanitizeRdpAddress(rawAddress);
+    const address = isValidRdpHost(sanitizedAddress) ? sanitizedAddress : 'localhost';
     const lines = [
         'screen mode id:i:2',
         'use multimon:i:0',

@@ -1,7 +1,0 @@
-Icon PNG files are generated from icon.svg during the Tauri build process.
-To generate manually:
-  npx @tauri-apps/tauricon --input ./public/icons/icon.svg
-
-Required sizes:
-  icon-192.png (192x192) — PWA manifest
-  icon-512.png (512x512) — PWA manifest
