@@ -489,7 +489,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
              case 'BULK_CANCEL': {
                 addLog(`Cancelling tasks for ${runner.selectedDeviceIds.size} devices...`, 'WARNING');
                 const cancellable: (Device['status'])[] = ['Connecting', 'Retrying...', 'Updating', 'Waking Up', 'Checking Info', 'Checking BIOS', 'Checking DCU', 'Checking Windows', 'Updating BIOS', 'Updating DCU', 'Updating Windows', 'Executing Script'];
-                const newDevices = runner.devices.map(d => runner.selectedDeviceIds.has(d.id) && cancellable.includes(d.status) ? { ...d, status: 'Cancelled' as const } : d);
+const newDevices = runner.devices.map(d => runner.selectedDeviceIds.has(d.id) && cancellable.includes(d.status) ? { ...d, status: 'Cancelled' } : d);
                 dispatch({ type: 'SET_DEVICES', payload: newDevices });
                 dispatch({ type: 'CLEAR_SELECTIONS' });
                 break;
