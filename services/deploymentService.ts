@@ -302,30 +302,18 @@ export const executeScript = async (
 };
 
 export const buildRemoteDesktopFile = (device: Device, credentials?: Credentials): string => {
-    const rawAddress = device.ipAddress || device.hostname || '';
-    const sanitized = rawAddress.replace(/[\x00-\x1F\x7F]/g, '').trim();
-export const buildRemoteDesktopFile = (device: Device, credentials?: Credentials): string => {
-    const rawAddress = device.ipAddress || device.hostname || '';
-    const sanitized = rawAddress.replace(/[\x00-\x1F\x7F]/g, '').trim();
-    const isValid = isValidRdpTarget(sanitized);
-    if (!isValid) {
-        throw new Error(`Invalid RDP target address for device "${device.hostname}"`);
-    }
-    const address = sanitized;
-    // ... rest of the function continues
-}
+    const sanitizeRdpAddress = (value: string): string => value.replace(/[\x00-\x1F\x7F]/g, '').trim();
+    const isValidRdpHost = (value: string): boolean => {
+        const ipv4Pattern = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}(:\d+)?$/;
+        const hostnamePattern = /^(?=.{1,253}$)(?!-)([A-Za-z0-9-]{1,63}\.)*[A-Za-z0-9-]{1,63}(:\d+)?$/;
+        const bracketedIpv6Pattern = /^\[[A-Fa-f0-9:]+\](:\d+)?$/;
+        const ipv6Pattern = /^[A-Fa-f0-9:]+$/;
+        return ipv4Pattern.test(value) || hostnamePattern.test(value) || bracketedIpv6Pattern.test(value) || ipv6Pattern.test(value);
+    };
 
-// Add near helpers in this file:
-const isValidRdpTarget = (value: string): boolean => {
-  if (!value) return false;
-  const ipv4 =
-    /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}(:\d{1,5})?$/.test(value);
-  const bracketedIpv6 =
-    /^\[[A-Fa-f0-9:]+\](:\d{1,5})?$/.test(value);
-  const hostname =
-    /^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)*[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?::\d{1,5})?$/.test(value);
-  return ipv4 || bracketedIpv6 || hostname;
-};
+    const rawAddress = device.ipAddress || device.hostname || '';
+    const sanitizedAddress = sanitizeRdpAddress(rawAddress);
+    const address = isValidRdpHost(sanitizedAddress) ? sanitizedAddress : 'localhost';
     const lines = [
         'screen mode id:i:2',
         'use multimon:i:0',

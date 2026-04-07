@@ -269,7 +269,10 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [state, dispatch] = useReducer(appReducer, initialState);
     const stateRef = useRef(state);
-    useEffect(() => { stateRef.current = state; }, [state]);
+
+    useEffect(() => {
+        stateRef.current = state;
+    }, [state]);
 
     const effectRunner = useCallback(async (state: AppState, action: AppAction) => {
         const { runner, ui } = state;
@@ -438,6 +441,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     addLog('No selected devices for bulk deployment operation.', 'WARNING');
                     break;
                 }
+                const startedAt = new Date();
 
                 const operationLabel: Record<DeploymentOperationType, string> = {
                     run: 'Run',
@@ -517,7 +521,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
              case 'REVALIDATE_IMAGING_DEVICES': {
                 addLog(`Starting re-validation for ${action.payload.size} device(s).`, 'INFO');
                  const onProgress = (device: ImagingDevice) => dispatch({ type: 'UPDATE_IMAGING_DEVICE_STATE', payload: device });
-                 const devicesToRevalidate = state.monitor.devices.filter(d => action.payload.has(d.id));
+                 const devicesToRevalidate = stateRef.current.monitor.devices.filter(d => action.payload.has(d.id));
                  await api.revalidateImagingDevices(devicesToRevalidate, onProgress);
                 break;
             }
@@ -544,7 +548,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
 
             case 'REMOTE_IN_WITH_CREDENTIALS': {
-                const device = runner.devices.find(d => d.id === state.ui.remoteTargetDeviceId);
+                const device = runner.devices.find(d => d.id === stateRef.current.ui.remoteTargetDeviceId);
                 if (!device) break;
                 const content = api.buildRemoteDesktopFile(device, action.payload);
                 const blob = new Blob([content], { type: 'application/rdp' });
