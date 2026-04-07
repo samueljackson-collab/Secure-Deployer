@@ -10,7 +10,7 @@
 // Characters that have special meaning in cmd.exe / PowerShell and must never
 // appear in user-supplied paths that are forwarded to a shell.
 const SHELL_METACHARACTERS = [
-  ';', '&', '|', '`', '$', '(', ')', '{', '}', '<', '>', "'", '"', '\n', '\r',
+  ';', '&', '|', '`', '$', '(', ')', '{', '}', '<', '>', "'", '"', '\n', '\r', '[', ']', '*', '?',
 ];
 
 /**
