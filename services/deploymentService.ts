@@ -304,8 +304,28 @@ export const executeScript = async (
 export const buildRemoteDesktopFile = (device: Device, credentials?: Credentials): string => {
     const rawAddress = device.ipAddress || device.hostname || '';
     const sanitized = rawAddress.replace(/[\x00-\x1F\x7F]/g, '').trim();
-    const isValid = /^[a-zA-Z0-9.\-_[\]:]+$/.test(sanitized) && sanitized.length > 0;
-    const address = isValid ? sanitized : 'localhost';
+export const buildRemoteDesktopFile = (device: Device, credentials?: Credentials): string => {
+    const rawAddress = device.ipAddress || device.hostname || '';
+    const sanitized = rawAddress.replace(/[\x00-\x1F\x7F]/g, '').trim();
+    const isValid = isValidRdpTarget(sanitized);
+    if (!isValid) {
+        throw new Error(`Invalid RDP target address for device "${device.hostname}"`);
+    }
+    const address = sanitized;
+    // ... rest of the function continues
+}
+
+// Add near helpers in this file:
+const isValidRdpTarget = (value: string): boolean => {
+  if (!value) return false;
+  const ipv4 =
+    /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}(:\d{1,5})?$/.test(value);
+  const bracketedIpv6 =
+    /^\[[A-Fa-f0-9:]+\](:\d{1,5})?$/.test(value);
+  const hostname =
+    /^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)*[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?::\d{1,5})?$/.test(value);
+  return ipv4 || bracketedIpv6 || hostname;
+};
     const lines = [
         'screen mode id:i:2',
         'use multimon:i:0',
