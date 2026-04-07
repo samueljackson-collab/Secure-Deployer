@@ -1,5 +1,5 @@
 
-import React, { createContext, useReducer, useContext, useEffect, useCallback } from 'react';
+import React, { createContext, useReducer, useContext, useEffect, useCallback, useRef } from 'react';
 import type { AppState, AppAction, AppDispatch, Device, LogEntry, ImagingDevice, DeploymentOperationType, DeploymentBatchSummary, SavedScript } from '../src/types';
 import * as api from '../services/deploymentService';
 import Papa from 'papaparse';
@@ -450,6 +450,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 };
                 addLog(`Starting bulk ${operationLabel[action.payload.operation]} for ${devicesToProcess.length} devices using "${action.payload.file.name}".`, 'INFO');
 
+                const startedAt = new Date();
                 const failuresByReason: Record<string, string[]> = {};
                 for (const device of devicesToProcess) {
                     dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, status: 'Deploying Action' } });
