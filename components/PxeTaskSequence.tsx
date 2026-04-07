@@ -812,7 +812,7 @@ timeout /t 5
                                             <label className="block text-sm font-medium text-gray-400 mb-2">Integration Code Snippet</label>
                                             <div className="flex gap-2">
                                                 <code className="flex-grow bg-black p-3 rounded border border-gray-700 font-mono text-xs text-gray-300 overflow-x-auto whitespace-pre-line">
-                                                    {`$cred = Get-Credential\nnet use Z: "${networkShare}" /user:$($cred.UserName) $($cred.GetNetworkCredential().Password)\nZ:\\AutoTag.bat`}
+                                                    {`$cred = Get-Credential\nNew-PSDrive -Name Z -PSProvider FileSystem -Root "${networkShare}" -Credential $cred -ErrorAction Stop\nZ:\\AutoTag.bat`}
                                                 </code>
                                                 <button 
                                                     onClick={handleCopySnippet}
