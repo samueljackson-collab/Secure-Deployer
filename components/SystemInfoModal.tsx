@@ -31,7 +31,7 @@ export const SystemInfoModal: React.FC = () => {
                     </div>
                     <div className="bg-black/50 p-4 rounded-lg">
                         <h3 className="text-sm font-bold uppercase text-gray-400">Overall Success Rate</h3>
-                        <p className="text-3xl font-bold text-[#39FF14] mt-2">{analytics.averageSuccessRate.toFixed(1)}%</p>
+                        <p className="text-3xl font-bold text-[#39FF14] mt-2">{analytics ? analytics.averageSuccessRate.toFixed(1) : '0.0'}%</p>
                     </div>
                     <div className="bg-black/50 p-4 rounded-lg">
                         <h3 className="text-sm font-bold uppercase text-gray-400">Total Deployment Runs</h3>

@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import type { Credentials } from '../types';
 import { CredentialsForm } from './CredentialsForm';
+import { validateUsername } from '../src/utils/security';
 
 interface SecureCredentialModalProps {
     isOpen: boolean;
@@ -11,20 +12,33 @@ interface SecureCredentialModalProps {
 
 export const SecureCredentialModal: React.FC<SecureCredentialModalProps> = ({ isOpen, onClose, onConfirm }) => {
     const [credentials, setCredentials] = useState<Credentials>({ username: '', password: '' });
+    const [usernameError, setUsernameError] = useState('');
 
     if (!isOpen) {
         return null;
     }
 
     const handleConfirm = () => {
+        const validation = validateUsername(credentials.username);
+        if (!validation.valid) {
+            setUsernameError(validation.error ?? 'Invalid username.');
+            return;
+        }
         onConfirm(credentials);
-        // Reset for next time
+        // Explicit memory-clearing: overwrite fields before releasing the reference.
         setCredentials({ username: '', password: '' });
+        setUsernameError('');
     };
 
     const handleClose = () => {
         setCredentials({ username: '', password: '' });
+        setUsernameError('');
         onClose();
+    };
+
+    const handleCredentialsChange: React.Dispatch<React.SetStateAction<Credentials>> = (value) => {
+        setCredentials(value);
+        if (usernameError) setUsernameError('');
     };
 
     const isFormValid = credentials.username.trim() !== '' && credentials.password.trim() !== '';
@@ -42,7 +56,12 @@ export const SecureCredentialModal: React.FC<SecureCredentialModalProps> = ({ is
                     <p className="text-sm text-gray-400 font-bold mb-4">
                         Please enter your single-use administrative credentials to authorize this deployment session. These credentials are not stored and are used only for this operation.
                     </p>
-                    <CredentialsForm credentials={credentials} setCredentials={setCredentials} />
+                    <CredentialsForm credentials={credentials} setCredentials={handleCredentialsChange} />
+                    {usernameError && (
+                        <p className="mt-2 text-xs text-red-400 font-semibold" role="alert">
+                            {usernameError}
+                        </p>
+                    )}
                 </div>
                 <div className="p-4 bg-black/50 rounded-b-lg flex justify-end space-x-4">
                     <button

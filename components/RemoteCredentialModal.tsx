@@ -2,6 +2,7 @@ import React from 'react';
 import type { Credentials } from '../types';
 import { CredentialsForm } from './CredentialsForm';
 import { X, Shield, Lock, Monitor, ArrowRight } from 'lucide-react';
+import { validateUsername } from '../src/utils/security';
 
 interface RemoteCredentialModalProps {
     isOpen: boolean;
@@ -12,17 +13,32 @@ interface RemoteCredentialModalProps {
 
 export const RemoteCredentialModal: React.FC<RemoteCredentialModalProps> = ({ isOpen, onClose, onConfirm, deviceHostname }) => {
     const [credentials, setCredentials] = React.useState<Credentials>({ username: '', password: '' });
+    const [usernameError, setUsernameError] = React.useState('');
 
     if (!isOpen) return null;
 
     const handleConfirm = () => {
+        const validation = validateUsername(credentials.username);
+        if (!validation.valid) {
+            setUsernameError(validation.error ?? 'Invalid username.');
+            return;
+        }
         onConfirm(credentials);
+        // Explicit memory-clearing: overwrite fields before releasing the reference.
         setCredentials({ username: '', password: '' });
+        setUsernameError('');
     };
 
     const handleClose = () => {
         setCredentials({ username: '', password: '' });
+        setUsernameError('');
         onClose();
+    };
+
+    const handleCredentialsChange: React.Dispatch<React.SetStateAction<Credentials>> = (value) => {
+        setCredentials(value);
+        // Clear the error as soon as the user edits the field.
+        if (usernameError) setUsernameError('');
     };
 
     const isFormValid = credentials.username.trim() !== '' && credentials.password.trim() !== '';
@@ -41,7 +57,7 @@ export const RemoteCredentialModal: React.FC<RemoteCredentialModalProps> = ({ is
                             <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">Secure Gateway Access</p>
                         </div>
                     </div>
-                    <button 
+                    <button
                         onClick={handleClose}
                         className="p-2 hover:bg-gray-800 rounded-full transition-colors text-gray-400 hover:text-white"
                     >
@@ -54,14 +70,19 @@ export const RemoteCredentialModal: React.FC<RemoteCredentialModalProps> = ({ is
                     <div className="flex items-start gap-4 mb-8 p-4 bg-cyan-500/5 border border-cyan-500/10 rounded-xl">
                         <Shield className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
                         <p className="text-sm text-gray-300 leading-relaxed">
-                            Enter credentials for <span className="text-cyan-400 font-bold font-mono">{deviceHostname}</span>. 
+                            Enter credentials for <span className="text-cyan-400 font-bold font-mono">{deviceHostname}</span>.
                             These are used only for this session and are <span className="text-white font-bold underline decoration-cyan-500/50">never stored</span>.
                         </p>
                     </div>
 
                     <div className="space-y-6">
-                        <CredentialsForm credentials={credentials} setCredentials={setCredentials} />
-                        
+                        <CredentialsForm credentials={credentials} setCredentials={handleCredentialsChange} />
+                        {usernameError && (
+                            <p className="text-xs text-red-400 font-semibold -mt-2" role="alert">
+                                {usernameError}
+                            </p>
+                        )}
+
                         <div className="flex items-center gap-2 text-[10px] text-gray-500 font-bold uppercase tracking-widest justify-center">
                             <Lock className="w-3 h-3" />
                             End-to-End Encrypted Session

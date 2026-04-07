@@ -1,3 +1,14 @@
+# Secrets and certificates — must never be committed
+.env
+*.pem
+*.key
+*.p12
+*.pfx
+*.cer
+*.crt
+*.csr
+*.der
+
 # Logs
 logs
 *.log
