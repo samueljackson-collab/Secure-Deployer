@@ -83,12 +83,6 @@ export interface DeploymentTemplate {
   scriptContent?: string;
 }
 
-export interface SavedScript {
-  id: string;
-  name: string;
-  content: string;
-}
-
 export interface DeploymentBatchSummary {
   id: number;
   operation: DeploymentOperationType;
@@ -185,7 +179,6 @@ export interface AppState {
             maxRetries: number;
             retryDelay: number;
             autoRebootEnabled: boolean;
-            activeScriptId: string | null;
         };
         isCancelled: boolean;
         batchHistory: DeploymentBatchSummary[];
@@ -221,8 +214,6 @@ export type AppAction =
   | { type: 'SHOW_COMPLIANCE_DETAILS'; payload: ComplianceResult }
   | { type: 'ADD_LOG'; payload: LogEntry }
   | { type: 'SET_RESCAN_MODAL_OPEN', payload: boolean }
-  | { type: 'SET_SYSTEM_INFO_MODAL_OPEN'; payload: boolean }
-  | { type: 'REMOTE_IN_DEVICE'; payload: number }
 
   // Runner Actions
   | { type: 'START_DEPLOYMENT_PROMPT' }

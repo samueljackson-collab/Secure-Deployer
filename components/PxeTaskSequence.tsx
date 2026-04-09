@@ -1,15 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Download, Terminal, Usb, Server, AlertTriangle, CheckCircle, Activity, ChevronRight, ChevronLeft, Play, Copy, RefreshCw, HardDrive, ShieldCheck, Gauge } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { validateWindowsPath } from '../src/utils/security';
+import { validateWindowsPath } from '../utils/security';
+import { RemoteCredentialModal } from './RemoteCredentialModal';
+import type { Credentials } from '../types';
 
 export const PxeTaskSequence: React.FC = () => {
     const [currentStep, setCurrentStep] = useState(1);
-    // networkShare holds the last *valid* path used by script generation and remote execution.
-    // rawNetworkShare mirrors what is currently typed in the input field and may be invalid.
     const [networkShare, setNetworkShare] = useState<string>('\\\\server\\share\\AutoTag');
-    const [rawNetworkShare, setRawNetworkShare] = useState<string>('\\\\server\\share\\AutoTag');
-    const [shareError, setShareError] = useState<string>('');
+    const [networkShareError, setNetworkShareError] = useState<string | null>(null);
     const [scriptContent, setScriptContent] = useState<string>('');
     const [activeTab, setActiveTab] = useState<'bat' | 'ps1'>('bat');
     const [integrationMethod, setIntegrationMethod] = useState<'usb' | 'pxe'>('pxe');
@@ -42,6 +41,8 @@ export const PxeTaskSequence: React.FC = () => {
     const [remoteProgress, setRemoteProgress] = useState(0);
     const [selectedRemoteScript, setSelectedRemoteScript] = useState<'autotag' | 'custom'>('autotag');
     const [customScriptFile, setCustomScriptFile] = useState<File | null>(null);
+    const [remoteCredentials, setRemoteCredentials] = useState<Credentials | null>(null);
+    const [showRemoteCredentialModal, setShowRemoteCredentialModal] = useState(false);
     const remoteLogEndRef = useRef<HTMLDivElement>(null);
 
     // AutoTag Log Preview States
@@ -52,14 +53,6 @@ export const PxeTaskSequence: React.FC = () => {
         generateScripts();
     }, [networkShare]);
 
-    // Validate the initial raw input value on mount so shareError is
-    // correctly populated if the component is ever pre-filled with an invalid path.
-    // Empty dep array is intentional: this runs once on mount only.
-    useEffect(() => {
-        const result = validateWindowsPath(rawNetworkShare);
-        setShareError(result.valid ? '' : (result.error ?? ''));
-    }, []);
-
     useEffect(() => {
         if (remoteLogEndRef.current) {
             remoteLogEndRef.current.scrollIntoView({ behavior: 'smooth' });
@@ -67,9 +60,9 @@ export const PxeTaskSequence: React.FC = () => {
     }, [remoteLogs]);
 
     const generateScripts = () => {
-        const ps1Script = `# AutoTag.ps1 - Device Metadata Capture for PXE
+        const ps1Script = `# AutoTag.ps1 - Identity Capture for Image Monitor
 # Version: 2.1
-# Description: Captures device metadata (Hostname, MAC, IP, Model, Asset Tag) and saves to JSON.
+# Description: Captures hostname and MAC address and saves to the Image Monitor location.
 # Includes comprehensive logging, error handling, and network share validation.
 
 param (
@@ -132,7 +125,7 @@ if (-not [string]::IsNullOrWhiteSpace($NetworkSharePath)) {
 }
 
 # 3. Gather Hardware Info
-Write-Log "Gathering hardware information..."
+Write-Log "Capturing hostname and MAC address..."
 try {
     $nic = Get-CimInstance -ClassName Win32_NetworkAdapterConfiguration | Where-Object { $_.IPEnabled -and $_.MACAddress } | Select-Object -First 1
     $computerSystem = Get-CimInstance -ClassName Win32_ComputerSystem
@@ -153,11 +146,11 @@ try {
         Timestamp     = Get-Date -Format "yyyy-MM-ddTHH:mm:ss"
     }
     
-    Write-Log "Hardware info gathered successfully."
+    Write-Log "Identity captured successfully."
     $info.GetEnumerator() | ForEach-Object { Write-Log "$($_.Name): $($_.Value)" }
 
 } catch {
-    Write-Log "Failed to gather hardware info: $_" "ERROR"
+    Write-Log "Failed to capture identity: $_" "ERROR"
     exit 1
 }
 
@@ -169,7 +162,7 @@ $jsonContent = $info | ConvertTo-Json -Depth 2
 try {
     $localPath = Join-Path -Path $PSScriptRoot -ChildPath $fileName
     $jsonContent | Out-File -FilePath $localPath -Encoding UTF8
-    Write-Log "Metadata saved locally to: $localPath" "SUCCESS"
+    Write-Log "AutoTag output saved locally to: $localPath" "SUCCESS"
 } catch {
     Write-Log "Failed to save local file: $_" "ERROR"
 }
@@ -179,13 +172,13 @@ if ($NetworkSharePath) {
     try {
         $networkPath = Join-Path -Path $NetworkSharePath -ChildPath $fileName
         $jsonContent | Out-File -FilePath $networkPath -Encoding UTF8
-        Write-Log "Metadata saved to network share: $networkPath" "SUCCESS"
+        Write-Log "AutoTag output saved to Image Monitor: $networkPath" "SUCCESS"
     } catch {
-        Write-Log "Failed to save to network share: $_" "ERROR"
+        Write-Log "Failed to save to Image Monitor: $_" "ERROR"
     }
 }
 
-Write-Log "AutoTag sequence completed successfully."
+Write-Log "AutoTag script completed successfully."
 Start-Sleep -Seconds 3
 `;
 
@@ -225,7 +218,7 @@ timeout /t 5
     };
 
     const handleCopySnippet = () => {
-        const snippet = `net use Z: "${networkShare}" /user:domain\\user password\nZ:\\AutoTag.bat`;
+        const snippet = `$cred = Get-Credential\nnet use Z: "${networkShare}" /user:($cred.UserName) ($cred.GetNetworkCredential().Password)\nZ:\\AutoTag.bat`;
         navigator.clipboard.writeText(snippet);
     };
 
@@ -254,11 +247,9 @@ timeout /t 5
         setIsValidating(true);
         setValidationResults({ path: null, permissions: null, diskSpace: null, writeSpeed: null });
 
-        // Simulate validation steps — delegates to the same validator used for
-        // live input checking so Path Format result stays consistent with the
-        // inline error state.
+        // Simulate validation steps
         setTimeout(() => {
-            const isPathValid = validateWindowsPath(networkShare).valid;
+            const isPathValid = /^\\\\[a-zA-Z0-9-._]+\\[a-zA-Z0-9-._\\]+$/.test(networkShare);
             setValidationResults(prev => ({ ...prev, path: isPathValid }));
 
             if (isPathValid) {
@@ -278,7 +269,7 @@ timeout /t 5
         }, 1000);
     };
 
-    const startRemoteExecution = () => {
+    const startRemoteExecution = (creds: Credentials) => {
         if (!remoteIp) return;
         if (selectedRemoteScript === 'custom' && !customScriptFile) {
             alert("Please select a custom script file.");
@@ -296,7 +287,7 @@ timeout /t 5
 
         if (isSuccess) {
             steps = [
-                { msg: `Connecting to ${remoteIp}...`, delay: 1000 },
+                { msg: `Connecting to ${remoteIp} as ${creds.username}...`, delay: 1000 },
                 { msg: "Connection established. Verifying credentials...", delay: 1500 },
                 { msg: "Authenticated successfully.", delay: 500 },
                 { msg: `Copying ${scriptName} to C:\\Temp\\...`, delay: 2000 },
@@ -304,45 +295,68 @@ timeout /t 5
                 { msg: `[INFO] Starting ${scriptName} Sequence...`, delay: 500 },
                 { msg: "[INFO] Checking network share access...", delay: 800 },
                 { msg: "[SUCCESS] Network share is accessible.", delay: 500 },
-                { msg: "[INFO] Gathering hardware information...", delay: 1200 },
-                { msg: "[INFO] Hardware info gathered successfully.", delay: 500 },
-                { msg: "[SUCCESS] Metadata saved to network share.", delay: 800 },
-                { msg: `[SUCCESS] ${scriptName} sequence completed successfully.`, delay: 500 },
+                { msg: "[INFO] Capturing hostname and MAC address...", delay: 1200 },
+                { msg: "[INFO] Identity captured successfully.", delay: 500 },
+                { msg: "[SUCCESS] AutoTag output saved to Image Monitor.", delay: 800 },
+                { msg: `[SUCCESS] ${scriptName} script completed successfully.`, delay: 500 },
                 { msg: "Remote execution finished.", delay: 500 }
             ];
         } else {
-            const errors = [
+            const errorTypes = [
                 {
+                    type: 'auth',
                     err: "Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))",
                     ts: "Verify that the provided credentials have administrative privileges on the target device. Check if WinRM is configured to allow remote connections."
                 },
                 {
+                    type: 'script',
                     err: `The term '${scriptName}' is not recognized as the name of a cmdlet, function, script file, or operable program.`,
                     ts: "Ensure the required PowerShell module is installed on the target device before running this script."
                 },
                 {
+                    type: 'network',
                     err: "Connecting to remote server failed with the following error message : The WinRM client cannot process the request.",
                     ts: "Check if the target device is online, on the same network, and has the WinRM service running. Verify firewall rules allow port 5985/5986."
                 },
                 {
+                    type: 'share',
                     err: "Cannot find path '\\\\server\\share\\AutoTag' because it does not exist.",
                     ts: "Verify that the network share path is correct and accessible from the target device. Check DNS resolution and network connectivity."
                 }
             ];
-            const randomError = errors[Math.floor(Math.random() * errors.length)];
+            const randomError = errorTypes[Math.floor(Math.random() * errorTypes.length)];
             
-            steps = [
-                { msg: `Connecting to ${remoteIp}...`, delay: 1000 },
-                { msg: "Connection established. Verifying credentials...", delay: 1500 },
-                { msg: "Authenticated successfully.", delay: 500 },
-                { msg: `Copying ${scriptName} to C:\\Temp\\...`, delay: 2000 },
-                { msg: `Starting ${scriptName} execution...`, delay: 1000 },
-                { msg: `[INFO] Starting ${scriptName} Sequence...`, delay: 500 },
-                { msg: "[ERROR] Execution failed.", delay: 800, isError: true },
-                { msg: `[POWERSHELL ERROR] ${randomError.err}`, delay: 500, isError: true },
-                { msg: `[TROUBLESHOOTING] ${randomError.ts}`, delay: 500, isError: true },
-                { msg: "Remote execution aborted.", delay: 500, isError: true }
-            ];
+            if (randomError.type === 'auth') {
+                steps = [
+                    { msg: `Connecting to ${remoteIp} as ${creds.username}...`, delay: 1000 },
+                    { msg: "Connection established. Verifying credentials...", delay: 1500 },
+                    { msg: "[ERROR] Authentication failed.", delay: 500, isError: true },
+                    { msg: `[POWERSHELL ERROR] ${randomError.err}`, delay: 500, isError: true },
+                    { msg: `[TROUBLESHOOTING] ${randomError.ts}`, delay: 500, isError: true },
+                    { msg: "Remote execution aborted.", delay: 500, isError: true }
+                ];
+            } else if (randomError.type === 'network') {
+                steps = [
+                    { msg: `Connecting to ${remoteIp} as ${creds.username}...`, delay: 1000 },
+                    { msg: "[ERROR] Connection failed.", delay: 1500, isError: true },
+                    { msg: `[POWERSHELL ERROR] ${randomError.err}`, delay: 500, isError: true },
+                    { msg: `[TROUBLESHOOTING] ${randomError.ts}`, delay: 500, isError: true },
+                    { msg: "Remote execution aborted.", delay: 500, isError: true }
+                ];
+            } else {
+                steps = [
+                    { msg: `Connecting to ${remoteIp} as ${creds.username}...`, delay: 1000 },
+                    { msg: "Connection established. Verifying credentials...", delay: 1500 },
+                    { msg: "Authenticated successfully.", delay: 500 },
+                    { msg: `Copying ${scriptName} to C:\\Temp\\...`, delay: 2000 },
+                    { msg: `Starting ${scriptName} execution...`, delay: 1000 },
+                    { msg: `[INFO] Starting ${scriptName} Sequence...`, delay: 500 },
+                    { msg: "[ERROR] Execution failed.", delay: 800, isError: true },
+                    { msg: `[POWERSHELL ERROR] ${randomError.err}`, delay: 500, isError: true },
+                    { msg: `[TROUBLESHOOTING] ${randomError.ts}`, delay: 500, isError: true },
+                    { msg: "Remote execution aborted.", delay: 500, isError: true }
+                ];
+            }
         }
 
         let currentStep = 0;
@@ -358,7 +372,8 @@ timeout /t 5
             setRemoteLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${step.msg}`]);
             setRemoteProgress(Math.round(((currentStep + 1) / steps.length) * 100));
             
-            if (currentStep === 4) setRemoteStatus('running');
+            if (currentStep === 4 && isSuccess) setRemoteStatus('running');
+            if (step.isError) setRemoteStatus('failed');
 
             currentStep++;
             setTimeout(executeStep, step.delay);
@@ -372,11 +387,11 @@ timeout /t 5
         // Simulate fetching logs
         setTimeout(() => {
             const newLogs = [
-                `[${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}] [INFO] AutoTag started on HOST-001`,
+                `[${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}] [INFO] AutoTag script started on HOST-001`,
                 `[${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}] [SUCCESS] Network share accessible`,
-                `[${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}] [INFO] Hardware info gathered: Dell Latitude 5420`,
-                `[${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}] [SUCCESS] Metadata saved to ${networkShare}\\DeviceMetadata_HOST-001.json`,
-                `[${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}] [INFO] AutoTag completed`
+                `[${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}] [INFO] Captured hostname and MAC address`,
+                `[${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}] [SUCCESS] AutoTag output saved to Image Monitor`,
+                `[${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}] [INFO] AutoTag script completed`
             ];
             setAutoTagLogs(newLogs);
             setIsRefreshingLogs(false);
@@ -391,7 +406,7 @@ timeout /t 5
                     PXE Task Sequence Wizard
                 </h2>
                 <p className="text-gray-400">
-                    Configure, validate, and deploy the AutoTag sequence for your imaging environment.
+                    Configure the AutoTag script to capture hostname and MAC, save to the Image Monitor, and build the Input CSV for the Secure Deployer Pipeline.
                 </p>
             </div>
 
@@ -435,42 +450,29 @@ timeout /t 5
                                             Network Share Path
                                         </label>
                                         <div className="flex gap-2">
-                                            <input
-                                                type="text"
-                                                value={rawNetworkShare}
+                                            <input 
+                                                type="text" 
+                                                value={networkShare}
                                                 onChange={(e) => {
                                                     const val = e.target.value;
-                                                    setRawNetworkShare(val);
-                                                    const result = validateWindowsPath(val);
-                                                    if (result.valid) {
-                                                        // Only promote to execution state when the path is valid.
-                                                        setNetworkShare(val);
-                                                    }
-                                                    setShareError(result.valid ? '' : (result.error ?? ''));
+                                                    setNetworkShare(val);
+                                                    const validation = validateWindowsPath(val);
+                                                    setNetworkShareError(validation.valid ? null : validation.error || 'Invalid path');
                                                 }}
-                                                aria-invalid={!!shareError}
-                                                aria-describedby={shareError ? 'share-path-error' : undefined}
-                                                className={`flex-grow bg-gray-900 border rounded px-3 py-2 text-white focus:ring-2 focus:outline-none ${
-                                                    shareError
-                                                        ? 'border-red-500 focus:ring-red-500'
-                                                        : 'border-gray-700 focus:ring-blue-500'
-                                                }`}
+                                                className="flex-grow bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
                                                 placeholder="\\server\share\AutoTag"
                                             />
-                                            <button
+                                            <button 
                                                 onClick={validateNetworkPath}
-                                                disabled={isValidating || shareError !== ''}
+                                                disabled={isValidating || networkShareError !== null}
                                                 className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-500 disabled:bg-gray-700 disabled:cursor-not-allowed flex items-center gap-2"
                                             >
                                                 {isValidating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
                                                 Validate Access
                                             </button>
                                         </div>
-                                        {shareError && (
-                                            <p id="share-path-error" className="mt-1 text-xs text-red-400 font-semibold flex items-center gap-1" role="alert">
-                                                <AlertTriangle className="w-3 h-3 shrink-0" />
-                                                {shareError}
-                                            </p>
+                                        {networkShareError && (
+                                            <p className="text-red-400 text-xs mt-1">{networkShareError}</p>
                                         )}
                                     </div>
 
@@ -606,7 +608,7 @@ timeout /t 5
                                     >
                                         <Usb className={`w-8 h-8 ${integrationMethod === 'usb' ? 'text-[#39FF14]' : 'text-gray-500'}`} />
                                         <span className="font-bold">USB Drive (Manual)</span>
-                                        <p className="text-xs text-center text-gray-400">Copy scripts to a USB drive and run manually on target devices.</p>
+                                        <p className="text-xs text-center text-gray-400">Copy scripts to a USB drive and run manually in the Image Monitor.</p>
                                     </button>
                                     
                                     <button 
@@ -620,7 +622,7 @@ timeout /t 5
                                     >
                                         <Server className={`w-8 h-8 ${integrationMethod === 'pxe' ? 'text-[#39FF14]' : 'text-gray-500'}`} />
                                         <span className="font-bold">PXE Server (Automated)</span>
-                                        <p className="text-xs text-center text-gray-400">Integrate directly into your WDS/MDT or SCCM Task Sequence.</p>
+                                        <p className="text-xs text-center text-gray-400">Integrate directly into your SCCM Task Sequence before the BIOS Identity Write phase.</p>
                                     </button>
                                 </div>
 
@@ -631,13 +633,17 @@ timeout /t 5
                                             <li>Create a folder named <code className="bg-gray-800 px-1 rounded text-[#39FF14]">AutoTag</code>.</li>
                                             <li>Download both scripts in the next step.</li>
                                             <li>Copy scripts to the folder.</li>
-                                            <li>Insert USB into target device before PXE boot.</li>
+                                            <li>Insert USB into target device before PXE boot and run AutoTag in the Image Monitor.</li>
                                         </ol>
                                     ) : (
                                         <div className="space-y-2">
                                             <p className="text-sm text-gray-300">Add a &quot;Run Command Line&quot; step to your Task Sequence:</p>
-                                            <div className="bg-black p-3 rounded border border-gray-800 font-mono text-xs text-green-400 overflow-x-auto">
-                                                cmd.exe /c net use Z: &quot;{networkShare}&quot; /user:domain\user password && Z:\AutoTag.bat
+                                            <div className="bg-red-900/20 border border-red-500/50 p-2 rounded mb-2 flex items-start gap-2">
+                                                <AlertTriangle size={16} className="text-red-400 shrink-0 mt-0.5" />
+                                                <p className="text-xs text-red-300">Security Warning: Never hardcode passwords in scripts. Use Get-Credential or a secure string prompt.</p>
+                                            </div>
+                                            <div className="bg-black p-3 rounded border border-gray-800 font-mono text-xs text-green-400 overflow-x-auto whitespace-pre">
+                                                {`$cred = Get-Credential\nnet use Z: "${networkShare}" /user:($cred.UserName) ($cred.GetNetworkCredential().Password)\nZ:\\AutoTag.bat`}
                                             </div>
                                             <p className="text-xs text-yellow-500 flex items-center gap-1 mt-2">
                                                 <AlertTriangle size={12} />
@@ -681,9 +687,13 @@ timeout /t 5
                                     {integrationMethod === 'pxe' && (
                                         <div className="mt-4">
                                             <label className="block text-sm font-medium text-gray-400 mb-2">Integration Code Snippet</label>
+                                            <div className="bg-red-900/20 border border-red-500/50 p-2 rounded mb-2 flex items-start gap-2">
+                                                <AlertTriangle size={16} className="text-red-400 shrink-0 mt-0.5" />
+                                                <p className="text-xs text-red-300">Security Warning: Never hardcode passwords in scripts. Use Get-Credential or a secure string prompt.</p>
+                                            </div>
                                             <div className="flex gap-2">
-                                                <code className="flex-grow bg-black p-3 rounded border border-gray-700 font-mono text-xs text-gray-300 overflow-x-auto">
-                                                    net use Z: &quot;{networkShare}&quot; /user:domain\user password && Z:\AutoTag.bat
+                                                <code className="flex-grow bg-black p-3 rounded border border-gray-700 font-mono text-xs text-gray-300 overflow-x-auto whitespace-pre">
+                                                    {`$cred = Get-Credential\nnet use Z: "${networkShare}" /user:($cred.UserName) ($cred.GetNetworkCredential().Password)\nZ:\\AutoTag.bat`}
                                                 </code>
                                                 <button 
                                                     onClick={handleCopySnippet}
@@ -824,7 +834,13 @@ timeout /t 5
                                         <option value="custom">Custom Script...</option>
                                     </select>
                                     <button 
-                                        onClick={startRemoteExecution}
+                                        onClick={() => {
+                                            if (!remoteCredentials) {
+                                                setShowRemoteCredentialModal(true);
+                                            } else {
+                                                startRemoteExecution(remoteCredentials);
+                                            }
+                                        }}
                                         disabled={remoteStatus === 'running' || !remoteIp || (selectedRemoteScript === 'custom' && !customScriptFile)}
                                         className="px-6 py-2 bg-[#39FF14] text-black font-bold rounded hover:bg-[#32e012] disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
@@ -890,6 +906,19 @@ timeout /t 5
                     </motion.div>
                 </div>
             )}
+            
+            <RemoteCredentialModal 
+                isOpen={showRemoteCredentialModal}
+                onClose={() => setShowRemoteCredentialModal(false)}
+                onConfirm={(creds) => {
+                    setRemoteCredentials(creds);
+                    setShowRemoteCredentialModal(false);
+                    startRemoteExecution(creds);
+                    // Clear credentials after execution starts
+                    setRemoteCredentials(null);
+                }}
+                deviceHostname={remoteIp || 'Target Device'}
+            />
         </div>
     );
 };

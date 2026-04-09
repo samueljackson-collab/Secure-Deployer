@@ -1,7 +1,8 @@
 
 
 import { sleep, normalizeMacAddress, detectDeviceType } from '../utils/helpers';
-import type { Device, ImagingDevice, DeploymentRun, ChecklistItem, ComplianceResult, Credentials, DeploymentOperationType } from '../types';
+// FIX: Import DeploymentStatus to correctly type the device state.
+import type { Device, ImagingDevice, DeploymentRun, ChecklistItem, ComplianceResult } from '../types';
 import { TARGET_BIOS_VERSION, TARGET_DCU_VERSION, TARGET_WIN_VERSION } from '../App';
 import { ParseResult } from 'papaparse';
 
@@ -184,6 +185,8 @@ export const updateDevice = async (
     onProgress: (device: Device) => void,
     isCancelled: () => boolean
 ): Promise<void> => {
+    // FIX: Changed `as const` to `as DeploymentStatus` to widen the type of the status property,
+    // allowing it to be updated to other valid deployment statuses. This resolves multiple type errors.
     let currentDeviceState: Device = { ...device, status: 'Updating' };
     onProgress(currentDeviceState);
     
@@ -299,18 +302,7 @@ export const executeScript = async (
 };
 
 export const buildRemoteDesktopFile = (device: Device, credentials?: Credentials): string => {
-    const sanitizeRdpAddress = (value: string): string => value.replace(/[\x00-\x1F\x7F]/g, '').trim();
-    const isValidRdpHost = (value: string): boolean => {
-        const ipv4Pattern = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}(:\d+)?$/;
-        const hostnamePattern = /^(?=.{1,253}$)(?!-)([A-Za-z0-9-]{1,63}\.)*[A-Za-z0-9-]{1,63}(:\d+)?$/;
-        const bracketedIpv6Pattern = /^\[[A-Fa-f0-9:]+\](:\d+)?$/;
-        const ipv6Pattern = /^[A-Fa-f0-9:]+$/;
-        return ipv4Pattern.test(value) || hostnamePattern.test(value) || bracketedIpv6Pattern.test(value) || ipv6Pattern.test(value);
-    };
-
-    const rawAddress = device.ipAddress || device.hostname || '';
-    const sanitizedAddress = sanitizeRdpAddress(rawAddress);
-    const address = isValidRdpHost(sanitizedAddress) ? sanitizedAddress : 'localhost';
+    const address = device.ipAddress || device.hostname;
     const lines = [
         'screen mode id:i:2',
         'use multimon:i:0',

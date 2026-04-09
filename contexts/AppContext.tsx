@@ -1,6 +1,6 @@
 
-import React, { createContext, useReducer, useContext, useEffect, useCallback, useRef } from 'react';
-import type { AppState, AppAction, AppDispatch, Device, LogEntry, ImagingDevice, DeploymentOperationType, DeploymentBatchSummary, SavedScript } from '../src/types';
+import React, { createContext, useReducer, useContext, useEffect, useCallback } from 'react';
+import type { AppState, AppAction, AppDispatch, Device, LogEntry, ImagingDevice, DeploymentOperationType, DeploymentBatchSummary } from '../src/types';
 import * as api from '../services/deploymentService';
 import Papa from 'papaparse';
 
@@ -15,7 +15,6 @@ const initialState: AppState = {
             maxRetries: 3,
             retryDelay: 2,
             autoRebootEnabled: false,
-            activeScriptId: null,
         },
         isCancelled: false,
         batchHistory: [],
@@ -25,22 +24,19 @@ const initialState: AppState = {
                 id: 'template-1',
                 name: 'Standard Office Deployment',
                 description: 'Default settings for standard office workstations. 3 retries, 2s delay, no auto-reboot.',
-                settings: { maxRetries: 3, retryDelay: 2, autoRebootEnabled: false },
-                packages: []
+                settings: { maxRetries: 3, retryDelay: 2, autoRebootEnabled: false }
             },
             {
                 id: 'template-2',
                 name: 'Kiosk Mode Setup',
                 description: 'Aggressive retry settings with auto-reboot enabled for unattended kiosks.',
-                settings: { maxRetries: 10, retryDelay: 5, autoRebootEnabled: true },
-                packages: []
+                settings: { maxRetries: 10, retryDelay: 5, autoRebootEnabled: true }
             },
             {
                 id: 'template-3',
                 name: 'High-Security Workstation',
                 description: 'Single attempt deployment, no auto-reboot, requires manual verification.',
-                settings: { maxRetries: 0, retryDelay: 0, autoRebootEnabled: false },
-                packages: []
+                settings: { maxRetries: 0, retryDelay: 0, autoRebootEnabled: false }
             }
         ]
     },
@@ -271,11 +267,6 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [state, dispatch] = useReducer(appReducer, initialState);
-    const stateRef = useRef(state);
-
-    useEffect(() => {
-        stateRef.current = state;
-    }, [state]);
 
     const effectRunner = useCallback(async (state: AppState, action: AppAction) => {
         const { runner, ui } = state;
@@ -314,8 +305,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             case 'INITIALIZE_DEPLOYMENT': {
                 const onProgress = (device: Device) => dispatch({ type: 'UPDATE_DEVICE_STATE', payload: device });
                 try {
-                     await api.runDeploymentFlow(action.payload.devices, runner.settings, onProgress, () => stateRef.current.runner.isCancelled);
-                     if (!stateRef.current.runner.isCancelled) {
+                     await api.runDeploymentFlow(action.payload.devices, runner.settings, onProgress, () => state.runner.isCancelled);
+                     if (!state.runner.isCancelled) {
                         addLog("Deployment scan complete.", 'INFO');
                         sendNotification('Deployment Complete', `Scan finished.`);
                         dispatch({ type: 'DEPLOYMENT_FINISHED' });
@@ -324,7 +315,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     addLog(error instanceof Error ? error.message : String(error), 'ERROR');
                     dispatch({ type: 'DEPLOYMENT_FINISHED' });
                 } finally {
-                    if (!stateRef.current.runner.isCancelled) {
+                    if (!state.runner.isCancelled) {
                         dispatch({ type: 'ARCHIVE_RUN' });
                     }
                 }
@@ -347,7 +338,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
                 await Promise.all(deviceIds.map(id => {
                     const device = runner.devices.find(d => d.id === id);
-                    if(device) return api.updateDevice(device, runner.settings, onProgress, () => stateRef.current.runner.isCancelled);
+                    if(device) return api.updateDevice(device, runner.settings, onProgress, () => state.runner.isCancelled);
                 }));
 
                 if (action.type === 'BULK_UPDATE') {
@@ -362,7 +353,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 if (device) {
                     dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, status: 'Rebooting...' } });
                     await api.rebootDevice();
-                    if (!stateRef.current.runner.isCancelled) {
+                    if (!state.runner.isCancelled) {
                         dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, status: 'Success' } });
                         addLog(`[${device.hostname}] Reboot complete.`, 'SUCCESS');
                     }
@@ -376,7 +367,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 addLog(`Initiating validation for ${deviceIds.size} device(s)...`, 'INFO');
                 const onProgress = (device: Device) => dispatch({ type: 'UPDATE_DEVICE_STATE', payload: device });
                 const devicesToValidate = runner.devices.filter(d => deviceIds.has(d.id));
-                await api.validateDevices(devicesToValidate, onProgress, () => stateRef.current.runner.isCancelled);
+                await api.validateDevices(devicesToValidate, onProgress, () => state.runner.isCancelled);
                 addLog('Manual validation scan complete.', 'INFO');
                 dispatch({ type: 'CLEAR_SELECTIONS' });
                 break;
@@ -415,7 +406,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     };
 
                     const success = await api.executeScript(device, onProgress);
-                    if (!stateRef.current.runner.isCancelled) {
+                    if (!state.runner.isCancelled) {
                          dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, status: success.success ? 'Execution Complete' : 'Execution Failed' } });
                          if (!success.success && success.error) {
                              dispatch({ type: 'APPEND_SCRIPT_LOG', payload: { id: device.id, log: `[ERROR] ${success.error}` } });
@@ -444,7 +435,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     addLog('No selected devices for bulk deployment operation.', 'WARNING');
                     break;
                 }
-                const startedAt = new Date();
 
                 const operationLabel: Record<DeploymentOperationType, string> = {
                     run: 'Run',
@@ -453,7 +443,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 };
                 addLog(`Starting bulk ${operationLabel[action.payload.operation]} for ${devicesToProcess.length} devices using "${action.payload.file.name}".`, 'INFO');
 
-                const startedAt = new Date();
                 const failuresByReason: Record<string, string[]> = {};
                 for (const device of devicesToProcess) {
                     dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, status: 'Deploying Action' } });
@@ -470,7 +459,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     id: Date.now(),
                     operation: action.payload.operation,
                     targetName: action.payload.file.name,
-                    startedAt,
+                    startedAt: new Date(),
                     failuresByReason,
                 };
                 dispatch({ type: 'SET_BATCH_HISTORY', payload: [batchSummary, ...runner.batchHistory].slice(0, 5) });
@@ -497,7 +486,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
              case 'BULK_CANCEL': {
                 addLog(`Cancelling tasks for ${runner.selectedDeviceIds.size} devices...`, 'WARNING');
                 const cancellable: (Device['status'])[] = ['Connecting', 'Retrying...', 'Updating', 'Waking Up', 'Checking Info', 'Checking BIOS', 'Checking DCU', 'Checking Windows', 'Updating BIOS', 'Updating DCU', 'Updating Windows', 'Executing Script'];
-const newDevices = runner.devices.map(d => runner.selectedDeviceIds.has(d.id) && cancellable.includes(d.status) ? { ...d, status: 'Cancelled' } : d);
+                const newDevices = runner.devices.map(d => runner.selectedDeviceIds.has(d.id) && cancellable.includes(d.status) ? { ...d, status: 'Cancelled' } : d);
                 dispatch({ type: 'SET_DEVICES', payload: newDevices });
                 dispatch({ type: 'CLEAR_SELECTIONS' });
                 break;
@@ -505,7 +494,7 @@ const newDevices = runner.devices.map(d => runner.selectedDeviceIds.has(d.id) &&
 
             case 'WAKE_ON_LAN': {
                 if (action.payload.size === 0) break;
-                const newDevices = runner.devices.map(d => action.payload.has(d.id) ? { ...d, status: 'Waking Up' as const } : d);
+                const newDevices = runner.devices.map(d => action.payload.has(d.id) ? { ...d, status: 'Waking Up' } : d);
                 dispatch({ type: 'SET_DEVICES', payload: newDevices });
                 addLog(`Sent Wake-on-LAN to ${action.payload.size} device(s).`, 'INFO');
                 dispatch({ type: 'CLEAR_SELECTIONS' });
@@ -524,7 +513,7 @@ const newDevices = runner.devices.map(d => runner.selectedDeviceIds.has(d.id) &&
              case 'REVALIDATE_IMAGING_DEVICES': {
                 addLog(`Starting re-validation for ${action.payload.size} device(s).`, 'INFO');
                  const onProgress = (device: ImagingDevice) => dispatch({ type: 'UPDATE_IMAGING_DEVICE_STATE', payload: device });
-                 const devicesToRevalidate = stateRef.current.monitor.devices.filter(d => action.payload.has(d.id));
+                 const devicesToRevalidate = state.monitor.devices.filter(d => action.payload.has(d.id));
                  await api.revalidateImagingDevices(devicesToRevalidate, onProgress);
                 break;
             }
@@ -533,8 +522,8 @@ const newDevices = runner.devices.map(d => runner.selectedDeviceIds.has(d.id) &&
                 if (runner.devices.length === 0) break;
                 const onProgress = (device: Device) => dispatch({ type: 'UPDATE_DEVICE_STATE', payload: device });
                 try {
-                    await api.validateDevices(runner.devices, onProgress, () => stateRef.current.runner.isCancelled);
-                    if (!stateRef.current.runner.isCancelled) {
+                    await api.validateDevices(runner.devices, onProgress, () => state.runner.isCancelled);
+                    if (!state.runner.isCancelled) {
                         addLog("Full re-scan complete.", 'INFO');
                         sendNotification('Re-Scan Complete', `Scan finished for all devices.`);
                         dispatch({ type: 'DEPLOYMENT_FINISHED' });
@@ -543,7 +532,7 @@ const newDevices = runner.devices.map(d => runner.selectedDeviceIds.has(d.id) &&
                     addLog(error instanceof Error ? error.message : String(error), 'ERROR');
                     dispatch({ type: 'DEPLOYMENT_FINISHED' });
                 } finally {
-                    if (!stateRef.current.runner.isCancelled) {
+                    if (!state.runner.isCancelled) {
                         dispatch({ type: 'ARCHIVE_RUN' });
                     }
                 }
@@ -551,7 +540,7 @@ const newDevices = runner.devices.map(d => runner.selectedDeviceIds.has(d.id) &&
             }
 
             case 'REMOTE_IN_WITH_CREDENTIALS': {
-                const device = runner.devices.find(d => d.id === stateRef.current.ui.remoteTargetDeviceId);
+                const device = runner.devices.find(d => d.id === state.ui.remoteTargetDeviceId);
                 if (!device) break;
                 const content = api.buildRemoteDesktopFile(device, action.payload);
                 const blob = new Blob([content], { type: 'application/rdp' });
@@ -579,11 +568,10 @@ const newDevices = runner.devices.map(d => runner.selectedDeviceIds.has(d.id) &&
     }, [dispatch]);
 
     const wrappedDispatch = useCallback((action: AppAction) => {
-        const newState = appReducer(stateRef.current, action);
-        stateRef.current = newState;
+        const newState = appReducer(state, action);
         dispatch(action);
         effectRunner(newState, action);
-    }, [effectRunner]);
+    }, [state, effectRunner]);
 
     useEffect(() => {
         const checkCompliance = async () => {

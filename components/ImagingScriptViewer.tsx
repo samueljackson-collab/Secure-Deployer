@@ -2,14 +2,56 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ImagingDevice } from '../types';
 import { FileCode, Play, Save, Terminal, Activity, CheckCircle, AlertTriangle, X, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AUTOTAG_WINPE_SCRIPT } from '../services/powershellScript';
 
 interface ImagingScriptViewerProps {
     devices: ImagingDevice[];
 }
 
 export const ImagingScriptViewer: React.FC<ImagingScriptViewerProps> = ({ devices }) => {
-    const [scriptContent, setScriptContent] = useState<string>(AUTOTAG_WINPE_SCRIPT);
+    const [scriptContent, setScriptContent] = useState<string>(`# Full Windows Imaging Script (WinPE/DISM)
+# This script executes the complete imaging sequence for enterprise deployment.
+# It assumes the environment is booted into WinPE and network shares are mapped.
+
+echo "====================================================="
+echo "        Enterprise Windows Imaging Sequence          "
+echo "====================================================="
+
+echo "[INFO] Step 1: Cleaning and partitioning disk 0..."
+# Using a predefined diskpart script to ensure consistent partition layout (UEFI/GPT)
+diskpart /s X:\\Windows\\System32\\diskpart_script.txt
+# (diskpart_script.txt contains: select disk 0, clean, convert gpt, create partition efi size=100, format quick fs=fat32 label="System", assign letter="S", create partition msr size=16, create partition primary, format quick fs=ntfs label="Windows", assign letter="W")
+
+echo "[INFO] Step 2: Applying Windows Image (install.wim)..."
+# Applying the customized enterprise WIM image to the Windows partition
+dism /Apply-Image /ImageFile:Z:\\Images\\Windows11_Enterprise_22H2_Custom.wim /Index:1 /ApplyDir:W:\\
+
+echo "[INFO] Step 3: Creating Boot Files (BCDBoot)..."
+# Writing boot environment files to the EFI system partition
+W:\\Windows\\System32\\bcdboot W:\\Windows /s S: /f ALL
+
+echo "[INFO] Step 4: Injecting Device Drivers..."
+# Recursively adding out-of-box drivers based on the detected hardware model
+dism /Image:W:\\ /Add-Driver /Driver:Z:\\Drivers\\Model_Specific /Recurse
+
+echo "[INFO] Step 5: Applying Unattend.xml (Sysprep configuration)..."
+# Copying the answer file for OOBE automation, domain join, and local admin setup
+copy Z:\\Configs\\unattend.xml W:\\Windows\\System32\\Sysprep\\unattend.xml
+
+echo "[INFO] Step 6: Setting up Recovery Environment (WinRE)..."
+# Configuring the Windows Recovery Environment
+md W:\\Recovery\\WindowsRE
+copy W:\\Windows\\System32\\Recovery\\winre.wim W:\\Recovery\\WindowsRE\\winre.wim
+W:\\Windows\\System32\\reagentc /setreimage /path W:\\Recovery\\WindowsRE /target W:\\Windows
+
+echo "[INFO] Step 7: Applying Custom Registry Settings..."
+# Loading the offline registry hive to apply enterprise policies before first boot
+reg load HKLM\\Offline W:\\Windows\\System32\\config\\SOFTWARE
+reg import Z:\\Configs\\EnterprisePolicies.reg
+reg unload HKLM\\Offline
+
+echo "[SUCCESS] Imaging complete. System will reboot shortly."
+wpeutil reboot
+`);
 
     const [isExecuting, setIsExecuting] = useState(false);
     const [executionProgress, setExecutionProgress] = useState(0);

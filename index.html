@@ -1,16 +1,41 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="
+      default-src 'self';
+      script-src 'self' https://cdn.tailwindcss.com https://esm.sh 'unsafe-inline';
+      style-src 'self' 'unsafe-inline';
+      connect-src 'self' https://login.microsoftonline.com https://*.windows.net https://accounts.google.com https://oauth2.googleapis.com https://*.okta.com https://*.okta-emea.com;
+      img-src 'self' data: blob: https:;
+      worker-src 'self' blob:;
+      object-src 'none';
+      base-uri 'self';
+      form-action 'self';
+    ">
     <link rel="icon" type="image/svg+xml" href="/pwa-icon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#000000" />
     <link rel="apple-touch-icon" href="/pwa-icon.svg" />
     <title>Secure Deployment Runner</title>
-    <link rel="stylesheet" href="/src/index.css">
-  </head>
+    <script src="https://cdn.tailwindcss.com"></script>
+
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-dom/client": "https://esm.sh/react-dom@^19.2.4/client",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "papaparse": "https://esm.sh/papaparse@^5.5.3"
+  }
+}
+</script>
+<link rel="stylesheet" href="/src/index.css">
+</head>
   <body class="bg-black text-gray-200">
     <div id="root"></div>
-    <script type="module" src="/src/index.tsx"></script>
-  </body>
+  <script type="module" src="/src/index.tsx"></script>
+</body>
 </html>
