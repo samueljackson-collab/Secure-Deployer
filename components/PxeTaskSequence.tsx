@@ -766,7 +766,7 @@ timeout /t 5
                                         <div className="space-y-2">
                                             <p className="text-sm text-gray-300">Add a &quot;Run Command Line&quot; step to your Task Sequence:</p>
                                             <div className="bg-black p-3 rounded border border-gray-800 font-mono text-xs text-green-400 overflow-x-auto whitespace-pre-line">
-                                                {`$cred = Get-Credential\nnet use Z: "${networkShare}" /user:$($cred.UserName) $($cred.GetNetworkCredential().Password)\nZ:\\AutoTag.bat`}
+                                                {`$cred = Get-Credential\nNew-PSDrive -Name Z -PSProvider FileSystem -Root "${networkShare}" -Credential $cred -ErrorAction Stop\nZ:\\AutoTag.bat`}
                                             </div>
                                             <p className="text-xs text-yellow-500 flex items-center gap-1 mt-2">
                                                 <AlertTriangle size={12} />
