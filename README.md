@@ -732,8 +732,7 @@ secure-deployer/
 │
 ├── services/
 │   ├── deploymentService.ts         # All deployment, scan, update, script, archive logic
-│   ├── powershellScript.ts          # WinPE AutoTag PowerShell script constant
-│   └── geminiService.ts             # Gemini AI integration stub (future use)
+│   └── powershellScript.ts          # WinPE AutoTag PowerShell script constant
 │
 ├── components/
 │   ├── ImageMonitor.tsx             # Imaging pipeline monitor + transfer UI
