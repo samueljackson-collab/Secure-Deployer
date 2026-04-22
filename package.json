@@ -12,7 +12,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@google/genai": "^1.44.0",
     "@types/recharts": "^1.8.29",
     "framer-motion": "^12.35.0",
     "lucide-react": "^0.576.0",
