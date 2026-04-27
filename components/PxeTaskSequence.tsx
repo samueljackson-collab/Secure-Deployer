@@ -545,14 +545,24 @@ timeout /t 5
                                     </div>
 
                                     {sccmStatus === 'not_found' && (
-                                        <div className="bg-red-900/20 border border-red-500/50 p-4 rounded flex items-start gap-3">
-                                            <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5" />
-                                            <div>
-                                                <h4 className="text-red-400 font-medium text-sm">Device Not Found in SCCM</h4>
-                                                <p className="text-gray-400 text-xs mt-1">
-                                                    The device with MAC address {targetDeviceMac} could not be found in SCCM. 
-                                                    Please ensure the device is imported into SCCM before selecting a boot image.
+                                        <div className="bg-orange-900/20 border border-orange-500/50 p-4 rounded flex items-start gap-3">
+                                            <AlertTriangle className="w-5 h-5 text-orange-500 mt-0.5 shrink-0" />
+                                            <div className="flex-1">
+                                                <h4 className="text-orange-400 font-medium text-sm">Device Not Found in SCCM</h4>
+                                                <p className="text-gray-300 text-xs mt-1 mb-3">
+                                                    The device with MAC address <code className="bg-black/50 px-1 rounded">{targetDeviceMac}</code> is not registered in the SCCM database. 
                                                 </p>
+                                                <div className="bg-black/40 p-3 rounded text-xs text-gray-400 space-y-2">
+                                                    <p className="font-semibold text-gray-300">Action Required:</p>
+                                                    <ol className="list-decimal list-inside space-y-1">
+                                                        <li>Open the SCCM Console (Configuration Manager).</li>
+                                                        <li>Navigate to <strong className="text-gray-300">Assets and Compliance &gt; Devices</strong>.</li>
+                                                        <li>Click <strong className="text-gray-300">Import Computer Information</strong> from the ribbon.</li>
+                                                        <li>Enter the computer name and the MAC address (<code className="text-gray-300">{targetDeviceMac}</code>).</li>
+                                                        <li>Add the device to the appropriate Collection for OS deployment.</li>
+                                                        <li className="pt-1 text-orange-400/80">Once imported, click &quot;Check SCCM&quot; again to refresh.</li>
+                                                    </ol>
+                                                </div>
                                             </div>
                                         </div>
                                     )}
