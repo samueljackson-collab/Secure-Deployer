@@ -156,6 +156,8 @@ export interface ImagingDevice {
   progress: number;
   duration: number; // The total time this device will take to image, in seconds
   complianceCheck?: ComplianceResult;
+  scriptFile?: File;
+  scriptContent?: string;
 }
 
 // --- Types for AppContext ---
@@ -266,6 +268,7 @@ export type AppAction =
   | { type: 'CLEAR_SELECTED_IMAGING_DEVICES'; payload: Set<string> }
   | { type: 'REVALIDATE_IMAGING_DEVICES'; payload: Set<string> }
   | { type: 'UPDATE_IMAGING_DEVICE_STATE'; payload: ImagingDevice }
+  | { type: 'SET_IMAGING_DEVICE_SCRIPT'; payload: { deviceId: string; file?: File; content?: string } }
   ;
 
 export type AppDispatch = Dispatch<AppAction>;

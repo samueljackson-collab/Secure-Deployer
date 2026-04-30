@@ -149,6 +149,14 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
             return { ...state, monitor: { ...state.monitor, devices: state.monitor.devices.map(d => d.id === action.payload.deviceId ? { ...d, hostname: action.payload.newHostname } : d) } };
         case 'REMOVE_IMAGING_DEVICE':
             return { ...state, monitor: { ...state.monitor, devices: state.monitor.devices.filter(d => d.id !== action.payload) } };
+        case 'SET_IMAGING_DEVICE_SCRIPT':
+            return {
+                ...state,
+                monitor: {
+                    ...state.monitor,
+                    devices: state.monitor.devices.map(d => d.id === action.payload.deviceId ? { ...d, scriptFile: action.payload.file, scriptContent: action.payload.content } : d)
+                }
+            };
         
         case 'TRANSFER_ALL_COMPLETED_DEVICES': {
             const completed = state.monitor.devices.filter(d => d.status === 'Completed');
@@ -506,6 +514,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 if (device) {
                     addLog(`Script "${action.payload.file.name}" selected for ${device.hostname}.`, 'INFO');
                     dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: action.payload.deviceId, scriptFile: action.payload.file, status: 'Ready for Execution' } });
+                }
+                break;
+            }
+
+            case 'SET_IMAGING_DEVICE_SCRIPT': {
+                const device = state.monitor.devices.find(d => d.id === action.payload.deviceId);
+                if (device) {
+                    const scriptName = action.payload.file ? action.payload.file.name : 'Custom Editor Content';
+                    addLog(`Imaging script updated for ${device.hostname} (${scriptName}).`, 'INFO');
                 }
                 break;
             }

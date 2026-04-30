@@ -1,63 +1,46 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ImagingDevice } from '../types';
-import { FileCode, Play, Save, Terminal, Activity, CheckCircle, AlertTriangle, X, RefreshCw } from 'lucide-react';
+import { FileCode, Play, Save, Terminal, Activity, CheckCircle, AlertTriangle, X, RefreshCw, Upload, ChevronRight, File } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAppContext } from '../contexts/AppContext';
 
 interface ImagingScriptViewerProps {
     devices: ImagingDevice[];
 }
 
+const AVAILABLE_SCRIPTS = [
+    {
+        name: 'Full Windows Imaging (DISM)',
+        content: `# Full Windows Imaging Script (WinPE/DISM)\n# This script executes the complete imaging sequence for enterprise deployment.\n# It assumes the environment is booted into WinPE and network shares are mapped.\n\necho "====================================================="\necho "        Enterprise Windows Imaging Sequence          "\necho "====================================================="\n\necho "[INFO] Step 1: Cleaning and partitioning disk 0..."\n# Using a predefined diskpart script to ensure consistent partition layout (UEFI/GPT)\ndiskpart /s X:\\Windows\\System32\\diskpart_script.txt\n\necho "[INFO] Step 2: Applying Windows Image (install.wim)..."\n# Applying the customized enterprise WIM image to the Windows partition\ndism /Apply-Image /ImageFile:Z:\\Images\\Windows11_Enterprise_22H2_Custom.wim /Index:1 /ApplyDir:W:\\\n\necho "[INFO] Step 3: Creating Boot Files (BCDBoot)..."\n# Writing boot environment files to the EFI system partition\nW:\\Windows\\System32\\bcdboot W:\\Windows /s S: /f ALL\n\necho "[INFO] Step 4: Injecting Device Drivers..."\n# Recursively adding out-of-box drivers based on the detected hardware model\ndism /Image:W:\\ /Add-Driver /Driver:Z:\\Drivers\\Model_Specific /Recurse\n\necho "[INFO] Step 5: Applying Unattend.xml (Sysprep configuration)..."\n# Copying the answer file for OOBE automation, domain join, and local admin setup\ncopy Z:\\Configs\\unattend.xml W:\\Windows\\System32\\Sysprep\\unattend.xml\n\necho "[INFO] Step 6: Setting up Recovery Environment (WinRE)..."\n# Configuring the Windows Recovery Environment\nmd W:\\Recovery\\WindowsRE\ncopy W:\\Windows\\System32\\Recovery\\winre.wim W:\\Recovery\\WindowsRE\\winre.wim\nW:\\Windows\\System32\\reagentc /setreimage /path W:\\Recovery\\WindowsRE /target W:\\Windows\n\necho "[INFO] Step 7: Applying Custom Registry Settings..."\n# Loading the offline registry hive to apply enterprise policies before first boot\nreg load HKLM\\Offline W:\\Windows\\System32\\config\\SOFTWARE\nreg import Z:\\Configs\\EnterprisePolicies.reg\nreg unload HKLM\\Offline\n\necho "[SUCCESS] Imaging complete. System will reboot shortly."\nwpeutil reboot\n`
+    },
+    {
+        name: 'Lite Touch Deployment',
+        content: `# Lite Touch Deployment Script\necho "Starting Lite Touch Deployment..."\necho "[INFO] Partitioning..."\necho "[INFO] Applying Image..."\necho "[SUCCESS] Deployment Complete."\n`
+    },
+    {
+        name: 'Diagnostic & Recovery',
+        content: `# Diagnostic & Recovery Script\necho "Running system diagnostics..."\necho "[INFO] Checking disk for errors..."\nchkdsk W: /f\necho "[INFO] Repairing boot records..."\nbootrec /fixmbr\nbootrec /fixboot\necho "[SUCCESS] Diagnostics complete."\n`
+    }
+];
+
 export const ImagingScriptViewer: React.FC<ImagingScriptViewerProps> = ({ devices }) => {
-    const [scriptContent, setScriptContent] = useState<string>(`# Full Windows Imaging Script (WinPE/DISM)
-# This script executes the complete imaging sequence for enterprise deployment.
-# It assumes the environment is booted into WinPE and network shares are mapped.
-
-echo "====================================================="
-echo "        Enterprise Windows Imaging Sequence          "
-echo "====================================================="
-
-echo "[INFO] Step 1: Cleaning and partitioning disk 0..."
-# Using a predefined diskpart script to ensure consistent partition layout (UEFI/GPT)
-diskpart /s X:\\Windows\\System32\\diskpart_script.txt
-# (diskpart_script.txt contains: select disk 0, clean, convert gpt, create partition efi size=100, format quick fs=fat32 label="System", assign letter="S", create partition msr size=16, create partition primary, format quick fs=ntfs label="Windows", assign letter="W")
-
-echo "[INFO] Step 2: Applying Windows Image (install.wim)..."
-# Applying the customized enterprise WIM image to the Windows partition
-dism /Apply-Image /ImageFile:Z:\\Images\\Windows11_Enterprise_22H2_Custom.wim /Index:1 /ApplyDir:W:\\
-
-echo "[INFO] Step 3: Creating Boot Files (BCDBoot)..."
-# Writing boot environment files to the EFI system partition
-W:\\Windows\\System32\\bcdboot W:\\Windows /s S: /f ALL
-
-echo "[INFO] Step 4: Injecting Device Drivers..."
-# Recursively adding out-of-box drivers based on the detected hardware model
-dism /Image:W:\\ /Add-Driver /Driver:Z:\\Drivers\\Model_Specific /Recurse
-
-echo "[INFO] Step 5: Applying Unattend.xml (Sysprep configuration)..."
-# Copying the answer file for OOBE automation, domain join, and local admin setup
-copy Z:\\Configs\\unattend.xml W:\\Windows\\System32\\Sysprep\\unattend.xml
-
-echo "[INFO] Step 6: Setting up Recovery Environment (WinRE)..."
-# Configuring the Windows Recovery Environment
-md W:\\Recovery\\WindowsRE
-copy W:\\Windows\\System32\\Recovery\\winre.wim W:\\Recovery\\WindowsRE\\winre.wim
-W:\\Windows\\System32\\reagentc /setreimage /path W:\\Recovery\\WindowsRE /target W:\\Windows
-
-echo "[INFO] Step 7: Applying Custom Registry Settings..."
-# Loading the offline registry hive to apply enterprise policies before first boot
-reg load HKLM\\Offline W:\\Windows\\System32\\config\\SOFTWARE
-reg import Z:\\Configs\\EnterprisePolicies.reg
-reg unload HKLM\\Offline
-
-echo "[SUCCESS] Imaging complete. System will reboot shortly."
-wpeutil reboot
-`);
-
+    const { dispatch } = useAppContext();
+    const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
+    const [scriptContent, setScriptContent] = useState<string>(AVAILABLE_SCRIPTS[0].content);
     const [isExecuting, setIsExecuting] = useState(false);
     const [executionProgress, setExecutionProgress] = useState(0);
     const [executionLogs, setExecutionLogs] = useState<string[]>([]);
     const [executionStatus, setExecutionStatus] = useState<'idle' | 'running' | 'completed' | 'failed'>('idle');
     const logsEndRef = useRef<HTMLDivElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const selectedDevice = devices.find(d => d.id === selectedDeviceId);
+
+    useEffect(() => {
+        if (selectedDevice?.scriptContent) {
+            setScriptContent(selectedDevice.scriptContent);
+        }
+    }, [selectedDeviceId, selectedDevice]);
 
     useEffect(() => {
         if (logsEndRef.current) {
@@ -66,7 +49,9 @@ wpeutil reboot
     }, [executionLogs]);
 
     const handleRunScript = () => {
-        if (devices.length === 0) {
+        const targetDevices = selectedDeviceId ? [selectedDevice].filter(Boolean) as ImagingDevice[] : devices;
+        
+        if (targetDevices.length === 0) {
             alert("No devices available to run the script.");
             return;
         }
@@ -74,40 +59,67 @@ wpeutil reboot
         setIsExecuting(true);
         setExecutionStatus('running');
         setExecutionProgress(0);
-        setExecutionLogs([`[${new Date().toLocaleTimeString()}] Starting execution on ${devices.length} device(s)...`]);
+        setExecutionLogs([`[${new Date().toLocaleTimeString()}] Starting execution on ${targetDevices.length} device(s)...`]);
 
         const steps = [
             { msg: "Connecting to target devices via WinRM...", delay: 1000 },
             { msg: "Authentication successful.", delay: 800 },
             { msg: "Transferring script payload...", delay: 1500 },
-            { msg: "Executing: Step 1: Cleaning and partitioning disk 0...", delay: 2000 },
-            { msg: "Executing: Step 2: Applying Windows Image (install.wim)...", delay: 3000 },
-            { msg: "Executing: Step 3: Creating Boot Files (BCDBoot)...", delay: 1500 },
-            { msg: "Executing: Step 4: Injecting Device Drivers...", delay: 2500 },
-            { msg: "Executing: Step 5: Applying Unattend.xml...", delay: 1000 },
-            { msg: "Executing: Step 6: Setting up Recovery Environment...", delay: 1500 },
-            { msg: "Executing: Step 7: Applying Custom Registry Settings...", delay: 1000 },
+            { msg: "Executing imaging sequence...", delay: 2000 },
             { msg: "Script execution completed successfully.", delay: 500 }
         ];
 
         let currentStep = 0;
-
         const runNextStep = () => {
             if (currentStep >= steps.length) {
                 setExecutionStatus('completed');
                 setExecutionProgress(100);
                 return;
             }
-
             const step = steps[currentStep];
             setExecutionLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${step.msg}`]);
             setExecutionProgress(Math.round(((currentStep + 1) / steps.length) * 100));
-            
             currentStep++;
             setTimeout(runNextStep, step.delay);
         };
-
         runNextStep();
+    };
+
+    const handleSelectScript = (content: string) => {
+        setScriptContent(content);
+        if (selectedDeviceId) {
+            dispatch({ type: 'SET_IMAGING_DEVICE_SCRIPT', payload: { deviceId: selectedDeviceId, content } });
+        }
+    };
+
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const content = event.target?.result as string;
+            setScriptContent(content);
+            if (selectedDeviceId) {
+                dispatch({ type: 'SET_IMAGING_DEVICE_SCRIPT', payload: { deviceId: selectedDeviceId, file, content } });
+            }
+        };
+        reader.readAsText(file);
+    };
+
+    const handleSaveScript = () => {
+        if (selectedDeviceId) {
+            dispatch({ type: 'SET_IMAGING_DEVICE_SCRIPT', payload: { deviceId: selectedDeviceId, content: scriptContent } });
+        }
+        const blob = new Blob([scriptContent], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = selectedDevice ? `${selectedDevice.hostname}_script.ps1` : 'imaging_script.ps1';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     };
 
     const closeExecutionModal = () => {
@@ -123,10 +135,23 @@ wpeutil reboot
                 <div className="bg-gray-950 p-4 rounded-lg shadow-lg border border-gray-800 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         <FileCode className="text-[#39FF14]" />
-                        <h2 className="text-xl font-bold text-white">Imaging Script Editor</h2>
+                        <h2 className="text-xl font-bold text-white">
+                            {selectedDevice ? `Script Editor: ${selectedDevice.hostname}` : 'Imaging Script Editor'}
+                        </h2>
                     </div>
                     <div className="flex gap-2">
-                        <button className="px-4 py-2 bg-gray-800 text-white rounded hover:bg-gray-700 flex items-center gap-2 transition-colors">
+                        {selectedDeviceId && (
+                            <button 
+                                onClick={() => fileInputRef.current?.click()}
+                                className="px-4 py-2 bg-gray-800 text-white rounded hover:bg-gray-700 flex items-center gap-2 transition-colors"
+                            >
+                                <Upload size={16} /> Upload
+                            </button>
+                        )}
+                        <button 
+                            onClick={handleSaveScript}
+                            className="px-4 py-2 bg-gray-800 text-white rounded hover:bg-gray-700 flex items-center gap-2 transition-colors"
+                        >
                             <Save size={16} /> Save
                         </button>
                         <button 
@@ -134,33 +159,86 @@ wpeutil reboot
                             disabled={isExecuting || devices.length === 0}
                             className="px-4 py-2 bg-[#39FF14] text-black font-bold rounded hover:bg-[#32e612] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
                         >
-                            <Play size={16} /> Run on All
+                            <Play size={16} /> {selectedDeviceId ? 'Run on Device' : 'Run on All'}
                         </button>
                     </div>
                 </div>
+
+                {selectedDeviceId && (
+                    <div className="bg-gray-900 p-3 rounded-lg border border-gray-800 flex flex-wrap gap-2 items-center">
+                        <span className="text-xs font-bold text-gray-500 uppercase mr-2">Available Scripts:</span>
+                        {AVAILABLE_SCRIPTS.map((script, idx) => (
+                            <button
+                                key={idx}
+                                onClick={() => handleSelectScript(script.content)}
+                                className="px-3 py-1 bg-gray-800 text-gray-300 text-xs rounded-full hover:bg-gray-700 hover:text-white transition-colors border border-gray-700"
+                            >
+                                {script.name}
+                            </button>
+                        ))}
+                        <input 
+                            type="file" 
+                            ref={fileInputRef} 
+                            onChange={handleFileUpload} 
+                            className="hidden" 
+                            accept=".ps1,.bat,.txt"
+                        />
+                    </div>
+                )}
+
                 <div className="bg-gray-900 flex-grow rounded-lg border border-gray-800 p-4 font-mono text-sm text-gray-300 overflow-auto">
                     <textarea 
                         className="w-full h-full bg-transparent border-none outline-none resize-none"
                         value={scriptContent}
-                        onChange={(e) => setScriptContent(e.target.value)}
+                        onChange={(e) => {
+                            setScriptContent(e.target.value);
+                        }}
                         spellCheck="false"
                     />
                 </div>
             </div>
 
             <div className="lg:col-span-1 bg-gray-950 p-6 rounded-lg shadow-lg border border-gray-800 flex flex-col h-full">
-                <h3 className="text-lg font-bold text-[#39FF14] mb-4 flex items-center gap-2">
-                    <Terminal size={20} /> Target Devices ({devices.length})
-                </h3>
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-bold text-[#39FF14] flex items-center gap-2">
+                        <Terminal size={20} /> Monitor Devices ({devices.length})
+                    </h3>
+                    {selectedDeviceId && (
+                        <button 
+                            onClick={() => setSelectedDeviceId(null)}
+                            className="text-xs text-gray-500 hover:text-white"
+                        >
+                            Clear Selection
+                        </button>
+                    )}
+                </div>
                 <div className="flex-grow overflow-y-auto space-y-2 pr-2">
                     {devices.length === 0 ? (
                         <p className="text-gray-500 italic">No devices in monitor.</p>
                     ) : (
                         devices.map(device => (
-                            <div key={device.id} className="p-3 bg-gray-900 rounded border border-gray-800 flex justify-between items-center">
-                                <div>
-                                    <div className="font-bold text-white">{device.hostname}</div>
-                                    <div className="text-xs text-gray-500">{device.ipAddress}</div>
+                            <button 
+                                key={device.id} 
+                                onClick={() => setSelectedDeviceId(device.id)}
+                                className={`w-full text-left p-3 rounded border transition-all flex justify-between items-center group ${
+                                    selectedDeviceId === device.id 
+                                        ? 'bg-[#39FF14]/10 border-[#39FF14] shadow-[0_0_10px_rgba(57,255,20,0.1)]' 
+                                        : 'bg-gray-900 border-gray-800 hover:border-gray-700'
+                                }`}
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className={`p-2 rounded-lg ${selectedDeviceId === device.id ? 'bg-[#39FF14] text-black' : 'bg-gray-800 text-gray-400 group-hover:text-gray-300'}`}>
+                                        <ChevronRight size={14} className={selectedDeviceId === device.id ? 'rotate-90' : ''} />
+                                    </div>
+                                    <div>
+                                        <div className={`font-bold transition-colors ${selectedDeviceId === device.id ? 'text-[#39FF14]' : 'text-white'}`}>
+                                            {device.hostname}
+                                        </div>
+                                        <div className="text-xs text-gray-500 flex items-center gap-1">
+                                            {device.scriptFile || device.scriptContent ? <File size={10} className="text-[#39FF14]" /> : null}
+                                            {device.ipAddress}
+                                        </div>
+                                    </div>
                                 </div>
                                 <div className={`text-xs px-2 py-1 rounded ${
                                     device.status === 'Completed' ? 'bg-green-900 text-green-300' :
@@ -169,10 +247,30 @@ wpeutil reboot
                                 }`}>
                                     {device.status}
                                 </div>
-                            </div>
+                            </button>
                         ))
                     )}
                 </div>
+                
+                {selectedDevice && (
+                    <div className="mt-4 p-4 bg-gray-900 rounded-lg border border-gray-800">
+                        <h4 className="text-xs font-bold text-gray-500 uppercase mb-2">Device Context</h4>
+                        <div className="space-y-1">
+                            <div className="flex justify-between text-xs">
+                                <span className="text-gray-400">Model:</span>
+                                <span className="text-gray-200">{selectedDevice.model}</span>
+                            </div>
+                            <div className="flex justify-between text-xs">
+                                <span className="text-gray-400">MAC:</span>
+                                <span className="text-gray-200">{selectedDevice.macAddress}</span>
+                            </div>
+                            <div className="flex justify-between text-xs">
+                                <span className="text-gray-400">Assigned Script:</span>
+                                <span className="text-blue-400">{selectedDevice.scriptFile?.name || (selectedDevice.scriptContent ? 'Custom Entry' : 'Default')}</span>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Real-time Execution Overlay */}
