@@ -1,9 +1,7 @@
 
-
 import React, { useState, useRef } from 'react';
 import type { Device, DeploymentStatus, DeviceFormFactor, DeploymentOperationType } from '../types';
 import { DeviceIcon, icons } from './DeviceIcon';
-// FIX: Import target versions from App.tsx where they are now defined and exported.
 import { TARGET_BIOS_VERSION, TARGET_DCU_VERSION, TARGET_WIN_VERSION } from '../App';
 import { Info, Package, Cpu, Play, Download, Trash2, ChevronDown, ChevronUp, CheckCircle, AlertTriangle } from 'lucide-react';
 
@@ -249,7 +247,6 @@ export const DeviceStatusTable: React.FC<DeviceStatusTableProps> = ({ devices, s
         if (e.target.files?.[0] && pendingBulkOp && onBulkDeployOperation) {
             onBulkDeployOperation({ operation: pendingBulkOp, file: e.target.files[0] });
             setPendingBulkOp(null);
-            // Reset input
             e.target.value = '';
         }
     };
