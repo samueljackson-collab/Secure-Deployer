@@ -15,6 +15,9 @@ const initialState: AppState = {
             maxRetries: 3,
             retryDelay: 2,
             autoRebootEnabled: false,
+            // biosPassword is intentionally blank at startup; the operator enters
+            // it per-session in Advanced Settings. It is never persisted to disk.
+            biosPassword: '',
         },
         isCancelled: false,
         batchHistory: [],
@@ -230,7 +233,9 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
         case 'DELETE_TEMPLATE':
             return { ...state, runner: { ...state.runner, templates: (state.runner.templates || []).filter(t => t.id !== action.payload) } };
         case 'APPLY_TEMPLATE':
-            return { ...state, runner: { ...state.runner, settings: action.payload.settings } };
+            // biosPassword is deliberately not overwritten when applying a template
+            // so the operator's in-session credential is preserved.
+            return { ...state, runner: { ...state.runner, settings: { ...state.runner.settings, ...action.payload.settings } } };
         case 'ADD_PACKAGE':
             return { ...state, runner: { ...state.runner, packages: [...state.runner.packages, action.payload] } };
         case 'REMOVE_PACKAGE':
@@ -264,8 +269,6 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
                 }
             };
         case 'REMOTE_IN_WITH_CREDENTIALS':
-            // This is handled in effectRunner, but we can close the modal here if we want.
-            // Actually, it's better to close it in effectRunner after success.
             return state;
 
         default:
@@ -341,6 +344,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             case 'BULK_UPDATE': {
                 const deviceIds = action.type === 'UPDATE_DEVICE' ? [action.payload] : [...runner.selectedDeviceIds];
                 if (action.type === 'BULK_UPDATE') addLog(`Initiating bulk update for ${deviceIds.length} devices...`, 'INFO');
+
+                // Log BIOS password status so the operator can confirm DCU will run silently.
+                if (runner.settings.biosPassword) {
+                    addLog('BIOS admin password provided — Dell Command Update will run non-interactively.', 'INFO');
+                } else {
+                    addLog('No BIOS admin password set — DCU may prompt for the BIOS password interactively.', 'WARNING');
+                }
                 
                 const onProgress = (device: Device) => dispatch({ type: 'UPDATE_DEVICE_STATE', payload: device });
 
@@ -401,13 +411,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                             payload: { 
                                 id: device.id, 
                                 scriptProgress: progress,
-                                // We need to append to existing logs, but UPDATE_SINGLE_DEVICE just merges.
-                                // It's better to dispatch an action that appends, or just rely on the fact that 
-                                // we can't easily append with UPDATE_SINGLE_DEVICE without knowing current state.
-                                // Let's just pass the log and we'll handle it in the reducer if needed, 
-                                // but wait, UPDATE_SINGLE_DEVICE merges the payload.
-                                // We can't access current state here easily.
-                                // Let's add an APPEND_SCRIPT_LOG action.
                             } 
                         });
                         dispatch({ type: 'APPEND_SCRIPT_LOG', payload: { id: device.id, log } });
@@ -473,21 +476,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 dispatch({ type: 'SET_BATCH_HISTORY', payload: [batchSummary, ...runner.batchHistory].slice(0, 5) });
                 addLog('Bulk deployment operation completed.', 'SUCCESS');
                 dispatch({ type: 'CLEAR_SELECTIONS' });
-                break;
-            }
-
-            case 'REMOTE_IN_DEVICE': {
-                const device = runner.devices.find(d => d.id === action.payload);
-                if (!device) break;
-                const content = api.buildRemoteDesktopFile(device);
-                const blob = new Blob([content], { type: 'application/rdp' });
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = `${device.hostname}.rdp`;
-                link.click();
-                URL.revokeObjectURL(url);
-                addLog(`[${device.hostname}] Remote-In prepared. Downloaded RDP config for ${device.ipAddress || device.hostname}.`, 'INFO');
                 break;
             }
 

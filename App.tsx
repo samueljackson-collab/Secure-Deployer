@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Header } from './components/Header';
 import { StepCard } from './components/StepCard';
@@ -31,6 +30,7 @@ export const TARGET_WIN_VERSION = '23H2';
 const AppContent: React.FC = () => {
     const { state, dispatch } = useAppContext();
     const { runner, monitor, ui } = state;
+    const [showBiosPassword, setShowBiosPassword] = React.useState(false);
 
     const isReadyToDeploy = ui.csvFile || runner.devices.length > 0;
 
@@ -100,7 +100,7 @@ const AppContent: React.FC = () => {
                                                     id="maxRetries" 
                                                     value={runner.settings.maxRetries}
                                                     onChange={(e) => dispatch({ type: 'SET_SETTINGS', payload: { maxRetries: Math.max(1, parseInt(e.target.value, 10)) } })}
-                                                    className="w-20 bg-gray-800 border border-gray-700 rounded-md px-2 py-1 text-sm text-center"
+                                                    className="w-20 bg-gray-800 border border-gray-700 rounded-md px-2 py-1 text-sm text-center focus:ring-1 focus:ring-[#39FF14] focus:border-[#39FF14] outline-none"
                                                 />
                                             </div>
                                              <div className="flex items-center justify-between">
@@ -110,7 +110,7 @@ const AppContent: React.FC = () => {
                                                     id="retryDelay"
                                                     value={runner.settings.retryDelay}
                                                     onChange={(e) => dispatch({ type: 'SET_SETTINGS', payload: { retryDelay: Math.max(1, parseInt(e.target.value, 10)) } })}
-                                                    className="w-20 bg-gray-800 border border-gray-700 rounded-md px-2 py-1 text-sm text-center"
+                                                    className="w-20 bg-gray-800 border border-gray-700 rounded-md px-2 py-1 text-sm text-center focus:ring-1 focus:ring-[#39FF14] focus:border-[#39FF14] outline-none"
                                                 />
                                             </div>
                                             <div className="flex items-center">
@@ -124,6 +124,50 @@ const AppContent: React.FC = () => {
                                                 <label htmlFor="autoReboot" className="ml-3 text-sm text-gray-300 cursor-pointer font-bold">
                                                     Automatically reboot when required
                                                 </label>
+                                            </div>
+
+                                            {/* BIOS Admin Password — passed to Dell Command Update as /biosPassword
+                                                so BIOS firmware updates run non-interactively. Held in React
+                                                state only; never written to localStorage or saved templates. */}
+                                            <div className="pt-1 border-t border-gray-800 space-y-1.5">
+                                                <div className="flex items-center gap-1.5 pt-2">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-[#39FF14]" viewBox="0 0 20 20" fill="currentColor">
+                                                        <path fillRule="evenodd" d="M18 8a6 6 0 01-7.743 5.743L10 14l-1 1-1 1H6v2H2v-4l4.257-4.257A6 6 0 1118 8zm-6-4a1 1 0 100 2 2 2 0 012 2 1 1 0 102 0 4 4 0 00-4-4z" clipRule="evenodd" />
+                                                    </svg>
+                                                    <label htmlFor="biosPassword" className="text-sm text-gray-300 font-bold">BIOS Admin Password</label>
+                                                </div>
+                                                <div className="relative">
+                                                    <input
+                                                        type={showBiosPassword ? 'text' : 'password'}
+                                                        id="biosPassword"
+                                                        value={runner.settings.biosPassword}
+                                                        onChange={(e) => dispatch({ type: 'SET_SETTINGS', payload: { biosPassword: e.target.value } })}
+                                                        placeholder="Leave blank if not set"
+                                                        className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-1.5 text-sm text-gray-200 placeholder-gray-500 focus:ring-1 focus:ring-[#39FF14] focus:border-[#39FF14] outline-none pr-10 transition-colors"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setShowBiosPassword(prev => !prev)}
+                                                        className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-500 hover:text-[#39FF14] transition-colors"
+                                                        aria-label={showBiosPassword ? 'Hide BIOS password' : 'Show BIOS password'}
+                                                    >
+                                                        {showBiosPassword ? (
+                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                                                <path fillRule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 9.958 0 00-4.512 1.074l-1.78-1.781zm4.261 4.26l1.514 1.515a2.003 2.003 0 012.45 2.45l1.514 1.514a4 4 0 00-5.478-5.478z" clipRule="evenodd" />
+                                                                <path d="M12.454 16.697L9.75 13.992a4 4 0 01-3.742-3.741L2.335 6.578A9.98 9.98 0 00.458 10c1.274 4.057 5.065 7 9.542 7 .847 0 1.669-.105 2.454-.303z" />
+                                                            </svg>
+                                                        ) : (
+                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                                                <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                                                                <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.022 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
+                                                            </svg>
+                                                        )}
+                                                    </button>
+                                                </div>
+                                                <p className="text-xs text-gray-500 leading-relaxed">
+                                                    Passed to Dell Command Update for silent BIOS flashing.
+                                                    Not saved to templates.
+                                                </p>
                                             </div>
                                         </div>
                                     </StepCard>
