@@ -10,7 +10,7 @@ interface SecureCredentialModalProps {
 }
 
 export const SecureCredentialModal: React.FC<SecureCredentialModalProps> = ({ isOpen, onClose, onConfirm }) => {
-    const [credentials, setCredentials] = useState<Credentials>({ username: '', password: '' });
+    const [credentials, setCredentials] = useState<Credentials>({ username: '', password: '', biosPassword: '' });
 
     if (!isOpen) {
         return null;
@@ -19,11 +19,11 @@ export const SecureCredentialModal: React.FC<SecureCredentialModalProps> = ({ is
     const handleConfirm = () => {
         onConfirm(credentials);
         // Reset for next time
-        setCredentials({ username: '', password: '' });
+        setCredentials({ username: '', password: '', biosPassword: '' });
     };
 
     const handleClose = () => {
-        setCredentials({ username: '', password: '' });
+        setCredentials({ username: '', password: '', biosPassword: '' });
         onClose();
     };
 

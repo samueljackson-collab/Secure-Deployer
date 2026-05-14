@@ -181,7 +181,8 @@ export const updateDevice = async (
     device: Device,
     settings: { autoRebootEnabled: boolean },
     onProgress: (device: Device) => void,
-    isCancelled: () => boolean
+    isCancelled: () => boolean,
+    biosPassword?: string
 ): Promise<void> => {
     let currentDeviceState: Device = { ...device, status: 'Updating' };
     onProgress(currentDeviceState);
@@ -201,6 +202,10 @@ export const updateDevice = async (
 
         currentDeviceState = { ...currentDeviceState, status: `Updating ${comp.name}` };
         onProgress(currentDeviceState);
+        if (comp.name === 'BIOS' && biosPassword) {
+            // Simulates: dcu-cli.exe /applyUpdates -reboot=disable -biosPassword=****
+            await sleep(300);
+        }
         await sleep(2000 + Math.random() * 1000);
         if (isCancelled()) return;
 
