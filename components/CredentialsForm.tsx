@@ -1,4 +1,3 @@
-
 import React from 'react';
 import type { Credentials } from '../types';
 
@@ -27,7 +26,7 @@ export const CredentialsForm: React.FC<CredentialsFormProps> = ({ credentials, s
                     value={credentials.username}
                     onChange={handleChange}
                     placeholder="e.g. admin"
-                    className="w-full bg-black/40 border border-gray-800 rounded-xl px-4 py-3 text-sm text-gray-200 placeholder-gray-600 focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all outline-none"
+                    className="w-full bg-black/40 border border-gray-800 rounded-xl px-4 py-3 text-sm text-gray-200 placeholder-gray-600 focus:ring-2 focus:ring-[#39FF14]/50 focus:border-[#39FF14] transition-all outline-none"
                 />
             </div>
             <div className="relative">
@@ -41,16 +40,17 @@ export const CredentialsForm: React.FC<CredentialsFormProps> = ({ credentials, s
                         value={credentials.password}
                         onChange={handleChange}
                         placeholder="••••••••"
-                        className="w-full bg-black/40 border border-gray-800 rounded-xl px-4 py-3 text-sm text-gray-200 placeholder-gray-600 focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all outline-none"
+                        className="w-full bg-black/40 border border-gray-800 rounded-xl px-4 py-3 text-sm text-gray-200 placeholder-gray-600 focus:ring-2 focus:ring-[#39FF14]/50 focus:border-[#39FF14] transition-all outline-none"
                     />
-                    <button 
+                    <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        className="absolute inset-y-0 right-0 px-4 flex items-center text-gray-500 hover:text-cyan-400 transition-colors"
+                        className="absolute inset-y-0 right-0 px-4 flex items-center text-gray-500 hover:text-[#39FF14] transition-colors"
                     >
                         {showPassword ? (
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 001.414-1.414z" clipRule="evenodd" />
+                                <path fillRule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 9.958 0 00-4.512 1.074l-1.78-1.781zm4.261 4.26l1.514 1.515a2.003 2.003 0 012.45 2.45l1.514 1.514a4 4 0 00-5.478-5.478z" clipRule="evenodd" />
+                                <path d="M12.454 16.697L9.75 13.992a4 4 0 01-3.742-3.741L2.335 6.578A9.98 9.98 0 00.458 10c1.274 4.057 5.065 7 9.542 7 .847 0 1.669-.105 2.454-.303z" />
                             </svg>
                         ) : (
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
