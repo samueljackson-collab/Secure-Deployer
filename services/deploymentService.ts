@@ -1,6 +1,5 @@
-
 import { sleep, normalizeMacAddress, detectDeviceType } from '../utils/helpers';
-import type { Device, ImagingDevice, DeploymentRun, ChecklistItem, ComplianceResult } from '../types';
+import type { Device, ImagingDevice, DeploymentRun, ChecklistItem, ComplianceResult, Credentials } from '../types';
 import { TARGET_BIOS_VERSION, TARGET_DCU_VERSION, TARGET_WIN_VERSION } from '../App';
 import { ParseResult } from 'papaparse';
 
@@ -179,7 +178,7 @@ const validateDevice = async (
 
 export const updateDevice = async (
     device: Device,
-    settings: { autoRebootEnabled: boolean },
+    settings: { autoRebootEnabled: boolean; biosPassword?: string },
     onProgress: (device: Device) => void,
     isCancelled: () => boolean
 ): Promise<void> => {
@@ -320,7 +319,7 @@ export const buildRemoteDesktopFile = (device: Device, credentials?: Credentials
 
 export const performDeploymentOperation = async (
     device: Device,
-    operation: DeploymentOperationType,
+    operation: 'run' | 'install' | 'delete',
     targetFile: File,
 ): Promise<{ ok: boolean; reason?: string; message: string; patch: Partial<Device> }> => {
     await sleep(1200 + Math.random() * 1000);

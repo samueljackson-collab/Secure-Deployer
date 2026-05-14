@@ -78,6 +78,7 @@ export interface DeploymentTemplate {
     maxRetries: number;
     retryDelay: number;
     autoRebootEnabled: boolean;
+    // biosPassword is intentionally excluded — never persisted to templates
   };
   packages: string[];
   scriptContent?: string;
@@ -181,6 +182,10 @@ export interface AppState {
             maxRetries: number;
             retryDelay: number;
             autoRebootEnabled: boolean;
+            // BIOS admin password — passed to Dell Command Update as /biosPassword
+            // so BIOS firmware updates run silently without operator input.
+            // Held only in React state; never written to localStorage or templates.
+            biosPassword: string;
         };
         isCancelled: boolean;
         batchHistory: DeploymentBatchSummary[];
