@@ -100,6 +100,7 @@ export interface LogEntry {
 export interface Credentials {
     username: string;
     password: string;
+    biosPassword?: string;
 }
 
 export type DeploymentState = 'idle' | 'running' | 'complete';

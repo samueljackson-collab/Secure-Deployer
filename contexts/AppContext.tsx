@@ -341,12 +341,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             case 'BULK_UPDATE': {
                 const deviceIds = action.type === 'UPDATE_DEVICE' ? [action.payload] : [...runner.selectedDeviceIds];
                 if (action.type === 'BULK_UPDATE') addLog(`Initiating bulk update for ${deviceIds.length} devices...`, 'INFO');
-                
+                if (state.credentials?.biosPassword) {
+                    addLog('BIOS password supplied — DCU will run unattended (/biosPassword flag).', 'INFO');
+                }
+
                 const onProgress = (device: Device) => dispatch({ type: 'UPDATE_DEVICE_STATE', payload: device });
 
                 await Promise.all(deviceIds.map(id => {
                     const device = runner.devices.find(d => d.id === id);
-                    if(device) return api.updateDevice(device, runner.settings, onProgress, () => state.runner.isCancelled);
+                    if(device) return api.updateDevice(device, runner.settings, onProgress, () => state.runner.isCancelled, state.credentials?.biosPassword);
                 }));
 
                 if (action.type === 'BULK_UPDATE') {
