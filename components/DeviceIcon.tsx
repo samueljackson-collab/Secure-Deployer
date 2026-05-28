@@ -1,6 +1,7 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import type { DeviceFormFactor } from '../types';
+import { getDellDeviceType, getDellFormFactorImageUrl } from '../utils/dellDeviceCatalog';
 
 interface DeviceIconProps {
     type: DeviceFormFactor;
@@ -68,11 +69,67 @@ export const icons: Record<DeviceFormFactor, { title: string; path: React.ReactN
 export const DeviceIcon: React.FC<DeviceIconProps> = ({ type }) => {
     const icon = icons[type] || icons.desktop;
     const baseClassName = "h-5 w-5 flex-shrink-0";
-    
+
     return (
         <svg xmlns="http://www.w3.org/2000/svg" className={`${baseClassName} ${icon.className}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <title>{icon.title}</title>
             {icon.path}
         </svg>
+    );
+};
+
+interface DeviceImageProps {
+    type: DeviceFormFactor;
+    /** Optional model string used to resolve the correct form-factor image. */
+    model?: string;
+    /** Controls rendered image dimensions. Defaults to 'md'. */
+    size?: 'sm' | 'md' | 'lg';
+}
+
+const SIZE_CLASSES: Record<NonNullable<DeviceImageProps['size']>, string> = {
+    sm: 'h-16 w-16',
+    md: 'h-24 w-24',
+    lg: 'h-36 w-36',
+};
+
+/**
+ * Renders the Dell product photo for a device's form factor.
+ * Falls back to the SVG DeviceIcon when no image is available or loading fails.
+ */
+export const DeviceImage: React.FC<DeviceImageProps> = ({ type, model, size = 'md' }) => {
+    const [imgFailed, setImgFailed] = useState(false);
+    // When a model string is provided, prefer the form factor resolved from the Dell catalog
+    // over the caller-supplied type — the catalog lookup is more precise.
+    const resolvedType: DeviceFormFactor = (model && getDellDeviceType(model)) || type;
+    const imageUrl = getDellFormFactorImageUrl(resolvedType);
+    const icon = icons[resolvedType] || icons.desktop;
+    const sizeClass = SIZE_CLASSES[size];
+
+    if (!imageUrl || imgFailed) {
+        return (
+            <div className={`${sizeClass} flex items-center justify-center`} title={icon.title}>
+                <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className={`h-full w-full ${icon.className}`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={1.5}
+                >
+                    <title>{icon.title}</title>
+                    {icon.path}
+                </svg>
+            </div>
+        );
+    }
+
+    return (
+        <img
+            src={imageUrl}
+            alt={icon.title}
+            title={icon.title}
+            className={`${sizeClass} object-contain`}
+            onError={() => setImgFailed(true)}
+        />
     );
 };

@@ -31,6 +31,7 @@ export const parseDevicesFromCsv = (results: ParseResult<Record<string, string>>
     }
     const hostnameCol = header.find(h => h.toLowerCase().includes('hostname'));
     const macCol = header.find(h => h.toLowerCase().includes('mac'));
+    const modelCol = header.find(h => h.toLowerCase() === 'model' || h.toLowerCase().includes('model'));
 
     if (!hostnameCol || !macCol) {
         errors.push("CSV must contain 'Hostname' and 'MAC' columns.");
@@ -54,15 +55,18 @@ export const parseDevicesFromCsv = (results: ParseResult<Record<string, string>>
             normalizedMac = normalizeMacAddress(rawMac);
             if (normalizedMac.length !== 12) macValidationError = `Incorrect length. Must be 12 characters without separators. Example: 00:1A:2B:3C:4D:5E.`;
         }
-        
+
         if (macValidationError) {
             errors.push(`[Validation Skip] Device "${hostname}" (Row ${index + 2}) has an invalid MAC address. Reason: ${macValidationError} | Raw Value: "${rawMac}"`);
             return;
         }
 
+        const model = modelCol ? (row[modelCol] || '').trim() : undefined;
+
         devices.push({
             id: index, hostname, mac: normalizedMac, status: 'Pending',
-            deviceType: detectDeviceType(hostname),
+            deviceType: detectDeviceType(hostname, model),
+            model: model || undefined,
             availableFiles: ['install_printer.exe', 'map_network_drive.bat', 'troubleshoot.ps1'],
             installedPackages: ['Microsoft Office', 'Google Chrome', 'Adobe Reader'],
             runningPrograms: ['Google Chrome'],
@@ -410,7 +414,7 @@ export const transformImagingToRunnerDevices = (imagingDevices: ImagingDevice[])
     return imagingDevices.map((d, index) => ({
         id: Date.now() + index,
         hostname: d.hostname, mac: d.macAddress, status: 'Pending File', isSelected: false,
-        deviceType: detectDeviceType(d.hostname),
+        deviceType: detectDeviceType(d.hostname, d.model),
         ipAddress: d.ipAddress, serialNumber: d.serialNumber, model: d.model,
         availableFiles: ['CorpInstaller.msi', 'Onboarding.ps1', 'LegacyAgent.exe'],
         installedPackages: ['VPNClient.msi'],
