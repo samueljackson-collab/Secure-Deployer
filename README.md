@@ -265,49 +265,363 @@ manually.
 
 ## 🚀 Setup & Runbook
 
-### Prerequisites
+### Step 0 — Verify Prerequisites
 
-- Node.js 18+ (recommended: Node.js 20 LTS)
-- npm 9+
-- Browser: latest Chrome, Edge, Firefox, or Safari
-- OS: Windows, macOS, or Linux
+Before cloning the repo, confirm your toolchain meets the minimum requirements. Run these commands
+and compare output to the expected values:
 
-### Commands
+```bash
+node --version
+```
+Expected output (must be **18.x or higher**):
+```
+v20.18.0
+```
 
-| Step | Command | Expected Result |
-|---|---|---|
-| Install | `npm install` | Dependencies install from lockfile and package manifest. |
-| Run (dev) | `npm run dev` | Vite dev server starts; local URL printed to terminal. |
-| Build | `npm run build` | Production bundle emitted to `dist/`. |
-| Lint | `npm run lint` | Target is zero errors (known failing baseline; see Known Gaps). |
-| Preview | `npm run preview` | Serves built `dist/` assets locally for smoke testing. |
+```bash
+npm --version
+```
+Expected output (must be **9.x or higher**):
+```
+10.8.2
+```
+
+If `node --version` returns a lower version, install Node.js 20 LTS from
+[nodejs.org](https://nodejs.org/en/download/) or via a version manager (`nvm`, `fnm`, `volta`).
+
+**Other requirements:**
+- Browser: latest Chrome, Edge, Firefox, or Safari (for running the app)
+- OS: Windows, macOS, or Linux (all supported)
+- Git 2.x+ (for cloning)
+
+---
+
+### Step 1 — Clone the repository
+
+```bash
+git clone https://github.com/samueljackson-collab/secure-deployer.git
+cd secure-deployer
+```
+
+What this does:
+- `git clone` downloads the full project from GitHub into a local folder called `secure-deployer`
+- `cd secure-deployer` enters the project folder — all commands below must run from this directory
+
+---
+
+### Step 2 — Install dependencies (`npm install`)
+
+```bash
+npm install
+```
+
+**What this does, line by line:**
+
+1. Reads `package.json` to find every library the project needs (React, Vite, TypeScript, etc.)
+2. Reads `package-lock.json` to pin each library to its exact recorded version — guarantees
+   identical installs across machines
+3. Downloads all packages from the npm registry into a local `node_modules/` folder
+4. Registers the CLI commands defined in `package.json` `"scripts"` so `npm run <command>` works
+
+**What you will see in the terminal during install:**
+
+```
+npm warn deprecated ...    ← cosmetic warnings about old transitive deps; safe to ignore
+npm warn ...
+
+added 412 packages, and audited 413 packages in 14s
+
+136 packages are looking for funding
+  run `npm fund` for details
+
+found 0 vulnerabilities
+```
+
+**What success looks like:** The last line says `added NNN packages` with `found 0 vulnerabilities`
+(or a low vuln count from transitive deps) and exits with code 0.
+
+**If this fails:**
+- `npm error code ENOENT` — you are not inside the `secure-deployer` folder; run `cd secure-deployer` first
+- `npm error engine` — your Node version is too old; upgrade to Node 18+
+- `npm error EACCES` — permission error on macOS/Linux; do **not** use `sudo npm install`; fix npm
+  global prefix permissions instead (`npm config set prefix ~/.npm-global`)
+
+---
+
+### Step 3 — Start the development server (`npm run dev`)
+
+```bash
+npm run dev
+```
+
+**What this command runs** (from `package.json` → `"scripts"` → `"dev"`):
+```json
+"dev": "vite"
+```
+
+Vite is the build tool that powers this project. When you run `vite` in dev mode it:
+1. Reads `vite.config.ts` to load project settings
+2. Starts a local HTTP server on port **3000** (defined by `server.port: 3000` in `vite.config.ts`)
+3. Listens on **all network interfaces** (`host: '0.0.0.0'`) so teammates on the same LAN can
+   access the app via your machine's IP address
+4. Watches source files for changes and hot-reloads the browser automatically — no refresh needed
+5. Handles TypeScript and React JSX transpilation on-the-fly (no separate compile step in dev)
+
+**What success looks like in the terminal:**
+
+```
+  VITE v6.2.x  ready in 312 ms
+
+  ➜  Local:   http://localhost:3000/
+  ➜  Network: http://192.168.1.105:3000/
+  ➜  press h + enter to show help
+```
+
+- **Local** — open this URL in your browser to use the app on the same machine
+- **Network** — share this URL with teammates on the same network
+- The server runs until you press `Ctrl + C` to stop it
+
+**Open `http://localhost:3000` in your browser.** You should see the Secure Deployment Runner
+dashboard with the Image Monitor tab active. If the page loads, setup is complete.
+
+---
+
+### Step 4 — Build for production (`npm run build`)
+
+```bash
+npm run build
+```
+
+**What this command runs:**
+```json
+"build": "vite build"
+```
+
+Vite compiles the entire project into an optimized, static bundle:
+1. TypeScript → JavaScript (removes types, applies strict checks from `tsconfig.json`)
+2. React JSX → plain JavaScript function calls
+3. All imports bundled and tree-shaken (unused code removed)
+4. Assets hashed for long-term browser caching (e.g., `index-a1b2c3d4.js`)
+5. PWA service worker generated (from `vite.config.ts` → `VitePWA(...)`) for offline use
+6. Output written to `dist/` folder
+
+**What success looks like in the terminal:**
+
+```
+vite v6.2.x building for production...
+✓ 412 modules transformed.
+
+dist/index.html                      2.50 kB │ gzip:   1.13 kB
+dist/assets/index-[hash].css        48.21 kB │ gzip:  10.42 kB
+dist/assets/index-[hash].js        638.72 kB │ gzip: 174.91 kB
+dist/registerSW.js                   0.14 kB │ gzip:   0.15 kB
+dist/sw.js                          77.48 kB │ gzip:  22.71 kB
+
+✓ built in 4.21s
+```
+
+The `dist/` folder now contains everything needed to deploy the app. No server-side runtime is
+required — these are plain HTML, CSS, and JavaScript files that any static file host can serve.
+
+**What each output file does:**
+- `dist/index.html` — the single HTML entry point; loads the app
+- `dist/assets/index-[hash].css` — all Tailwind styles bundled together
+- `dist/assets/index-[hash].js` — all React components, services, and utilities bundled together
+- `dist/sw.js` — the PWA service worker that enables offline use
+- `dist/registerSW.js` — registers the service worker on first page load
+
+---
+
+### Step 5 — Lint the codebase (`npm run lint`)
+
+```bash
+npm run lint
+```
+
+**What this command runs:**
+```json
+"lint": "eslint . --ext ts,tsx"
+```
+
+ESLint scans every `.ts` and `.tsx` file in the project against the rules defined in
+`eslint.config.js`. The configuration:
+- Applies TypeScript-aware rules (`@typescript-eslint/recommended`)
+- Applies React-specific rules (`plugin:react/recommended`)
+- Targets only source files (ignores `dist/` and `eslint.config.js` itself)
+
+**What success looks like:**
+
+```bash
+$ npm run lint
+> secure-deployment-runner@1.0.0 lint
+> eslint . --ext ts,tsx
+
+$
+```
+
+No output after the command header = **zero errors and zero warnings**. This is the target state.
+The process exits with code 0.
+
+**If errors are reported**, they appear as:
+```
+src/components/Foo.tsx
+  12:5  error  'bar' is defined but never used  @typescript-eslint/no-unused-vars
+```
+The format is `file:line:column  severity  message  rule-name`. Fix the flagged lines and re-run.
+
+---
+
+### Step 6 — Preview the production build (`npm run preview`)
+
+```bash
+# Must run npm run build first
+npm run build && npm run preview
+```
+
+**What this command runs:**
+```json
+"preview": "vite preview"
+```
+
+Vite serves the already-built `dist/` folder on a local HTTP server so you can smoke-test the
+production bundle before deploying it. Unlike `npm run dev`, this serves the minified, bundled
+output — not source files. This catches issues that only appear in production builds (missing
+env vars, incorrect asset paths, etc.).
+
+**What success looks like:**
+
+```
+  ➜  Local:   http://localhost:4173/
+  ➜  Network: http://192.168.1.105:4173/
+  ➜  press h + enter to show help
+```
+
+Note the port is **4173** (Vite preview default), not 3000. Open that URL and verify the app
+loads and all tabs function as expected.
+
+---
+
+### Complete First-Run Checklist
+
+Run through this checklist top-to-bottom on a fresh clone to confirm full setup:
+
+- [ ] `node --version` → prints `v18.x.x` or higher
+- [ ] `npm --version` → prints `9.x.x` or higher
+- [ ] `npm install` → ends with `added NNN packages` and no errors
+- [ ] `npm run dev` → terminal shows `VITE ready` and a `Local:` URL
+- [ ] Browser opens `http://localhost:3000` → Secure Deployment Runner dashboard loads
+- [ ] Image Monitor tab is visible and active by default
+- [ ] `npm run build` → terminal shows `✓ built in X.XXs` with no TypeScript errors
+- [ ] `npm run lint` → no output after the command header (zero errors)
+- [ ] `npm run preview` → terminal shows `Local:` URL on port 4173; app loads in browser
+
+---
+
+### Key Configuration Files Explained
+
+#### `vite.config.ts` — build and dev server settings
+
+```typescript
+server: {
+    port: 3000,       // The port npm run dev listens on → http://localhost:3000
+    host: '0.0.0.0', // Listen on all interfaces, not just localhost → enables LAN access
+},
+```
+
+```typescript
+VitePWA({
+    registerType: 'autoUpdate', // Service worker auto-updates when a new build is deployed
+    // Adds a web app manifest so the app can be installed from the browser as a PWA
+})
+```
+
+```typescript
+define: {
+    'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
+    // Injects the GEMINI_API_KEY value from your .env file into the bundle at build time
+    // (No API key is required for core deployment functionality)
+}
+```
+
+```typescript
+resolve: {
+    alias: { '@': path.resolve(__dirname, '.') }
+    // Maps '@' to the project root so you can write:
+    //   import Foo from '@/components/Foo'
+    // instead of relative paths like '../../../components/Foo'
+}
+```
+
+#### `package.json` scripts — what each command actually invokes
+
+```json
+"scripts": {
+    "dev":     "vite",                      // Starts Vite dev server with HMR on port 3000
+    "build":   "vite build",               // Compiles TypeScript + React → optimized dist/ bundle
+    "lint":    "eslint . --ext ts,tsx",    // Runs ESLint on all TypeScript source files
+    "preview": "vite preview"              // Serves the built dist/ folder for smoke testing
+}
+```
+
+#### `tsconfig.json` — TypeScript compiler settings
+
+```json
+"strict": true
+// Enables all strict TypeScript checks:
+//   - noImplicitAny: variables must have explicit types
+//   - strictNullChecks: null/undefined must be handled explicitly
+//   - noUnusedLocals: unused variables are errors
+// This catches bugs at compile time rather than runtime.
+```
+
+```json
+"moduleResolution": "bundler"
+// Tells TypeScript to resolve imports the same way Vite does,
+// so TypeScript errors match exactly what Vite would bundle.
+```
+
+---
 
 ### Serving on a LAN (for team access)
 
 ```bash
-# Build first
+# Step 1: Build the production bundle
 npm run build
+# ✓ Output: dist/ folder created
 
-# Serve dist/ on port 3000 (any static file server works)
+# Step 2a: Serve with the 'serve' package (recommended)
 npx serve dist -p 3000 --cors
+# ✓ Output:
+#   Serving!
+#   - Local:    http://localhost:3000
+#   - Network:  http://192.168.1.x:3000
 
-# Or with Python (no install needed)
+# Step 2b: Serve with Python (no install required, already on most machines)
 cd dist && python3 -m http.server 3000
+# ✓ Output:
+#   Serving HTTP on 0.0.0.0 port 3000 (http://0.0.0.0:3000/) ...
 ```
 
 Other team members access via `http://<server-ip>:3000`. For remote/WAN access, place behind a
 reverse proxy (nginx, Caddy) with HTTPS + VPN. See `docs/AUTOMATION.md` for full remote access
 patterns.
 
+---
+
 ### Troubleshooting
 
 | Symptom | Likely Cause | Resolution |
 |---|---|---|
-| App fails to start | Node / npm version mismatch | Confirm Node 18+; delete `node_modules`; run `npm install` again. |
-| CSV imports 0 devices | Missing `Hostname` / `MAC` headers or invalid MAC format | Check header row; correct MAC to `XX:XX:XX:XX:XX:XX` or `XX-XX-XX-XX-XX-XX`. |
-| Most devices show Offline | Mock service simulates instability | Increase Max Retries and Retry Delay in Advanced Settings; re-scan. |
-| Device not appearing in Image Monitor | AutoTag didn't publish successfully or network share unreachable | Re-run `autotag.bat`; check network share path and credentials. |
-| Scan starts then hangs | Long retry chain on a large cohort | Reduce cohort size; cancel and restart with shorter retry settings. |
+| `npm install` fails with `ENOENT` | Not inside the project folder | Run `cd secure-deployer` first |
+| `npm install` fails with `engine` error | Node version too old | Upgrade to Node 18+ |
+| App fails to start / `EADDRINUSE` | Port 3000 already in use | Kill the other process or change `server.port` in `vite.config.ts` |
+| Browser shows blank page after `npm run dev` | JavaScript error in console | Open DevTools → Console tab; copy the error and investigate |
+| CSV imports 0 devices | Missing `Hostname` / `MAC` headers or invalid MAC format | Check header row; correct MAC to `XX:XX:XX:XX:XX:XX` or `XX-XX-XX-XX-XX-XX` |
+| Optional `Model` column not detected | Column header not matching | Header must contain the word `model` (case-insensitive) |
+| Most devices show Offline | Mock service simulates instability | Increase Max Retries and Retry Delay in Advanced Settings; re-scan |
+| Device not appearing in Image Monitor | AutoTag didn't publish successfully or network share unreachable | Re-run `autotag.bat`; check network share path and credentials |
+| Scan starts then hangs | Long retry chain on a large cohort | Reduce cohort size; cancel and restart with shorter retry settings |
+| Device image shows SVG icon instead of Dell photo | Dell CDN image URL failed to load (expected in dev/offline environments) | Normal fallback behavior — SVG icon renders instead |
 
 ---
 
@@ -418,6 +732,7 @@ flowchart LR
 - [Remote desktop RDP generator](./components/RemoteDesktop.tsx)
 - [Domain type contracts](./src/types.ts)
 - [Helper utilities](./utils/helpers.ts)
+- [Dell device catalog — model → form factor + images](./utils/dellDeviceCatalog.ts)
 - [Project scripts + dependencies](./package.json)
 - [Full process SOP](./docs/PROCESS.md)
 - [Capacity + scalability guide](./docs/CAPACITY.md)
@@ -597,15 +912,31 @@ Papa Parse (`papaparse@5.5.x`) handles CSV parsing in `parseDevicesFromCsv()`.
 - `Hostname`
 - `MAC`
 
+**Optional columns:**
+- `Model` — Dell hardware model string (e.g., `Latitude 5450`, `OptiPlex 7020 SFF`). When
+  present, the device form factor and product image are resolved from the hardware model metadata
+  via `utils/dellDeviceCatalog.ts` rather than from hostname pattern matching. This is the
+  preferred method — it is accurate regardless of how hostnames are formatted.
+
 **Validation behavior:**
 - Rows missing `Hostname` are skipped.
 - MAC values are normalized to uppercase hex via `normalizeMacAddress()` in `utils/helpers.ts`.
 - Unsupported MAC characters (anything not `:`, `-`, `.`, or hex) are rejected.
 - Incorrect normalized MAC length (not 12 hex chars) is rejected.
 - Row-level errors are collected and surfaced to the operator log panel.
-- Device type is detected from hostname substrings via `detectDeviceType()` in `utils/helpers.ts`.
+- Device type is resolved from the `Model` column (if present and recognized) first, then falls
+  back to hostname substring matching via `detectDeviceType()` in `utils/helpers.ts`.
 
-**Example CSV:**
+**Example CSV with model metadata (recommended):**
+```csv
+Hostname,MAC,Model
+CORP-001,00:1A:2B:3C:4D:5E,Latitude 5450
+CORP-002,10-20-30-40-50-60,OptiPlex 7020 SFF
+CORP-003,00.11.22.33.44.55,OptiPlex 7020 Micro
+CORP-004,AA:BB:CC:DD:EE:FF,Latitude 5650
+```
+
+**Example CSV without model (hostname fallback):**
 ```csv
 Hostname,MAC
 HQ-LT-001,00:1A:2B:3C:4D:5E
@@ -613,7 +944,31 @@ BRANCH-SFF-007,10-20-30-40-50-60
 REMOTE-TOWER-03,00.11.22.33.44.55
 ```
 
-**Device type detection from hostname** (in `utils/helpers.ts`):
+**Device type detection — priority order:**
+
+1. **Model metadata lookup** (`utils/dellDeviceCatalog.ts` → `getDellDeviceType(model)`)
+   — Uses Dell hardware model string to identify the exact form factor. Covers all current
+   Latitude, Precision, OptiPlex, and Wyse product lines. Also applied automatically when
+   devices are transferred from Image Monitor (the AutoTag script collects the model string
+   from WMI during PXE imaging — no operator input required).
+
+2. **Hostname pattern fallback** (`utils/helpers.ts` → `detectDeviceType(hostname)`)
+   — Used when no model is provided or the model is unrecognized.
+
+| Dell model example | Detected form factor |
+|---|---|
+| `Latitude 5440`, `Latitude 5450`, `Latitude 7450` | `laptop-14` |
+| `Latitude 5650`, `Latitude 7650`, `Precision 5690` | `laptop-16` |
+| `Latitude 5540`, `Latitude 5550` | `laptop` |
+| `Latitude 7350` | `detachable` |
+| `OptiPlex * SFF` / `OptiPlex * Small Form Factor` | `sff` |
+| `OptiPlex * Micro` / `OptiPlex * MFF` | `micro` |
+| `OptiPlex * Tower` | `tower` |
+| `Wyse 3040`, `Wyse 5070`, `Wyse 5470` | `wyse` |
+| `XPS 13 *` | `laptop-14` |
+| `XPS 16 *` | `laptop-16` |
+
+**Hostname fallback pattern matching** (when no model column is present):
 
 | Hostname substring | Detected type |
 |---|---|
@@ -626,6 +981,11 @@ REMOTE-TOWER-03,00.11.22.33.44.55
 | `wyse` | `wyse` |
 | `vdi` | `vdi` |
 | (none match) | `desktop` |
+
+**Device images:** Once a form factor is resolved, `components/DeviceIcon.tsx` →
+`DeviceImage` renders the corresponding Dell product photo from Dell's image CDN. If the CDN
+image fails to load (e.g., offline environment), the component automatically falls back to the
+inline SVG icon — no configuration required.
 
 ### Configuration and Tuning
 
