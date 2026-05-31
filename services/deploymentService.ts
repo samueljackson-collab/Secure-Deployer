@@ -67,9 +67,9 @@ export const parseDevicesFromCsv = (results: ParseResult<Record<string, string>>
             id: index, hostname, mac: normalizedMac, status: 'Pending',
             deviceType: detectDeviceType(hostname, model),
             model: model || undefined,
-            availableFiles: ['install_printer.exe', 'map_network_drive.bat', 'troubleshoot.ps1'],
-            installedPackages: ['Microsoft Office', 'Google Chrome', 'Adobe Reader'],
-            runningPrograms: ['Google Chrome'],
+            availableFiles: [],
+            installedPackages: [],
+            runningPrograms: [],
         });
     });
 
@@ -147,7 +147,14 @@ const validateDevice = async (
 
         switch (check.key) {
             case 'info':
-                currentDeviceState = { ...currentDeviceState, encryptionStatus: Math.random() > 0.2 ? 'Enabled' : 'Disabled', model: 'OptiPlex 7020', serialNumber: 'ABC1234', assetTag: 'ASSET-XYZ' };
+                // Preserve model/serial/assetTag already set from CSV or imaging transfer.
+                // In production these come from real WMI/SMBIOS queries on the device.
+                currentDeviceState = {
+                    ...currentDeviceState,
+                    encryptionStatus: Math.random() > 0.2 ? 'Enabled' : 'Disabled',
+                    serialNumber: currentDeviceState.serialNumber ?? undefined,
+                    assetTag: currentDeviceState.assetTag ?? undefined,
+                };
                 break;
             case 'bios':
                 const isBiosUpToDate = Math.random() > 0.3;
@@ -416,8 +423,8 @@ export const transformImagingToRunnerDevices = (imagingDevices: ImagingDevice[])
         hostname: d.hostname, mac: d.macAddress, status: 'Pending File', isSelected: false,
         deviceType: detectDeviceType(d.hostname, d.model),
         ipAddress: d.ipAddress, serialNumber: d.serialNumber, model: d.model,
-        availableFiles: ['CorpInstaller.msi', 'Onboarding.ps1', 'LegacyAgent.exe'],
-        installedPackages: ['VPNClient.msi'],
+        availableFiles: [],
+        installedPackages: [],
         runningPrograms: [],
     }));
 };
