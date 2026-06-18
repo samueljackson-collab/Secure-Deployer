@@ -319,7 +319,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             case 'INITIALIZE_DEPLOYMENT': {
                 const onProgress = (device: Device) => dispatch({ type: 'UPDATE_DEVICE_STATE', payload: device });
                 try {
-                     await api.runDeploymentFlow(action.payload.devices, runner.settings, onProgress, () => state.runner.isCancelled);
+                     await api.runDeploymentFlow(action.payload.devices, runner.settings, onProgress, () => state.runner.isCancelled, action.payload.credentials);
                      if (!state.runner.isCancelled) {
                         addLog("Deployment scan complete.", 'INFO');
                         sendNotification('Deployment Complete', `Scan finished.`);
@@ -384,7 +384,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 addLog(`Initiating validation for ${deviceIds.size} device(s)...`, 'INFO');
                 const onProgress = (device: Device) => dispatch({ type: 'UPDATE_DEVICE_STATE', payload: device });
                 const devicesToValidate = runner.devices.filter(d => deviceIds.has(d.id));
-                await api.validateDevices(devicesToValidate, onProgress, () => state.runner.isCancelled);
+                await api.validateDevices(devicesToValidate, onProgress, () => state.runner.isCancelled, state.credentials);
                 addLog('Manual validation scan complete.', 'INFO');
                 dispatch({ type: 'CLEAR_SELECTIONS' });
                 break;
@@ -533,7 +533,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 if (runner.devices.length === 0) break;
                 const onProgress = (device: Device) => dispatch({ type: 'UPDATE_DEVICE_STATE', payload: device });
                 try {
-                    await api.validateDevices(runner.devices, onProgress, () => state.runner.isCancelled);
+                    await api.validateDevices(runner.devices, onProgress, () => state.runner.isCancelled, state.credentials);
                     if (!state.runner.isCancelled) {
                         addLog("Full re-scan complete.", 'INFO');
                         sendNotification('Re-Scan Complete', `Scan finished for all devices.`);

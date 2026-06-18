@@ -3,6 +3,22 @@ import { sleep, normalizeMacAddress, detectDeviceType } from '../utils/helpers';
 import type { Device, ImagingDevice, DeploymentRun, ChecklistItem, ComplianceResult, Credentials, DeploymentOperationType } from '../types';
 import { TARGET_BIOS_VERSION, TARGET_DCU_VERSION, TARGET_WIN_VERSION } from '../App';
 import { ParseResult } from 'papaparse';
+import { isTauri, invokeCommand } from './tauriBridge';
+
+interface ScanResult {
+    encryptionStatus: 'Enabled' | 'Disabled';
+    model: string;
+    serialNumber: string;
+    assetTag: string;
+    biosVersion: string;
+    isBiosUpToDate: boolean;
+    dcuVersion: string;
+    isDcuUpToDate: boolean;
+    winVersion: string;
+    isWinUpToDate: boolean;
+    crowdstrikeStatus: 'Running' | 'Not Found';
+    sccmStatus: 'Healthy' | 'Unhealthy';
+}
 
 // --- HELPERS ---
 
@@ -84,35 +100,122 @@ export const runDeploymentFlow = async (
     devices: Device[],
     settings: { maxRetries: number; retryDelay: number },
     onProgress: (device: Device) => void,
-    isCancelled: () => boolean
+    isCancelled: () => boolean,
+    credentials?: Credentials
 ): Promise<void> => {
     await sleep(2000); // Simulate WoL
-    
+
     for (const device of devices) {
         if (isCancelled()) break;
-        await validateDevice(device, settings, onProgress, isCancelled);
+        await validateDevice(device, settings, onProgress, isCancelled, credentials);
     }
 };
 
 export const validateDevices = async (
     devices: Device[],
     onProgress: (device: Device) => void,
-    isCancelled: () => boolean
+    isCancelled: () => boolean,
+    credentials?: Credentials
 ): Promise<void> => {
      for (const device of devices) {
         if (isCancelled()) break;
         onProgress({ ...device, status: 'Validating' });
-        await validateDevice(device, {maxRetries: 1, retryDelay: 1}, onProgress, isCancelled);
+        await validateDevice(device, {maxRetries: 1, retryDelay: 1}, onProgress, isCancelled, credentials);
     }
 }
+
+/**
+ * Real scan, executed via the Rust `scan_device` Tauri command (one
+ * `Invoke-Command` WinRM round trip). Only available inside the packaged
+ * desktop app, since it needs the Rust backend to reach the target's
+ * network.
+ */
+interface ScanOutcomeOk { status: 'ok'; result: ScanResult }
+interface ScanOutcomeError { status: 'error'; kind: string; message: string }
+type ScanOutcome = ScanOutcomeOk | ScanOutcomeError;
+
+const scanDeviceReal = async (
+    device: Device,
+    credentials: Credentials
+): Promise<ScanOutcome> => {
+    try {
+        const result = await invokeCommand<ScanResult>('scan_device', {
+            host: device.ipAddress || device.hostname,
+            credentials: { username: credentials.username, password: credentials.password },
+            targetBiosVersion: TARGET_BIOS_VERSION,
+            targetDcuVersion: TARGET_DCU_VERSION,
+            targetWinVersion: TARGET_WIN_VERSION,
+        });
+        return { status: 'ok', result };
+    } catch (error) {
+        const e = error as { kind?: string; message?: string };
+        return { status: 'error', kind: e?.kind || 'ExecutionFailed', message: e?.message || String(error) };
+    }
+};
 
 const validateDevice = async (
     device: Device,
     settings: { maxRetries: number, retryDelay: number },
     onProgress: (device: Device) => void,
-    isCancelled: () => boolean
+    isCancelled: () => boolean,
+    credentials?: Credentials
 ) => {
     let currentDeviceState = { ...device };
+
+    // In the packaged desktop app, run the real WinRM scan. Outside of
+    // Tauri (plain `vite dev` in a browser, with no Rust backend to reach
+    // the target network) fall back to the simulated scan below so the UI
+    // remains usable for frontend-only development.
+    if (isTauri() && credentials?.username) {
+        onProgress({ ...currentDeviceState, status: 'Connecting' });
+        if (isCancelled()) return;
+
+        onProgress({ ...currentDeviceState, status: 'Checking Info' });
+        const outcome = await scanDeviceReal(currentDeviceState, credentials);
+        if (isCancelled()) return;
+
+        if (outcome.status === 'error') {
+            const status = outcome.kind === 'Unreachable' ? 'Offline' : 'Failed';
+            onProgress({ ...currentDeviceState, status });
+            return;
+        }
+
+        const r = outcome.result;
+        const isEncryptionOk = r.encryptionStatus === 'Enabled';
+        const isCrowdstrikeOk = r.crowdstrikeStatus === 'Running';
+        const isSccmOk = r.sccmStatus === 'Healthy';
+
+        currentDeviceState = {
+            ...currentDeviceState,
+            encryptionStatus: r.encryptionStatus,
+            model: r.model || currentDeviceState.model,
+            serialNumber: r.serialNumber,
+            assetTag: r.assetTag,
+            biosVersion: r.biosVersion,
+            isBiosUpToDate: r.isBiosUpToDate,
+            dcuVersion: r.dcuVersion,
+            isDcuUpToDate: r.isDcuUpToDate,
+            winVersion: r.winVersion,
+            isWinUpToDate: r.isWinUpToDate,
+            crowdstrikeStatus: r.crowdstrikeStatus,
+            sccmStatus: r.sccmStatus,
+            updatesNeeded: {
+                bios: !r.isBiosUpToDate,
+                dcu: !r.isDcuUpToDate,
+                windows: !r.isWinUpToDate,
+                encryption: !isEncryptionOk,
+                crowdstrike: !isCrowdstrikeOk,
+                sccm: !isSccmOk,
+            },
+        };
+
+        const allUpToDate = r.isBiosUpToDate && r.isDcuUpToDate && r.isWinUpToDate && isEncryptionOk && isCrowdstrikeOk && isSccmOk;
+        currentDeviceState.status = allUpToDate ? 'Success' : 'Scan Complete';
+        onProgress(currentDeviceState);
+        return;
+    }
+
+    // --- Browser-only simulated fallback (no Rust backend available) ---
 
     // Connection
     onProgress({ ...currentDeviceState, status: 'Connecting' });
@@ -120,7 +223,7 @@ const validateDevice = async (
     for (let attempt = 1; attempt <= settings.maxRetries; attempt++) {
         if (isCancelled()) return;
         await sleep(1000 + Math.random() * 500);
-        if (Math.random() > 0.3) { isConnected = true; break; } 
+        if (Math.random() > 0.3) { isConnected = true; break; }
         else if (attempt < settings.maxRetries) {
             onProgress({ ...currentDeviceState, status: 'Retrying...', retryAttempt: attempt });
             await sleep(settings.retryDelay * 1000);
@@ -173,7 +276,7 @@ const validateDevice = async (
     currentDeviceState.sccmStatus = isSccmOk ? 'Healthy' : 'Unhealthy';
 
     const allUpToDate = !!currentDeviceState.isBiosUpToDate && !!currentDeviceState.isDcuUpToDate && !!currentDeviceState.isWinUpToDate && isEncryptionOk && isCrowdstrikeOk && isSccmOk;
-    
+
     currentDeviceState.updatesNeeded = { bios: !currentDeviceState.isBiosUpToDate, dcu: !currentDeviceState.isDcuUpToDate, windows: !currentDeviceState.isWinUpToDate, encryption: !isEncryptionOk, crowdstrike: !isCrowdstrikeOk, sccm: !isSccmOk };
     currentDeviceState.status = allUpToDate ? 'Success' : 'Scan Complete';
 

@@ -12,7 +12,7 @@ export default [
     },
   },
   {
-    ignores: ["dist/**", "eslint.config.js"],
+    ignores: ["dist/**", "eslint.config.js", "src-tauri/**"],
   },
   ...tseslint.configs.recommended,
   {

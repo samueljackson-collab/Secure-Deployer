@@ -14,7 +14,7 @@
     "tauri:build": "tauri build"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.5.0",
+    "@tauri-apps/api": "^2.11.1",
     "@types/recharts": "^1.8.29",
     "framer-motion": "^12.35.0",
     "lucide-react": "^0.576.0",
