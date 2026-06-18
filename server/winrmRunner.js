@@ -18,11 +18,19 @@ export async function runPowerShellScript({ host, username, password, port, scri
         auth,
     };
 
-    params.shellId = await winrm.shell.doCreateShell(params);
+const WINRM_TIMEOUT_MS = 120000;
+const withTimeout = (promise, ms, label) =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)),
+  ]);
+
+export async function runPowerShellScript({ host, username, password, port, scriptContent }) {
+    params.shellId = await withTimeout(winrm.shell.doCreateShell(params), WINRM_TIMEOUT_MS, 'CreateShell');
     try {
         params.command = command;
-        params.commandId = await winrm.command.doExecuteCommand(params);
-        const result = await winrm.command.doReceiveOutput(params);
+        params.commandId = await withTimeout(winrm.command.doExecuteCommand(params), WINRM_TIMEOUT_MS, 'ExecuteCommand');
+        const result = await withTimeout(winrm.command.doReceiveOutput(params), WINRM_TIMEOUT_MS, 'ReceiveOutput');
         return result;
     } finally {
         await winrm.shell.doDeleteShell(params).catch(() => {});
