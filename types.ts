@@ -192,7 +192,7 @@ export interface AppState {
         devices: ImagingDevice[];
     };
     ui: {
-        activeTab: 'monitor' | 'runner' | 'build' | 'script' | 'remote' | 'pxe' | 'analytics' | 'templates';
+        activeTab: 'monitor' | 'runner' | 'build' | 'script' | 'remote' | 'bulk' | 'pxe' | 'analytics' | 'templates';
         csvFile: File | null;
         isCredentialModalOpen: boolean;
         isComplianceModalOpen: boolean;
@@ -202,13 +202,15 @@ export interface AppState {
         isRescanModalOpen: boolean;
         isRemoteCredentialModalOpen: boolean;
         remoteTargetDeviceId: number | null;
+        isSystemInfoModalOpen: boolean;
     };
     credentials?: Credentials;
 }
 
 export type AppAction =
   // UI Actions
-  | { type: 'SET_ACTIVE_TAB'; payload: 'monitor' | 'runner' | 'build' | 'script' | 'remote' | 'pxe' | 'analytics' | 'templates' }
+  | { type: 'SET_ACTIVE_TAB'; payload: 'monitor' | 'runner' | 'build' | 'script' | 'remote' | 'bulk' | 'pxe' | 'analytics' | 'templates' }
+  | { type: 'SET_SYSTEM_INFO_MODAL_OPEN'; payload: boolean }
   | { type: 'SET_CSV_FILE'; payload: File | null }
   | { type: 'SET_CREDENTIAL_MODAL_OPEN'; payload: boolean }
   | { type: 'SET_COMPLIANCE_MODAL_OPEN'; payload: boolean }

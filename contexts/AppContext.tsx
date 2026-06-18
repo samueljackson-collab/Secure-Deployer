@@ -1,6 +1,6 @@
 
 import React, { createContext, useReducer, useContext, useEffect, useCallback } from 'react';
-import type { AppState, AppAction, AppDispatch, Device, LogEntry, ImagingDevice, DeploymentOperationType, DeploymentBatchSummary } from '../src/types';
+import type { AppState, AppAction, AppDispatch, Device, LogEntry, ImagingDevice, DeploymentOperationType, DeploymentBatchSummary } from '../types';
 import * as api from '../services/deploymentService';
 import Papa from 'papaparse';
 
@@ -24,19 +24,22 @@ const initialState: AppState = {
                 id: 'template-1',
                 name: 'Standard Office Deployment',
                 description: 'Default settings for standard office workstations. 3 retries, 2s delay, no auto-reboot.',
-                settings: { maxRetries: 3, retryDelay: 2, autoRebootEnabled: false }
+                settings: { maxRetries: 3, retryDelay: 2, autoRebootEnabled: false },
+                packages: []
             },
             {
                 id: 'template-2',
                 name: 'Kiosk Mode Setup',
                 description: 'Aggressive retry settings with auto-reboot enabled for unattended kiosks.',
-                settings: { maxRetries: 10, retryDelay: 5, autoRebootEnabled: true }
+                settings: { maxRetries: 10, retryDelay: 5, autoRebootEnabled: true },
+                packages: []
             },
             {
                 id: 'template-3',
                 name: 'High-Security Workstation',
                 description: 'Single attempt deployment, no auto-reboot, requires manual verification.',
-                settings: { maxRetries: 0, retryDelay: 0, autoRebootEnabled: false }
+                settings: { maxRetries: 0, retryDelay: 0, autoRebootEnabled: false },
+                packages: []
             }
         ]
     },
@@ -54,6 +57,7 @@ const initialState: AppState = {
         isRescanModalOpen: false,
         isRemoteCredentialModalOpen: false,
         remoteTargetDeviceId: null,
+        isSystemInfoModalOpen: false,
     },
 };
 
@@ -193,6 +197,8 @@ const appReducer = (state: AppState, action: AppAction): AppState => {
             return { ...state, ui: { ...state.ui, isPassedComplianceModalOpen: action.payload } };
         case 'SET_RESCAN_MODAL_OPEN':
             return { ...state, ui: { ...state.ui, isRescanModalOpen: action.payload } };
+        case 'SET_SYSTEM_INFO_MODAL_OPEN':
+            return { ...state, ui: { ...state.ui, isSystemInfoModalOpen: action.payload } };
         case 'RESCAN_ALL_DEVICES_PROMPT':
             if (state.runner.devices.length === 0) {
                  return { ...state, runner: { ...state.runner, logs: [...state.runner.logs, { timestamp: new Date(), message: "No devices to re-scan.", level: 'WARNING' }] } };
@@ -479,25 +485,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 break;
             }
 
-            case 'REMOTE_IN_DEVICE': {
-                const device = runner.devices.find(d => d.id === action.payload);
-                if (!device) break;
-                const content = api.buildRemoteDesktopFile(device);
-                const blob = new Blob([content], { type: 'application/rdp' });
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = `${device.hostname}.rdp`;
-                link.click();
-                URL.revokeObjectURL(url);
-                addLog(`[${device.hostname}] Remote-In prepared. Downloaded RDP config for ${device.ipAddress || device.hostname}.`, 'INFO');
-                break;
-            }
-
              case 'BULK_CANCEL': {
                 addLog(`Cancelling tasks for ${runner.selectedDeviceIds.size} devices...`, 'WARNING');
                 const cancellable: (Device['status'])[] = ['Connecting', 'Retrying...', 'Updating', 'Waking Up', 'Checking Info', 'Checking BIOS', 'Checking DCU', 'Checking Windows', 'Updating BIOS', 'Updating DCU', 'Updating Windows', 'Executing Script'];
-                const newDevices = runner.devices.map(d => runner.selectedDeviceIds.has(d.id) && cancellable.includes(d.status) ? { ...d, status: 'Cancelled' } : d);
+                const newDevices: Device[] = runner.devices.map(d => runner.selectedDeviceIds.has(d.id) && cancellable.includes(d.status) ? { ...d, status: 'Cancelled' } : d);
                 dispatch({ type: 'SET_DEVICES', payload: newDevices });
                 dispatch({ type: 'CLEAR_SELECTIONS' });
                 break;
@@ -505,7 +496,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
             case 'WAKE_ON_LAN': {
                 if (action.payload.size === 0) break;
-                const newDevices = runner.devices.map(d => action.payload.has(d.id) ? { ...d, status: 'Waking Up' } : d);
+                const newDevices: Device[] = runner.devices.map(d => action.payload.has(d.id) ? { ...d, status: 'Waking Up' } : d);
                 dispatch({ type: 'SET_DEVICES', payload: newDevices });
                 addLog(`Sent Wake-on-LAN to ${action.payload.size} device(s).`, 'INFO');
                 dispatch({ type: 'CLEAR_SELECTIONS' });

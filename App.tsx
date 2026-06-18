@@ -21,8 +21,9 @@ import { AllComplianceDetailsModal } from './components/AllComplianceDetailsModa
 import { PassedComplianceDetailsModal } from './components/PassedComplianceDetailsModal';
 import { RescanConfirmationModal } from './components/RescanConfirmationModal';
 import { RemoteCredentialModal } from './components/RemoteCredentialModal';
+import { SystemInfoModal } from './components/SystemInfoModal';
 import { PackageManager } from './components/PackageManager';
-import type { Credentials } from './types';
+import type { Credentials, AppState } from './types';
 import { AppProvider, useAppContext } from './contexts/AppContext';
 
 export const TARGET_BIOS_VERSION = 'A24';
@@ -35,7 +36,7 @@ const AppContent: React.FC = () => {
 
     const isReadyToDeploy = ui.csvFile || runner.devices.length > 0;
 
-    const TabButton: React.FC<{tabName: 'monitor' | 'runner' | 'build' | 'script' | 'remote' | 'bulk' | 'pxe' | 'analytics' | 'templates', label: string, icon: React.ReactNode}> = ({ tabName, label, icon }) => (
+    const TabButton: React.FC<{tabName: AppState['ui']['activeTab'], label: string, icon: React.ReactNode}> = ({ tabName, label, icon }) => (
       <button
         onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: tabName })}
         className={`flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-t-lg border-b-2 transition-colors duration-200 ${
@@ -223,6 +224,7 @@ const AppContent: React.FC = () => {
                 onConfirm={(credentials: Credentials) => dispatch({ type: 'REMOTE_IN_WITH_CREDENTIALS', payload: credentials })}
                 deviceHostname={runner.devices.find(d => d.id === ui.remoteTargetDeviceId)?.hostname || ''}
             />
+            {ui.isSystemInfoModalOpen && <SystemInfoModal />}
         </div>
     );
 };

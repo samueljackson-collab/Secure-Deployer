@@ -1,6 +1,6 @@
 
 import { sleep, normalizeMacAddress, detectDeviceType } from '../utils/helpers';
-import type { Device, ImagingDevice, DeploymentRun, ChecklistItem, ComplianceResult } from '../types';
+import type { Device, ImagingDevice, DeploymentRun, ChecklistItem, ComplianceResult, Credentials, DeploymentOperationType } from '../types';
 import { TARGET_BIOS_VERSION, TARGET_DCU_VERSION, TARGET_WIN_VERSION } from '../App';
 import { ParseResult } from 'papaparse';
 
