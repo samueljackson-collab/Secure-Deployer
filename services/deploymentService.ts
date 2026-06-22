@@ -284,16 +284,34 @@ const validateDevice = async (
 };
 
 
+interface UpdateOutcomeOk { status: 'ok'; output: string }
+interface UpdateOutcomeError { status: 'error'; kind: string; message: string }
+type UpdateOutcome = UpdateOutcomeOk | UpdateOutcomeError;
+
+const invokeUpdateCommand = async (command: 'apply_dcu_update' | 'apply_windows_update', args: Record<string, unknown>): Promise<UpdateOutcome> => {
+    try {
+        const result = await invokeCommand<{ output: string }>(command, args);
+        return { status: 'ok', output: result.output };
+    } catch (error) {
+        const e = error as { kind?: string; message?: string };
+        return { status: 'error', kind: e?.kind || 'ExecutionFailed', message: e?.message || String(error) };
+    }
+};
+
 export const updateDevice = async (
     device: Device,
     settings: { autoRebootEnabled: boolean },
     onProgress: (device: Device) => void,
     isCancelled: () => boolean,
-    biosPassword?: string
+    biosPassword?: string,
+    credentials?: Credentials
 ): Promise<void> => {
     let currentDeviceState: Device = { ...device, status: 'Updating' };
     onProgress(currentDeviceState);
-    
+
+    const host = device.ipAddress || device.hostname;
+    const realMode = isTauri() && credentials?.username;
+
     let needsReboot = false;
     const succeeded: string[] = [];
     const failed: string[] = [];
@@ -309,8 +327,35 @@ export const updateDevice = async (
 
         currentDeviceState = { ...currentDeviceState, status: `Updating ${comp.name}` };
         onProgress(currentDeviceState);
+
+        if (realMode && credentials) {
+            // BIOS and DCU updates are both applied by dcu-cli.exe in a
+            // single Rust command; Windows Update is a separate script.
+            const outcome = comp.name === 'Windows'
+                ? await invokeUpdateCommand('apply_windows_update', {
+                    host,
+                    credentials: { username: credentials.username, password: credentials.password },
+                })
+                : await invokeUpdateCommand('apply_dcu_update', {
+                    host,
+                    credentials: { username: credentials.username, password: credentials.password },
+                    biosPassword: comp.name === 'BIOS' ? biosPassword : undefined,
+                });
+
+            if (isCancelled()) return;
+
+            if (outcome.status === 'ok') {
+                succeeded.push(comp.name);
+                if (comp.requiresReboot) needsReboot = true;
+            } else {
+                failed.push(comp.name);
+                break; // Stop on first failure
+            }
+            continue;
+        }
+
+        // --- Browser-only simulated fallback (no Rust backend available) ---
         if (comp.name === 'BIOS' && biosPassword) {
-            // Simulates: dcu-cli.exe /applyUpdates -reboot=disable -biosPassword=****
             await sleep(300);
         }
         await sleep(2000 + Math.random() * 1000);
@@ -321,7 +366,7 @@ export const updateDevice = async (
             if (comp.requiresReboot) needsReboot = true;
         } else {
             failed.push(comp.name);
-            break; // Stop on first failure
+            break;
         }
     }
 
@@ -336,23 +381,65 @@ export const updateDevice = async (
     } else {
         currentDeviceState.status = 'Success'; // No updates were needed
     }
-    
+
     onProgress(currentDeviceState);
 
     if (currentDeviceState.status === 'Update Complete (Reboot Pending)' && settings.autoRebootEnabled) {
-        await rebootDevice();
+        await rebootDevice(device, credentials);
         onProgress({ ...currentDeviceState, status: 'Success' });
     }
 };
 
-export const rebootDevice = async (): Promise<void> => {
+export const rebootDevice = async (device?: Device, credentials?: Credentials): Promise<void> => {
+    if (isTauri() && credentials?.username && device) {
+        try {
+            await invokeCommand('reboot_device', {
+                host: device.ipAddress || device.hostname,
+                credentials: { username: credentials.username, password: credentials.password },
+            });
+        } catch (error) {
+            throw new Error((error as { message?: string })?.message || String(error));
+        }
+        return;
+    }
+    // --- Browser-only simulated fallback (no Rust backend available) ---
     await sleep(8000 + Math.random() * 4000);
 };
 
 export const executeScript = async (
     device?: Device,
-    onProgress?: (progress: number, log: string) => void
+    onProgress?: (progress: number, log: string) => void,
+    credentials?: Credentials
 ): Promise<{ success: boolean; output: string; error?: string; troubleshooting?: string }> => {
+    if (isTauri() && credentials?.username && device?.scriptFile) {
+        const scriptBody = await device.scriptFile.text();
+        onProgress?.(20, `[INFO] Connecting to ${device.hostname}...`);
+        try {
+            const result = await invokeCommand<{ output: string }>('execute_adhoc_script', {
+                host: device.ipAddress || device.hostname,
+                credentials: { username: credentials.username, password: credentials.password },
+                scriptBody,
+            });
+            onProgress?.(100, '[SUCCESS] Script completed.');
+            return { success: true, output: result.output };
+        } catch (error) {
+            const e = error as { kind?: string; message?: string };
+            const message: string = e?.message || String(error);
+            onProgress?.(100, `[ERROR] ${message}`);
+            // The Rust side already appends a "Tip: ..." suffix from its own
+            // troubleshooting KB when it recognizes the failure; surface that
+            // as a separate field for the UI rather than embedding it in `error`.
+            const tipMatch = message.match(/ Tip: (.+)$/);
+            return {
+                success: false,
+                output: '',
+                error: tipMatch ? message.slice(0, tipMatch.index) : message,
+                troubleshooting: tipMatch?.[1],
+            };
+        }
+    }
+
+    // --- Browser-only simulated fallback (no Rust backend available) ---
     const isSuccess = Math.random() > 0.3;
     let fullOutput = "";
 
@@ -399,7 +486,7 @@ export const executeScript = async (
             }
         ];
         const randomError = errors[Math.floor(Math.random() * errors.length)];
-        
+
         return {
             success: false,
             output: fullOutput.trim(),
@@ -430,11 +517,66 @@ export const buildRemoteDesktopFile = (device: Device, credentials?: Credentials
     return lines.join('\n');
 };
 
+const fileToBase64 = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+    });
+
+const performDeploymentOperationReal = async (
+    device: Device,
+    operation: DeploymentOperationType,
+    targetFile: File,
+    credentials: Credentials
+): Promise<{ ok: boolean; reason?: string; message: string; patch: Partial<Device> }> => {
+    const targetName = targetFile.name;
+    const host = device.ipAddress || device.hostname;
+    try {
+        const fileBase64 = operation === 'delete' ? undefined : await fileToBase64(targetFile);
+        const result = await invokeCommand<{ output: string }>('run_remote_file_op', {
+            host,
+            credentials: { username: credentials.username, password: credentials.password },
+            operation,
+            fileName: targetName,
+            fileBase64,
+        });
+        const verb = operation === 'run' ? 'Run' : operation === 'install' ? 'Install' : 'Delete';
+        const files = new Set(device.availableFiles || []);
+        const installed = new Set(device.installedPackages || []);
+        const running = new Set(device.runningPrograms || []);
+        if (operation === 'run') running.add(targetName);
+        if (operation === 'install') { files.add(targetName); installed.add(targetName); }
+        if (operation === 'delete') { files.delete(targetName); installed.delete(targetName); running.delete(targetName); }
+        return {
+            ok: true,
+            message: `[${device.hostname}] ${verb} operation succeeded for "${targetName}". ${result.output}`.trim(),
+            patch: { status: 'Action Complete', availableFiles: [...files], installedPackages: [...installed], runningPrograms: [...running] },
+        };
+    } catch (error) {
+        const e = error as { kind?: string; message?: string };
+        const verb = operation === 'run' ? 'Run' : operation === 'install' ? 'Install' : 'Delete';
+        return {
+            ok: false,
+            reason: e?.kind || 'ExecutionFailed',
+            message: `[${device.hostname}] ${verb} failed for "${targetName}": ${e?.message || String(error)}`,
+            patch: { status: 'Action Failed' },
+        };
+    }
+};
+
 export const performDeploymentOperation = async (
     device: Device,
     operation: DeploymentOperationType,
     targetFile: File,
+    credentials?: Credentials,
 ): Promise<{ ok: boolean; reason?: string; message: string; patch: Partial<Device> }> => {
+    if (isTauri() && credentials?.username) {
+        return performDeploymentOperationReal(device, operation, targetFile, credentials);
+    }
+
+    // --- Browser-only simulated fallback (no Rust backend available) ---
     await sleep(1200 + Math.random() * 1000);
     const targetName = targetFile.name;
     const files = new Set(device.availableFiles || []);
@@ -525,33 +667,51 @@ export const transformImagingToRunnerDevices = (imagingDevices: ImagingDevice[])
     }));
 };
 
-const runSingleComplianceCheck = async (): Promise<ComplianceResult> => {
+const runSingleComplianceCheck = async (device: ImagingDevice, credentials?: Credentials): Promise<ComplianceResult> => {
+    if (isTauri() && credentials?.username) {
+        try {
+            const result = await invokeCommand<{ status: 'Passed' | 'Failed'; details: ChecklistItem[] }>('run_compliance_check', {
+                host: device.ipAddress || device.hostname,
+                credentials: { username: credentials.username, password: credentials.password },
+            });
+            return { status: result.status, details: result.details };
+        } catch (error) {
+            const e = error as { message?: string };
+            const check = (desc: string): ChecklistItem => ({ description: desc, expected: 'Yes', passed: false, actual: 'Unknown' });
+            return {
+                status: 'Failed',
+                details: [check(`Compliance check failed: ${e?.message || String(error)}`)],
+            };
+        }
+    }
+
+    // --- Browser-only simulated fallback (no Rust backend available) ---
     await sleep(2000 + Math.random() * 3000);
     const check = (desc: string, pass: boolean): ChecklistItem => ({ description: desc, expected: 'Yes', passed: pass, actual: pass ? 'Yes' : 'No' });
-    
+
     const details: ChecklistItem[] = [
         check('Bitlocker Volume Status', Math.random() > 0.1),
         check('Citrix Workspace Installed', Math.random() > 0.1),
         check('LAPS Installed', Math.random() > 0.1),
         check('SCCM Client Installed & Running', Math.random() > 0.15),
     ];
-    
+
     const overallStatus = details.every(item => item.passed) ? 'Passed' : 'Failed';
     return { status: overallStatus, details };
 };
 
-export const runComplianceChecks = async (devices: ImagingDevice[], onProgress: (device: ImagingDevice) => void): Promise<void> => {
+export const runComplianceChecks = async (devices: ImagingDevice[], onProgress: (device: ImagingDevice) => void, credentials?: Credentials): Promise<void> => {
     for (const device of devices) {
         onProgress({ ...device, status: 'Checking Compliance' });
-        const result = await runSingleComplianceCheck();
+        const result = await runSingleComplianceCheck(device, credentials);
         onProgress({ ...device, complianceCheck: result, status: 'Completed' });
     }
 };
 
-export const revalidateImagingDevices = async (devices: ImagingDevice[], onProgress: (device: ImagingDevice) => void): Promise<void> => {
+export const revalidateImagingDevices = async (devices: ImagingDevice[], onProgress: (device: ImagingDevice) => void, credentials?: Credentials): Promise<void> => {
      for (const device of devices) {
         onProgress({ ...device, status: 'Checking Compliance', complianceCheck: undefined });
-        const result = await runSingleComplianceCheck();
+        const result = await runSingleComplianceCheck(device, credentials);
         onProgress({ ...device, complianceCheck: result, status: 'Completed' });
     }
 }

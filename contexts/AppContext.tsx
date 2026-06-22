@@ -355,7 +355,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
                 await Promise.all(deviceIds.map(id => {
                     const device = runner.devices.find(d => d.id === id);
-                    if(device) return api.updateDevice(device, runner.settings, onProgress, () => state.runner.isCancelled, state.credentials?.biosPassword);
+                    if(device) return api.updateDevice(device, runner.settings, onProgress, () => state.runner.isCancelled, state.credentials?.biosPassword, state.credentials);
                 }));
 
                 if (action.type === 'BULK_UPDATE') {
@@ -369,7 +369,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 const device = runner.devices.find(d => d.id === action.payload);
                 if (device) {
                     dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, status: 'Rebooting...' } });
-                    await api.rebootDevice();
+                    await api.rebootDevice(device, state.credentials);
                     if (!state.runner.isCancelled) {
                         dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, status: 'Success' } });
                         addLog(`[${device.hostname}] Reboot complete.`, 'SUCCESS');
@@ -422,7 +422,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                         dispatch({ type: 'APPEND_SCRIPT_LOG', payload: { id: device.id, log } });
                     };
 
-                    const success = await api.executeScript(device, onProgress);
+                    const success = await api.executeScript(device, onProgress, state.credentials);
                     if (!state.runner.isCancelled) {
                          dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, status: success.success ? 'Execution Complete' : 'Execution Failed' } });
                          if (!success.success && success.error) {
@@ -463,7 +463,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 const failuresByReason: Record<string, string[]> = {};
                 for (const device of devicesToProcess) {
                     dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, status: 'Deploying Action' } });
-                    const result = await api.performDeploymentOperation(device, action.payload.operation, action.payload.file);
+                    const result = await api.performDeploymentOperation(device, action.payload.operation, action.payload.file, state.credentials);
                     dispatch({ type: 'UPDATE_SINGLE_DEVICE', payload: { id: device.id, ...result.patch } });
                     addLog(result.message, result.ok ? 'SUCCESS' : 'ERROR');
                     if (!result.ok && result.reason) {
@@ -525,7 +525,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 addLog(`Starting re-validation for ${action.payload.size} device(s).`, 'INFO');
                  const onProgress = (device: ImagingDevice) => dispatch({ type: 'UPDATE_IMAGING_DEVICE_STATE', payload: device });
                  const devicesToRevalidate = state.monitor.devices.filter(d => action.payload.has(d.id));
-                 await api.revalidateImagingDevices(devicesToRevalidate, onProgress);
+                 // Reuses the Runner flow's one-time credentials if already captured this
+                 // session; a dedicated credentials prompt for the imaging/monitor flow
+                 // (which has no Runner credentials of its own) is tracked as follow-up work.
+                 await api.revalidateImagingDevices(devicesToRevalidate, onProgress, state.credentials);
                 break;
             }
 
@@ -590,7 +593,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             if (devicesToCheck.length === 0) return;
 
             const onProgress = (device: ImagingDevice) => dispatch({ type: 'UPDATE_IMAGING_DEVICE_STATE', payload: device });
-            await api.runComplianceChecks(devicesToCheck, onProgress);
+            await api.runComplianceChecks(devicesToCheck, onProgress, state.credentials);
         };
         checkCompliance();
     }, [state.monitor.devices]);

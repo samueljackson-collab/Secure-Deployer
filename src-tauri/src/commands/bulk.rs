@@ -1,4 +1,5 @@
 use crate::error::AppError;
+use crate::scripts::{DCU_SCRIPT, WIN_UPDATE_SCRIPT};
 use crate::winrm;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -6,12 +7,6 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::Semaphore;
 use zeroize::Zeroizing;
-
-/// Same payloads carried forward from the now-deleted Node relay
-/// (`server/scripts/dcu.ps1` / `winupdate.ps1`), embedded into the binary
-/// so the packaged app has no runtime dependency on external script files.
-const DCU_SCRIPT: &str = include_str!("../scripts/dcu.ps1");
-const WIN_UPDATE_SCRIPT: &str = include_str!("../scripts/winupdate.ps1");
 
 /// Devices are addressed by whichever of hostname/IP is present; WinRM
 /// connects to `ip_address` when given, otherwise `hostname`.

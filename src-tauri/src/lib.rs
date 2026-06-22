@@ -1,5 +1,6 @@
 mod commands;
 mod error;
+mod scripts;
 mod winrm;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -18,7 +19,13 @@ pub fn run() {
     })
     .invoke_handler(tauri::generate_handler![
       commands::scan::scan_device,
-      commands::bulk::bulk_update
+      commands::bulk::bulk_update,
+      commands::update::apply_dcu_update,
+      commands::update::apply_windows_update,
+      commands::reboot::reboot_device,
+      commands::script::execute_adhoc_script,
+      commands::fileop::run_remote_file_op,
+      commands::compliance::run_compliance_check
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
