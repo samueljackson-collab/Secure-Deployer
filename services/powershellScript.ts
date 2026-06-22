@@ -24,7 +24,7 @@ const RISKY_PATTERNS: Array<{ regex: RegExp; pattern: string; description: strin
     { regex: /\bUninstall-WindowsFeature\b/i, pattern: 'Uninstall-WindowsFeature', description: 'Removes a Windows Server role or feature.', severity: 'medium' },
     { regex: /\bSet-ExecutionPolicy\b.*\b(Unrestricted|Bypass)\b/i, pattern: 'Set-ExecutionPolicy Unrestricted/Bypass', description: 'Removes or bypasses script execution restrictions.', severity: 'medium' },
     { regex: /\bInvoke-Expression\b|\biex\b/i, pattern: 'Invoke-Expression / iex', description: 'Executes arbitrary string as code — potential injection vector.', severity: 'medium' },
-    { regex: /\bDownloadString\b|\bDownloadFile\b/i, pattern: 'WebClient Download', description: 'Downloads and potentially executes remote content.', severity: 'medium' },
+    { regex: /\b(DownloadString|DownloadFile)\b|\b(Invoke-WebRequest|iwr|Invoke-RestMethod|irm)\b/i, pattern: 'Web Download / Request', description: 'Downloads and potentially executes remote content.', severity: 'medium' },
     { regex: /\bStart-Process\b.*-Verb\s+RunAs\b/i, pattern: 'Start-Process -Verb RunAs', description: 'Launches a process with elevated privileges.', severity: 'medium' },
     { regex: /\bnetsh\s+firewall\b|\bnetsh\s+advfirewall\b/i, pattern: 'netsh firewall', description: 'Modifies Windows Firewall rules.', severity: 'medium' },
 ];
