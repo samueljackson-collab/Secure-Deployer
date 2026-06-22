@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import Papa from 'papaparse';
+import Papa, { ParseResult } from 'papaparse';
 import { parseDevicesFromCsv } from '../../services/deploymentService';
 
 describe('parseDevicesFromCsv', () => {
@@ -138,10 +138,10 @@ describe('parseDevicesFromCsv', () => {
     const results = {
       data: [],
       errors: [],
-      meta: {} as any,
+      meta: {} as ParseResult<Record<string, string>>['meta'],
     };
 
-    const { devices, errors } = parseDevicesFromCsv(results as any);
+    const { devices, errors } = parseDevicesFromCsv(results as ParseResult<Record<string, string>>);
 
     expect(devices).toEqual([]);
     expect(errors).toEqual(['Could not detect header row in CSV.']);
@@ -158,11 +158,13 @@ describe('parseDevicesFromCsv', () => {
   it('surfaces PapaParse-reported parsing errors alongside any device errors', () => {
     const results = {
       data: [],
-      errors: [{ type: 'Quotes', code: 'MissingQuotes', message: 'Unescaped quote', row: 0 } as any],
-      meta: { fields: ['Hostname', 'MAC'] } as any,
+      errors: [
+        { type: 'Quotes', code: 'MissingQuotes', message: 'Unescaped quote', row: 0 } as ParseResult<Record<string, string>>['errors'][number],
+      ],
+      meta: { fields: ['Hostname', 'MAC'] } as ParseResult<Record<string, string>>['meta'],
     };
 
-    const { devices, errors } = parseDevicesFromCsv(results as any);
+    const { devices, errors } = parseDevicesFromCsv(results as ParseResult<Record<string, string>>);
 
     expect(devices).toEqual([]);
     expect(errors).toHaveLength(1);
