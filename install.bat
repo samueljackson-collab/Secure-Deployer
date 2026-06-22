@@ -124,22 +124,21 @@ if errorlevel 1 (
 echo [INFO] Dependencies installed successfully.
 
 :: ---------------------------------------------------------------------------
-:: Step 5 -- Warn about broken vitest.config.ts
+:: Step 5 -- Warn about test coverage status
 :: ---------------------------------------------------------------------------
 echo.
 echo ============================================================
-echo [WARN] IMPORTANT: The test harness is not yet functional.
+echo [INFO] Test Infrastructure Status:
 echo.
-echo        vitest.config.ts exists but is missing required fields:
-echo          - environment: 'jsdom'   (needed for React component tests)
-echo          - globals: true          (needed for describe/it/expect)
-echo          - setupFiles             (needed for @testing-library cleanup)
+echo        vitest.config.ts is properly configured.
+echo        Test dependencies are installed in package.json.
+echo        "npm test" and "npm run test:coverage" scripts exist.
+echo        src\tests\setup.ts imports @testing-library/jest-dom.
 echo.
-echo        Test dependencies (vitest, jsdom, @testing-library/react)
-echo        are not in package.json, and no "test" script exists yet.
+echo        However, NO TESTS have been written yet.
+echo        "npm test" will pass (no failures) but coverage will be 0%%.
 echo.
-echo        "npm test" will fail until these issues are resolved.
-echo        See docs\GUIDE.md -- Testing section for the full fix.
+echo        See docs\GUIDE.md -- Testing section for test-writing guidance.
 echo ============================================================
 echo.
 

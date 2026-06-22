@@ -7,19 +7,16 @@ a green state. Items marked **BLOCKING** must be resolved before any production 
 
 ## Section 1 — Test Coverage Gate
 
-> **Status: BLOCKED** — vitest.config.ts is broken; no tests exist yet.
+> **Status: BLOCKED** — Test infrastructure is configured but no tests exist yet.
 
-- [ ] **BLOCKING** — Install missing test dependencies:
-  ```bash
-  npm install --save-dev vitest @vitest/coverage-v8 jsdom @testing-library/react @testing-library/user-event @testing-library/jest-dom
-  ```
-- [ ] **BLOCKING** — Fix `vitest.config.ts`: add `environment: 'jsdom'`, `globals: true`, and
-      `setupFiles` pointing to a test setup file. The current config is missing all three fields
-      and tests cannot run without them.
-- [ ] **BLOCKING** — Create `tests/setup.ts` with `@testing-library/jest-dom` import and
-      `cleanup()` registered in `afterEach`.
-- [ ] **BLOCKING** — Add `test`, `test:watch`, and `test:coverage` scripts to `package.json`
-      (none currently exist).
+- [x] **BLOCKING** — All test dependencies installed in `package.json`:
+      `vitest`, `@vitest/coverage-v8`, `jsdom`, `@testing-library/react`,
+      `@testing-library/user-event`, `@testing-library/jest-dom`.
+- [x] **BLOCKING** — `vitest.config.ts` properly configured with `environment: 'jsdom'`,
+      `globals: true`, and `setupFiles: ['./src/tests/setup.ts']`.
+- [x] **BLOCKING** — `src/tests/setup.ts` imports `@testing-library/jest-dom` for extended matchers.
+- [x] **BLOCKING** — Test scripts added to `package.json`: `test`, `test:coverage`.
+- [ ] **BLOCKING** — Write actual tests (none exist yet — see priority test areas below).
 - [ ] Line coverage threshold ≥ 70% (enforced by `vitest.config.ts` coverage thresholds).
 - [ ] Function coverage threshold ≥ 70%.
 - [ ] `npm test` exits with code 0 before any merge to `main`.
@@ -240,7 +237,7 @@ These checks are unique to Secure Deployment Runner's domain and must be verifie
 
 | Section | Gate | Status |
 |---|---|---|
-| 1. Test Coverage | `npm test` passes; coverage ≥ 70% | BLOCKED (vitest config broken) |
+| 1. Test Coverage | `npm test` passes; coverage ≥ 70% | BLOCKED (no tests written yet) |
 | 2. Build Verification | lint 0 warnings, tsc 0 errors, build succeeds | — |
 | 3. Environment & Secrets | No hardcoded keys; secrets in GitHub | — |
 | 4. Security | HTTPS, no credential bypass, CSV sanitized | — |
