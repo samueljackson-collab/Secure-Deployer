@@ -13,6 +13,7 @@ import { BuildOutput } from './components/BuildOutput';
 import { ImagingScriptViewer } from './components/ImagingScriptViewer';
 import { PxeTaskSequence } from './components/PxeTaskSequence';
 import { RemoteDesktop } from './components/RemoteDesktop';
+import { BulkUpdate } from './components/BulkUpdate';
 import { AnalyticsTab } from './components/AnalyticsTab';
 import { DeploymentTemplates } from './components/DeploymentTemplates';
 import { ComplianceDetailsModal } from './components/ComplianceDetailsModal';
@@ -34,7 +35,7 @@ const AppContent: React.FC = () => {
 
     const isReadyToDeploy = ui.csvFile || runner.devices.length > 0;
 
-    const TabButton: React.FC<{tabName: 'monitor' | 'runner' | 'build' | 'script' | 'remote' | 'pxe' | 'analytics' | 'templates', label: string, icon: React.ReactNode}> = ({ tabName, label, icon }) => (
+    const TabButton: React.FC<{tabName: 'monitor' | 'runner' | 'build' | 'script' | 'remote' | 'bulk' | 'pxe' | 'analytics' | 'templates', label: string, icon: React.ReactNode}> = ({ tabName, label, icon }) => (
       <button
         onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: tabName })}
         className={`flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-t-lg border-b-2 transition-colors duration-200 ${
@@ -59,6 +60,7 @@ const AppContent: React.FC = () => {
                     <TabButton tabName="pxe" label="PXE Task Sequence" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" /></svg>} />
                     <TabButton tabName="build" label="Build Output" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M5 4a2 2 0 012-2h6a2 2 0 012 2v1H5V4zM5 7h10v9a2 2 0 01-2 2H7a2 2 0 01-2-2V7z" /><path d="M10 11a1 1 0 011 1v2a1 1 0 11-2 0v-2a1 1 0 011-1z" /></svg>} />
                     <TabButton tabName="remote" label="Remote Desktop" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z" /><path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.022 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" /></svg>} />
+                    <TabButton tabName="bulk" label="Bulk Update" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M2 4a2 2 0 012-2h12a2 2 0 012 2v2H2V4zm0 4h16v8a2 2 0 01-2 2H4a2 2 0 01-2-2V8zm4 3a1 1 0 100 2h2a1 1 0 100-2H6z" /></svg>} />
                     <TabButton tabName="analytics" label="Trends & Analytics" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" /></svg>} />
                     <TabButton tabName="templates" label="Templates" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM4 7a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1zM2 11a2 2 0 012-2h12a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4z" /></svg>} />
                 </div>
@@ -185,6 +187,7 @@ const AppContent: React.FC = () => {
                 {ui.activeTab === 'script' && <ImagingScriptViewer devices={state.monitor.devices} />}
                 {ui.activeTab === 'pxe' && <PxeTaskSequence />}
                 {ui.activeTab === 'remote' && <RemoteDesktop devices={state.runner.devices} onRemoteIn={(deviceId) => dispatch({ type: 'PROMPT_REMOTE_CREDENTIALS', payload: deviceId })} />}
+                {ui.activeTab === 'bulk' && <BulkUpdate devices={state.runner.devices} />}
                 {ui.activeTab === 'analytics' && <AnalyticsTab />}
                 {ui.activeTab === 'templates' && <DeploymentTemplates />}
             </main>
