@@ -3,6 +3,7 @@ import { ImagingDevice } from '../types';
 import { FileCode, Play, Save, Terminal, Activity, CheckCircle, AlertTriangle, X, RefreshCw, Upload, ChevronRight, File } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAppContext } from '../contexts/AppContext';
+import { ScriptAnalysisModal } from './ScriptAnalysisModal';
 
 interface ImagingScriptViewerProps {
     devices: ImagingDevice[];
@@ -11,7 +12,7 @@ interface ImagingScriptViewerProps {
 const AVAILABLE_SCRIPTS = [
     {
         name: 'Full Windows Imaging (DISM)',
-        content: `# Full Windows Imaging Script (WinPE/DISM)\n# This script executes the complete imaging sequence for enterprise deployment.\n# It assumes the environment is booted into WinPE and network shares are mapped.\n\necho "====================================================="\necho "        Enterprise Windows Imaging Sequence          "\necho "====================================================="\n\necho "[INFO] Step 1: Cleaning and partitioning disk 0..."\n# Using a predefined diskpart script to ensure consistent partition layout (UEFI/GPT)\ndiskpart /s X:\\Windows\\System32\\diskpart_script.txt\n\necho "[INFO] Step 2: Applying Windows Image (install.wim)..."\n# Applying the customized enterprise WIM image to the Windows partition\ndism /Apply-Image /ImageFile:Z:\\Images\\Windows11_Enterprise_22H2_Custom.wim /Index:1 /ApplyDir:W:\\\n\necho "[INFO] Step 3: Creating Boot Files (BCDBoot)..."\n# Writing boot environment files to the EFI system partition\nW:\\Windows\\System32\\bcdboot W:\\Windows /s S: /f ALL\n\necho "[INFO] Step 4: Injecting Device Drivers..."\n# Recursively adding out-of-box drivers based on the detected hardware model\ndism /Image:W:\\ /Add-Driver /Driver:Z:\\Drivers\\Model_Specific /Recurse\n\necho "[INFO] Step 5: Applying Unattend.xml (Sysprep configuration)..."\n# Copying the answer file for OOBE automation, domain join, and local admin setup\ncopy Z:\\Configs\\unattend.xml W:\\Windows\\System32\\Sysprep\\unattend.xml\n\necho "[INFO] Step 6: Setting up Recovery Environment (WinRE)..."\n# Configuring the Windows Recovery Environment\nmd W:\\Recovery\\WindowsRE\ncopy W:\\Windows\\System32\\Recovery\\winre.wim W:\\Recovery\\WindowsRE\\winre.wim\nW:\\Windows\\System32\\reagentc /setreimage /path W:\\Recovery\\WindowsRE /target W:\\Windows\n\necho "[INFO] Step 7: Applying Custom Registry Settings..."\n# Loading the offline registry hive to apply enterprise policies before first boot\nreg load HKLM\\Offline W:\\Windows\\System32\\config\\SOFTWARE\nreg import Z:\\Configs\\EnterprisePolicies.reg\nreg unload HKLM\\Offline\n\necho "[SUCCESS] Imaging complete. System will reboot shortly."\nwpeutil reboot\n`
+        content: `# Full Windows Imaging Script (WinPE/DISM)\n# Enterprise imaging sequence — requires WinPE environment.\n\necho "====================================================="\necho "        Enterprise Windows Imaging Sequence          "\necho "====================================================="\n\necho "[INFO] Step 1: Cleaning and partitioning disk 0..."\ndiskpart /s X:\\Windows\\System32\\diskpart_script.txt\n\necho "[INFO] Step 2: Applying Windows Image (install.wim)..."\ndism /Apply-Image /ImageFile:Z:\\Images\\Windows11_Enterprise_22H2_Custom.wim /Index:1 /ApplyDir:W:\\\n\necho "[INFO] Step 3: Creating Boot Files (BCDBoot)..."\nW:\\Windows\\System32\\bcdboot W:\\Windows /s S: /f ALL\n\necho "[INFO] Step 4: Injecting Device Drivers..."\ndism /Image:W:\\ /Add-Driver /Driver:Z:\\Drivers\\Model_Specific /Recurse\n\necho "[INFO] Step 5: Applying Unattend.xml (Sysprep configuration)..."\ncopy Z:\\Configs\\unattend.xml W:\\Windows\\System32\\Sysprep\\unattend.xml\n\necho "[INFO] Step 6: Setting up Recovery Environment (WinRE)..."\nmd W:\\Recovery\\WindowsRE\ncopy W:\\Windows\\System32\\Recovery\\winre.wim W:\\Recovery\\WindowsRE\\winre.wim\nW:\\Windows\\System32\\reagentc /setreimage /path W:\\Recovery\\WindowsRE /target W:\\Windows\n\necho "[INFO] Step 7: Applying Custom Registry Settings..."\nreg load HKLM\\Offline W:\\Windows\\System32\\config\\SOFTWARE\nreg import Z:\\Configs\\EnterprisePolicies.reg\nreg unload HKLM\\Offline\n\necho "[SUCCESS] Imaging complete. System will reboot shortly."\nwpeutil reboot\n`
     },
     {
         name: 'Lite Touch Deployment',
@@ -28,6 +29,7 @@ export const ImagingScriptViewer: React.FC<ImagingScriptViewerProps> = ({ device
     const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
     const [scriptContent, setScriptContent] = useState<string>(AVAILABLE_SCRIPTS[0].content);
     const [isExecuting, setIsExecuting] = useState(false);
+    const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
     const [executionProgress, setExecutionProgress] = useState(0);
     const [executionLogs, setExecutionLogs] = useState<string[]>([]);
     const [executionStatus, setExecutionStatus] = useState<'idle' | 'running' | 'completed' | 'failed'>('idle');
@@ -48,11 +50,10 @@ export const ImagingScriptViewer: React.FC<ImagingScriptViewerProps> = ({ device
         }
     }, [executionLogs]);
 
-    const handleRunScript = () => {
+    const startExecution = () => {
         const targetDevices = selectedDeviceId ? [selectedDevice].filter(Boolean) as ImagingDevice[] : devices;
-        
         if (targetDevices.length === 0) {
-            alert("No devices available to run the script.");
+            alert('No devices available to run the script.');
             return;
         }
 
@@ -62,11 +63,11 @@ export const ImagingScriptViewer: React.FC<ImagingScriptViewerProps> = ({ device
         setExecutionLogs([`[${new Date().toLocaleTimeString()}] Starting execution on ${targetDevices.length} device(s)...`]);
 
         const steps = [
-            { msg: "Connecting to target devices via WinRM...", delay: 1000 },
-            { msg: "Authentication successful.", delay: 800 },
-            { msg: "Transferring script payload...", delay: 1500 },
-            { msg: "Executing imaging sequence...", delay: 2000 },
-            { msg: "Script execution completed successfully.", delay: 500 }
+            { msg: 'Connecting to target devices via WinRM...', delay: 1000 },
+            { msg: 'Authentication successful.', delay: 800 },
+            { msg: 'Transferring script payload...', delay: 1500 },
+            { msg: 'Executing imaging sequence...', delay: 2000 },
+            { msg: 'Script execution completed successfully.', delay: 500 },
         ];
 
         let currentStep = 0;
@@ -85,6 +86,15 @@ export const ImagingScriptViewer: React.FC<ImagingScriptViewerProps> = ({ device
         runNextStep();
     };
 
+    const handleRunScript = () => {
+        const targetDevices = selectedDeviceId ? [selectedDevice].filter(Boolean) as ImagingDevice[] : devices;
+        if (targetDevices.length === 0) {
+            alert('No devices available to run the script.');
+            return;
+        }
+        setIsAnalysisModalOpen(true);
+    };
+
     const handleSelectScript = (content: string) => {
         setScriptContent(content);
         if (selectedDeviceId) {
@@ -95,7 +105,6 @@ export const ImagingScriptViewer: React.FC<ImagingScriptViewerProps> = ({ device
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
-
         const reader = new FileReader();
         reader.onload = (event) => {
             const content = event.target?.result as string;
@@ -141,20 +150,20 @@ export const ImagingScriptViewer: React.FC<ImagingScriptViewerProps> = ({ device
                     </div>
                     <div className="flex gap-2">
                         {selectedDeviceId && (
-                            <button 
+                            <button
                                 onClick={() => fileInputRef.current?.click()}
                                 className="px-4 py-2 bg-gray-800 text-white rounded hover:bg-gray-700 flex items-center gap-2 transition-colors"
                             >
                                 <Upload size={16} /> Upload
                             </button>
                         )}
-                        <button 
+                        <button
                             onClick={handleSaveScript}
                             className="px-4 py-2 bg-gray-800 text-white rounded hover:bg-gray-700 flex items-center gap-2 transition-colors"
                         >
                             <Save size={16} /> Save
                         </button>
-                        <button 
+                        <button
                             onClick={handleRunScript}
                             disabled={isExecuting || devices.length === 0}
                             className="px-4 py-2 bg-[#39FF14] text-black font-bold rounded hover:bg-[#32e612] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
@@ -176,23 +185,15 @@ export const ImagingScriptViewer: React.FC<ImagingScriptViewerProps> = ({ device
                                 {script.name}
                             </button>
                         ))}
-                        <input 
-                            type="file" 
-                            ref={fileInputRef} 
-                            onChange={handleFileUpload} 
-                            className="hidden" 
-                            accept=".ps1,.bat,.txt"
-                        />
+                        <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept=".ps1,.bat,.txt" />
                     </div>
                 )}
 
                 <div className="bg-gray-900 flex-grow rounded-lg border border-gray-800 p-4 font-mono text-sm text-gray-300 overflow-auto">
-                    <textarea 
+                    <textarea
                         className="w-full h-full bg-transparent border-none outline-none resize-none"
                         value={scriptContent}
-                        onChange={(e) => {
-                            setScriptContent(e.target.value);
-                        }}
+                        onChange={(e) => setScriptContent(e.target.value)}
                         spellCheck="false"
                     />
                 </div>
@@ -204,10 +205,7 @@ export const ImagingScriptViewer: React.FC<ImagingScriptViewerProps> = ({ device
                         <Terminal size={20} /> Monitor Devices ({devices.length})
                     </h3>
                     {selectedDeviceId && (
-                        <button 
-                            onClick={() => setSelectedDeviceId(null)}
-                            className="text-xs text-gray-500 hover:text-white"
-                        >
+                        <button onClick={() => setSelectedDeviceId(null)} className="text-xs text-gray-500 hover:text-white">
                             Clear Selection
                         </button>
                     )}
@@ -217,12 +215,12 @@ export const ImagingScriptViewer: React.FC<ImagingScriptViewerProps> = ({ device
                         <p className="text-gray-500 italic">No devices in monitor.</p>
                     ) : (
                         devices.map(device => (
-                            <button 
-                                key={device.id} 
+                            <button
+                                key={device.id}
                                 onClick={() => setSelectedDeviceId(device.id)}
                                 className={`w-full text-left p-3 rounded border transition-all flex justify-between items-center group ${
-                                    selectedDeviceId === device.id 
-                                        ? 'bg-[#39FF14]/10 border-[#39FF14] shadow-[0_0_10px_rgba(57,255,20,0.1)]' 
+                                    selectedDeviceId === device.id
+                                        ? 'bg-[#39FF14]/10 border-[#39FF14] shadow-[0_0_10px_rgba(57,255,20,0.1)]'
                                         : 'bg-gray-900 border-gray-800 hover:border-gray-700'
                                 }`}
                             >
@@ -235,7 +233,7 @@ export const ImagingScriptViewer: React.FC<ImagingScriptViewerProps> = ({ device
                                             {device.hostname}
                                         </div>
                                         <div className="text-xs text-gray-500 flex items-center gap-1">
-                                            {device.scriptFile || device.scriptContent ? <File size={10} className="text-[#39FF14]" /> : null}
+                                            {(device.scriptFile || device.scriptContent) ? <File size={10} className="text-[#39FF14]" /> : null}
                                             {device.ipAddress}
                                         </div>
                                     </div>
@@ -251,7 +249,7 @@ export const ImagingScriptViewer: React.FC<ImagingScriptViewerProps> = ({ device
                         ))
                     )}
                 </div>
-                
+
                 {selectedDevice && (
                     <div className="mt-4 p-4 bg-gray-900 rounded-lg border border-gray-800">
                         <h4 className="text-xs font-bold text-gray-500 uppercase mb-2">Device Context</h4>
@@ -273,16 +271,26 @@ export const ImagingScriptViewer: React.FC<ImagingScriptViewerProps> = ({ device
                 )}
             </div>
 
-            {/* Real-time Execution Overlay */}
+            <ScriptAnalysisModal
+                isOpen={isAnalysisModalOpen}
+                scriptContent={scriptContent}
+                deviceHostname={selectedDevice?.hostname}
+                onClose={() => setIsAnalysisModalOpen(false)}
+                onApprove={() => {
+                    setIsAnalysisModalOpen(false);
+                    startExecution();
+                }}
+            />
+
             <AnimatePresence>
                 {isExecuting && (
-                    <motion.div 
+                    <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         className="absolute inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-6"
                     >
-                        <motion.div 
+                        <motion.div
                             initial={{ scale: 0.95, y: 20 }}
                             animate={{ scale: 1, y: 0 }}
                             exit={{ scale: 0.95, y: 20 }}
@@ -290,7 +298,7 @@ export const ImagingScriptViewer: React.FC<ImagingScriptViewerProps> = ({ device
                         >
                             <div className="px-6 py-4 border-b border-gray-800 flex justify-between items-center bg-gray-950 rounded-t-xl">
                                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                                    <Activity className="text-[#39FF14]" /> 
+                                    <Activity className="text-[#39FF14]" />
                                     Live Execution Monitor
                                 </h3>
                                 {executionStatus !== 'running' && (
@@ -299,9 +307,8 @@ export const ImagingScriptViewer: React.FC<ImagingScriptViewerProps> = ({ device
                                     </button>
                                 )}
                             </div>
-                            
+
                             <div className="p-6 flex flex-col flex-grow overflow-hidden">
-                                {/* Status and Progress */}
                                 <div className="mb-6 space-y-4">
                                     <div className="flex justify-between items-end">
                                         <div>
@@ -321,13 +328,11 @@ export const ImagingScriptViewer: React.FC<ImagingScriptViewerProps> = ({ device
                                                 </span>
                                             </div>
                                         </div>
-                                        <div className="text-right">
-                                            <span className="text-2xl font-mono font-bold text-white">{executionProgress}%</span>
-                                        </div>
+                                        <span className="text-2xl font-mono font-bold text-white">{executionProgress}%</span>
                                     </div>
-                                    
+
                                     <div className="h-3 bg-gray-800 rounded-full overflow-hidden border border-gray-700">
-                                        <motion.div 
+                                        <motion.div
                                             className={`h-full ${executionStatus === 'failed' ? 'bg-red-500' : 'bg-[#39FF14]'}`}
                                             initial={{ width: 0 }}
                                             animate={{ width: `${executionProgress}%` }}
@@ -336,15 +341,13 @@ export const ImagingScriptViewer: React.FC<ImagingScriptViewerProps> = ({ device
                                     </div>
                                 </div>
 
-                                {/* Terminal Logs */}
                                 <div className="flex-grow bg-black rounded-lg border border-gray-800 p-4 font-mono text-sm overflow-y-auto shadow-inner relative">
                                     <div className="absolute top-2 right-4 text-xs text-gray-600 select-none">TERMINAL OUTPUT</div>
                                     {executionLogs.map((log, i) => {
-                                        let textColor = "text-gray-300";
-                                        if (log.includes("[ERROR]")) textColor = "text-red-400 font-bold";
-                                        else if (log.includes("[SUCCESS]")) textColor = "text-[#39FF14] font-bold";
-                                        else if (log.includes("[INFO]")) textColor = "text-blue-300";
-                                        
+                                        let textColor = 'text-gray-300';
+                                        if (log.includes('[ERROR]')) textColor = 'text-red-400 font-bold';
+                                        else if (log.includes('[SUCCESS]')) textColor = 'text-[#39FF14] font-bold';
+                                        else if (log.includes('[INFO]')) textColor = 'text-blue-300';
                                         return (
                                             <div key={i} className={`py-1 border-b border-gray-800/50 last:border-0 ${textColor}`}>
                                                 {log}
@@ -361,4 +364,3 @@ export const ImagingScriptViewer: React.FC<ImagingScriptViewerProps> = ({ device
         </div>
     );
 };
-
