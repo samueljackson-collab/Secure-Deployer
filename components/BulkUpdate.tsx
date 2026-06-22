@@ -3,6 +3,7 @@ import Papa from 'papaparse';
 import { FileUp, X, FileText, PlayCircle, CheckCircle2, XCircle, Loader2, Server } from 'lucide-react';
 import type { Device, Credentials } from '../types';
 import { CredentialsForm } from './CredentialsForm';
+import { invokeCommand, isTauri } from '../services/tauriBridge';
 
 interface BulkUpdateProps {
     devices: Device[];
@@ -27,7 +28,13 @@ interface TargetState {
     scripts: Record<ScriptKey, { status: TargetStatus; log?: string; error?: string | null }>;
 }
 
-const RELAY_URL = (import.meta as unknown as { env: Record<string, string> }).env?.VITE_BULK_UPDATE_RELAY_URL || 'http://localhost:4001';
+interface BulkStatusEvent {
+    target: CsvTarget;
+    scriptKey: ScriptKey;
+    status: TargetStatus;
+    log?: string;
+    error?: string;
+}
 
 export const BulkUpdate: React.FC<BulkUpdateProps> = ({ devices }) => {
     const [csvTargets, setCsvTargets] = useState<CsvTarget[]>([]);
@@ -112,77 +119,67 @@ export const BulkUpdate: React.FC<BulkUpdateProps> = ({ devices }) => {
         setProgress(initial);
         setRunning(true);
 
-        try {
-            const response = await fetch(`${RELAY_URL}/api/bulk-update`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    targets,
-                    credentials: { username: credentials.username, password: credentials.password },
-                    scripts: Array.from(selectedScripts),
-                }),
-            });
-
-            if (!response.ok || !response.body) {
-                throw new Error(`Relay returned ${response.status}`);
-            }
-
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            let buffer = '';
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                buffer += decoder.decode(value, { stream: true });
-
-                const events = buffer.split('\n\n');
-                buffer = events.pop() || '';
-
-                for (const chunk of events) {
-                    const lines = chunk.split('\n');
-                    const eventLine = lines.find((l) => l.startsWith('event:'));
-                    const dataLine = lines.find((l) => l.startsWith('data:'));
-                    if (!eventLine || !dataLine) continue;
-
-                    const event = eventLine.replace('event:', '').trim();
-                    const data = JSON.parse(dataLine.replace('data:', '').trim());
-
-                    if (event === 'status') {
-                        setProgress((prev) =>
-                            prev.map((t) => {
-                                if (t.target.hostname !== data.target.hostname || t.target.ipAddress !== data.target.ipAddress) {
-                                    return t;
-                                }
-                                if (!data.scriptKey) {
-                                    return t;
-                                }
-                                return {
-                                    ...t,
-                                    scripts: {
-                                        ...t.scripts,
-                                        [data.scriptKey]: { status: data.status, log: data.log, error: data.error },
-                                    },
-                                };
-                            })
-                        );
-                    }
-                }
-            }
-        } catch (err) {
-            // Surface a generic failure on every target if the relay is unreachable.
+        if (!isTauri()) {
+            // Browser-only dev mode: no Rust backend to reach the target
+            // network. Surface this clearly instead of pretending to run.
             setProgress((prev) =>
                 prev.map((t) => ({
                     ...t,
                     scripts: Object.fromEntries(
                         Object.keys(t.scripts).map((key) => [
                             key,
-                            { status: 'failed' as TargetStatus, error: `Relay unreachable: ${(err as Error).message}` },
+                            { status: 'failed' as TargetStatus, error: 'Bulk update requires the packaged desktop app (no backend available in browser dev mode).' },
+                        ])
+                    ) as TargetState['scripts'],
+                }))
+            );
+            setRunning(false);
+            return;
+        }
+
+        const { listen } = await import('@tauri-apps/api/event');
+        const unlisten = await listen<BulkStatusEvent>('bulk-update-status', (event) => {
+            const data = event.payload;
+            setProgress((prev) =>
+                prev.map((t) => {
+                    if (t.target.hostname !== data.target.hostname || t.target.ipAddress !== data.target.ipAddress) {
+                        return t;
+                    }
+                    return {
+                        ...t,
+                        scripts: {
+                            ...t.scripts,
+                            [data.scriptKey]: { status: data.status, log: data.log, error: data.error },
+                        },
+                    };
+                })
+            );
+        });
+
+        try {
+            await invokeCommand('bulk_update', {
+                targets,
+                credentials: {
+                    username: credentials.username,
+                    password: credentials.password,
+                    biosPassword: credentials.biosPassword || undefined,
+                },
+                scripts: Array.from(selectedScripts),
+            });
+        } catch (err) {
+            setProgress((prev) =>
+                prev.map((t) => ({
+                    ...t,
+                    scripts: Object.fromEntries(
+                        Object.keys(t.scripts).map((key) => [
+                            key,
+                            { status: 'failed' as TargetStatus, error: `Bulk update failed: ${(err as Error)?.message || String(err)}` },
                         ])
                     ) as TargetState['scripts'],
                 }))
             );
         } finally {
+            unlisten();
             setRunning(false);
             setCredentials({ username: '', password: '' });
         }

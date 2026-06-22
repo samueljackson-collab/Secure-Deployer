@@ -16,7 +16,10 @@ pub fn run() {
       }
       Ok(())
     })
-    .invoke_handler(tauri::generate_handler![commands::scan::scan_device])
+    .invoke_handler(tauri::generate_handler![
+      commands::scan::scan_device,
+      commands::bulk::bulk_update
+    ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }
