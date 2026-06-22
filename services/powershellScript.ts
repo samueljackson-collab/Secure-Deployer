@@ -40,7 +40,9 @@ export function analyzeScriptRisks(content: string): ScriptAnalysisResult {
     for (const { regex, pattern, description, severity } of RISKY_PATTERNS) {
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
-            if (line.trim().startsWith('#')) continue;
+            const trimmed = line.trim();
+            const lowerTrimmed = trimmed.toLowerCase();
+            if (trimmed.startsWith('#') || lowerTrimmed.startsWith('rem ') || lowerTrimmed === 'rem' || trimmed.startsWith('::')) continue;
             if (regex.test(line)) {
                 warnings.push({ pattern, description, line: i, severity });
                 break;
