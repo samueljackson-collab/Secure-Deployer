@@ -1,6 +1,13 @@
 import winrm from 'nodejs-winrm';
 
 const DEFAULT_PORT = 5985;
+const WINRM_TIMEOUT_MS = 120000;
+
+const withTimeout = (promise, ms, label) =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)),
+  ]);
 
 /**
  * Runs a PowerShell script on a remote Windows host over WinRM.
@@ -18,14 +25,6 @@ export async function runPowerShellScript({ host, username, password, port, scri
         auth,
     };
 
-const WINRM_TIMEOUT_MS = 120000;
-const withTimeout = (promise, ms, label) =>
-  Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)),
-  ]);
-
-export async function runPowerShellScript({ host, username, password, port, scriptContent }) {
     params.shellId = await withTimeout(winrm.shell.doCreateShell(params), WINRM_TIMEOUT_MS, 'CreateShell');
     try {
         params.command = command;
